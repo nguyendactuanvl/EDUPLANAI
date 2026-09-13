@@ -744,7 +744,11 @@ app.all("/api/generate-worksheet", async (req, res) => {
          - Hình thức: ${type || "Kết hợp trắc nghiệm và tự luận"}.
          - Phân hóa từ cơ bản đến vận dụng.
       4. Trình bày rõ ràng, để lại khoảng trống hợp lý giả định học sinh sẽ làm trực tiếp vào phiếu.
-      5. KHOA HỌC/TOÁN: BẮT BUỘC sử dụng chuẩn LaTeX cho MỌI công thức. TẤT CẢ các biến số (như $x, V$), giá trị (như $500\\text{ cm}^3$) ĐỀU PHẢI bọc trong dấu $. Sử dụng duy nhất dấu $ cho công thức trong dòng. ĐẶC BIỆT QUAN TRỌNG: LUÔN LUÔN CÓ KHOẢNG TRẮNG trước và sau dấu $ để không bị dính chữ khi xuất file (Ví dụ đúng: "Ta có $x=2$ là", sai: "Ta có$x=2$là").
+      5. KHOA HỌC/TOÁN: BẮT BUỘC sử dụng chuẩn LaTeX cho MỌI công thức. TẤT CẢ các biến số (như $x, V$) ĐỀU PHẢI bọc trong dấu $.
+         - Sử dụng dấu $ cho công thức trong dòng.
+         - Sử dụng dấu $$ cho công thức đứng độc lập.
+         - LƯU Ý TỐI QUAN TRỌNG VỀ BẢNG (TABLE): Bảng trong Markdown sẽ BỊ LỖI NẶNG nếu có dấu xuống dòng. Do đó, TUYỆT ĐỐI KHÔNG ĐƯỢC XUỐNG DÒNG bên trong các ô của bảng. Nếu viết hệ phương trình (cases) trong bảng, BẮT BUỘC phải viết liền trên 1 dòng (ví dụ: $\\begin{cases} x=1 \\\\\\\\ y=2 \\end{cases}$).
+         - LUÔN LUÔN CÓ KHOẢNG TRẮNG trước và sau dấu $ để không bị dính chữ.
       6. ĐÁP ÁN: Ở cuối tài liệu, hãy cung cấp phần Hướng dẫn giải/Đáp án, phân cách bằng tiêu đề "--- HƯỚNG DẪN CHẤM / ĐÁP ÁN ---".
       7. BẮT BUỘC kiểm tra và SỬA LỖI CHÍNH TẢ tiếng Việt thật cẩn thận trước khi trả kết quả.`;
 

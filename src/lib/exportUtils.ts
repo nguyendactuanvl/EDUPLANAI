@@ -132,21 +132,7 @@ export function exportHtmlToWord(element: HTMLElement, filename: string) {
         });
 
         if (el.parentNode) {
-            // Sanitization Layer: Detect mathematical expressions and wrap them safely
-            // This prevents MS Word layout engine from colliding adjacent text and handles encoding
-            const mathWrapper = document.createElement("span");
-            mathWrapper.className = "math-sanitization-wrapper";
-            mathWrapper.setAttribute("style", "font-family: \"Cambria Math\", serif;");
-            
-            // Add protective non-breaking spaces
-            const spaceBefore = document.createTextNode("\u00A0");
-            const spaceAfter = document.createTextNode("\u00A0");
-            
-            mathWrapper.appendChild(spaceBefore);
-            mathWrapper.appendChild(mathClone);
-            mathWrapper.appendChild(spaceAfter);
-            
-            el.parentNode.replaceChild(mathWrapper, el);
+            el.parentNode.replaceChild(mathClone, el);
         }
       }
     });
@@ -159,9 +145,6 @@ export function exportHtmlToWord(element: HTMLElement, filename: string) {
     // 2. Prevent text collisions between consecutive formatted elements
     contentHtml = contentHtml.replace(/<\/strong>\s*<strong>/g, "</strong> <strong>");
     contentHtml = contentHtml.replace(/<\/em>\s*<em>/g, "</em> <em>");
-    // 3. Prevent text collision explicitly when letters immediately follow/precede the math wrapper
-    contentHtml = contentHtml.replace(/<\/span>([A-Za-z0-9])/g, "</span> $1");
-    contentHtml = contentHtml.replace(/([A-Za-z0-9])<span class=\"math-sanitization-wrapper\"/g, "$1 <span class=\"math-sanitization-wrapper\"");
     
     const header = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns:m='http://schemas.microsoft.com/office/2004/12/omml' xmlns='http://www.w3.org/TR/REC-html40'>
 <head>

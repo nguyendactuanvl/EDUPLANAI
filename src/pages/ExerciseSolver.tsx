@@ -312,7 +312,12 @@ const handleSolve = async () => {
         slide.addText(content.substring(0, 1500) + (content.length > 1500 ? '...' : ''), { x: 0.5, y: 1.5, w: '90%', h: '70%', fontSize: 16, color: '333333', valign: 'top' });
     }
     
-    await pres.writeFile({ fileName: `LoiGiai_${new Date().getTime()}.pptx` });
+    try {
+      await pres.writeFile({ fileName: `LoiGiai_${new Date().getTime()}.pptx` });
+    } catch (error: any) {
+      console.error("Export PPTX error", error);
+      alert("Có lỗi xảy ra khi xuất file PowerPoint: " + (error.message || "Lỗi không xác định"));
+    }
   };
 
   // Presentation slides logic

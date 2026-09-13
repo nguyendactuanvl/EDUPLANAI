@@ -174,10 +174,11 @@ export function Worksheets() {
         }
       }
       
-      await pres.writeFile({ fileName: `BaiGiang_${customLessonName.replace(/\s+/g, '_')}.pptx` });
-    } catch (error) {
+      const safeFileName = `BaiGiang_${(customLessonName || "PHT").replace(/[^a-zA-Z0-9_\u00C0-\u1EF9]/g, '_')}.pptx`;
+      await pres.writeFile({ fileName: safeFileName });
+    } catch (error: any) {
       console.error("Export PPTX error", error);
-      alert("Có lỗi xảy ra khi xuất file PowerPoint");
+      alert("Có lỗi xảy ra khi xuất file PowerPoint: " + (error.message || "Lỗi không xác định"));
     } finally {
       setIsLoading(false);
     }
