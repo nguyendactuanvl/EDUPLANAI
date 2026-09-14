@@ -1108,7 +1108,7 @@ ${customPrompt}
                             {q.options.map((opt, oIdx) => (
                               <div key={oIdx} className={`flex items-start gap-1 p-2 rounded-md border ${oIdx === q.correctOptionIndex ? 'bg-emerald-50 border-emerald-200 font-medium' : 'border-transparent'}`}>
                                 <span className="shrink-0 font-medium">{String.fromCharCode(65 + oIdx)}.</span>
-                                <div className="markdown-body inline-markdown flex-1"><Markdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} >{opt}</Markdown></div>
+                                <div className="markdown-body inline-markdown flex-1"><Markdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} >{opt.replace(/^[A-D][\.\:\)]\s*/i, '')}</Markdown></div>
                               </div>
                             ))}
                           </div>
@@ -1184,7 +1184,7 @@ ${customPrompt}
                                     {q.options.map((opt, oIdx) => (
                                       <div key={oIdx} className="option" style={{paddingLeft: '10px', display: 'flex', gap: '4px', alignItems: 'flex-start'}}>
                                         <span style={{fontWeight: 'bold', flexShrink: 0}}>{String.fromCharCode(65 + oIdx)}.</span>
-                                        <div className="markdown-body inline-markdown" style={{flex: 1}}><Markdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} >{opt}</Markdown></div>
+                                        <div className="markdown-body inline-markdown" style={{flex: 1}}><Markdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} >{opt.replace(/^[A-D][\.\:\)]\s*/i, '')}</Markdown></div>
                                       </div>
                                     ))}
                                   </div>

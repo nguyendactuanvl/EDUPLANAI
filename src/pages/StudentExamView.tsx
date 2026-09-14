@@ -159,7 +159,7 @@ export function StudentExamView({ examId }: { examId: string }) {
                     <div className={`w-6 h-6 rounded-full border flex items-center justify-center shrink-0 ${isSelected && !isSubmitted ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-slate-300'}`}>
                       {String.fromCharCode(65 + oIdx)}
                     </div>
-                    <span className="flex-1"><div className="markdown-body"><Markdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} >{opt}</Markdown></div></span>
+                    <span className="flex-1"><div className="markdown-body"><Markdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} >{opt.replace(/^[A-D][\.\:\)]\s*/i, '')}</Markdown></div></span>
                     {isSubmitted && isCorrect && <CheckCircle2 className="w-5 h-5 text-emerald-600" />}
                     {isSubmitted && isSelected && !isCorrect && <XCircle className="w-5 h-5 text-red-600" />}
                   </button>

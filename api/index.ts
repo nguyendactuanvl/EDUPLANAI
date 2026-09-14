@@ -334,7 +334,7 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT MỘT ĐỐI TƯỢNG JSON VỚI CẤU TRÚC:
       "number": 1,
       "type": "mc", // "mc" (nhiều lựa chọn), "tf" (đúng sai), "sa" (trả lời ngắn), "essay" (tự luận)
       "content": "Nội dung câu hỏi...",
-      "options": ["A. Đáp án 1", "B. Đáp án 2", "C. Đáp án 3", "D. Đáp án 4"], // CHỈ DÙNG CHO type="mc"
+      "options": ["Đáp án 1", "Đáp án 2", "Đáp án 3", "Đáp án 4"], // CHỈ DÙNG CHO type="mc". TUYỆT ĐỐI KHÔNG chứa tiền tố A., B., C., D. ở đầu mỗi tùy chọn (chỉ chứa nội dung đáp án).
       "correct": "A", // Đáp án đúng cho "mc" (A/B/C/D)
       "correctAnswer": "Lời giải/Đáp án chi tiết hoặc đáp án đúng cho các loại câu khác", // Dùng cho tf, sa, essay
       "explanation": "Lời giải chi tiết..."
@@ -377,7 +377,10 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT MỘT ĐỐI TƯỢNG JSON VỚI CẤU TRÚC:
 
     const formattedQuestions = rawQuestions.map((q, idx) => {
       const questionText = q.content || q.question || q.text || q.title || `Câu hỏi số ${idx + 1}`;
-      const choices = q.options || q.choices || q.answers || [];
+      let choices = q.options || q.choices || q.answers || [];
+      if (Array.isArray(choices)) {
+          choices = choices.map(c => typeof c === 'string' ? c.replace(/^[A-D][\.\:\)]\s*/i, '') : c);
+      }
       const rightAns = q.correct || q.answer || '';
       const correctAnsStr = q.correctAnswer || q.correct || q.answer || q.explanation || '';
       const explain = q.explanation || q.explain || q.solution || '';
