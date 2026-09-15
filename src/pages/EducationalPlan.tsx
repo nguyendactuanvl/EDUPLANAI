@@ -24,9 +24,9 @@ export function EducationalPlan() {
       const filesArray = Array.from(e.target.files);
       filesArray.forEach(file => {
         const fileType = file.type || '';
-        const validTypes = ['application/pdf', 'text/plain', 'text/csv', 'text/html'];
-        if (!validTypes.includes(fileType) && !file.name.match(/\.(pdf|txt|csv|html)$/i)) {
-          alert(`File "${file.name}" không được hỗ trợ. Trí tuệ nhân tạo (AI) hiện tại chỉ có thể đọc được các định dạng văn bản chuẩn như PDF, TXT, CSV, HTML. Vui lòng "Lưu dưới dạng" (Save As / Export) file Word/Excel của bạn sang định dạng PDF trước khi tải lên.`);
+        const validTypes = ['application/pdf', 'text/plain', 'text/csv', 'text/html', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+        if (!validTypes.includes(fileType) && !file.name.match(/\.(pdf|txt|csv|html|doc|docx)$/i)) {
+          alert(`File "${file.name}" không được hỗ trợ. Trí tuệ nhân tạo (AI) hiện tại chỉ đọc được định dạng PDF, TXT, CSV, HTML, DOC, DOCX.`);
           return;
         }
         const reader = new FileReader();
@@ -178,7 +178,7 @@ export function EducationalPlan() {
                 ref={fileInputRef}
                 onChange={handleFileUpload}
                 className="hidden" 
-                accept=".pdf,.txt,.csv,.html"
+                accept=".pdf,.txt,.csv,.html,.doc,.docx"
                 multiple
               />
               <button 

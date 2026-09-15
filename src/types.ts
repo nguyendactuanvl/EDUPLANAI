@@ -1,6 +1,7 @@
 export interface KHGDRow {
   id: string;
   grade: number;
+  subject?: string;
   stt: number;
   lesson: string;
   periods: number;
@@ -20,7 +21,8 @@ export interface Circular {
 export interface HistoryItem {
   id: string;
   type: "KHBD" | "KHGD" | "PHT" | "GBT";
-  grade: number; // 10, 11, 12
+  grade: number;
+  subject?: string; // 10, 11, 12
   subject: string;
   lessonName: string;
   content: string; // The generated markdown

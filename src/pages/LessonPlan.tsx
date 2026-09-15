@@ -36,8 +36,8 @@ export function LessonPlan() {
 
   // Filter lessons by selected grade
   const availableLessons = useMemo(() => {
-    return fullPlan.filter(plan => plan.grade === selectedGrade);
-  }, [selectedGrade]);
+    return fullPlan.filter(plan => plan.grade === selectedGrade && (plan.subject === subject || (!plan.subject && subject === "Toán")));
+  }, [selectedGrade, subject]);
 
   // Find the fully selected lesson object
   const selectedLesson = useMemo(() => {
@@ -58,9 +58,9 @@ export function LessonPlan() {
       const filesArray = Array.from(e.target.files);
       filesArray.forEach(file => {
         const fileType = file.type || '';
-        const validTypes = ['application/pdf', 'text/plain', 'text/csv', 'text/html'];
-        if (!validTypes.includes(fileType) && !file.name.match(/\.(pdf|txt|csv|html)$/i)) {
-          alert(`File "${file.name}" không được hỗ trợ. Trí tuệ nhân tạo (AI) hiện tại chỉ có thể đọc được các định dạng văn bản chuẩn như PDF, TXT, CSV, HTML. Vui lòng "Lưu dưới dạng" (Save As / Export) file Word/Excel của bạn sang định dạng PDF trước khi tải lên.`);
+        const validTypes = ['application/pdf', 'text/plain', 'text/csv', 'text/html', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+        if (!validTypes.includes(fileType) && !file.name.match(/\.(pdf|txt|csv|html|doc|docx)$/i)) {
+          alert(`File "${file.name}" không được hỗ trợ. Trí tuệ nhân tạo (AI) hiện tại chỉ đọc được định dạng PDF, TXT, CSV, HTML, DOC, DOCX.`);
           return;
         }
         let mimeType = fileType;
@@ -293,6 +293,33 @@ export function LessonPlan() {
         
         <TextbookManager onSelect={setSelectedTextbook} selectedId={selectedTextbook?.id || ""} />
 
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Môn học</label>
+          <select 
+            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none mb-4 bg-white"
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+          >
+            <option value="Ngữ văn">Ngữ văn</option>
+            <option value="Toán">Toán</option>
+            <option value="Tiếng Anh">Tiếng Anh</option>
+            <option value="Giáo dục thể chất">Giáo dục thể chất</option>
+            <option value="Lịch sử">Lịch sử</option>
+            <option value="Địa lí">Địa lí</option>
+            <option value="Giáo dục kinh tế và pháp luật">Giáo dục kinh tế và pháp luật</option>
+            <option value="Vật lí">Vật lí</option>
+            <option value="Hoá học">Hoá học</option>
+            <option value="Sinh học">Sinh học</option>
+            <option value="Công nghệ">Công nghệ</option>
+            <option value="Tin học">Tin học</option>
+            <option value="Âm nhạc">Âm nhạc</option>
+            <option value="Mĩ thuật">Mĩ thuật</option>
+            <option value="Hoạt động trải nghiệm, hướng nghiệp">Hoạt động trải nghiệm, hướng nghiệp</option>
+            <option value="Giáo dục quốc phòng và an ninh">Giáo dục quốc phòng và an ninh</option>
+            <option value="Chuyên đề học tập">Chuyên đề học tập</option>
+          </select>
+        </div>
+        
         <div className="flex bg-slate-100 p-1 rounded-lg">
           <button 
             className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'system' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
@@ -354,7 +381,7 @@ export function LessonPlan() {
                 </select>
               ) : (
                 <div className="p-3 bg-amber-50 border border-amber-200 text-amber-700 text-sm rounded-lg">
-                  Hệ thống hiện tại chỉ tích hợp sẵn Kế hoạch mẫu cho môn <b>Toán (10, 11, 12)</b>. 
+                  Hệ thống hiện tại chỉ tích hợp sẵn Kế hoạch mẫu cho một số môn học phổ biến. 
                   <br/>Với các lớp/môn khác, vui lòng chuyển sang tab <b>"Từ tệp tải lên"</b> để AI đọc bài từ file Kế hoạch dạy học của bạn hoặc gõ thủ công.
                 </div>
               )}
@@ -422,7 +449,7 @@ export function LessonPlan() {
                   ref={fileInputRef} 
                   className="hidden" 
                   onChange={handleFileUpload}
-                  accept=".pdf,.txt,.csv,.html"
+                  accept=".pdf,.txt,.csv,.html,.doc,.docx"
                   multiple
                 />
               </div>

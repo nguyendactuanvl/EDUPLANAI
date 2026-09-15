@@ -2,6 +2,10 @@
 import express from "express";
 import path from "path";
 import { GoogleGenAI, Type } from "@google/genai";
+import mammoth from 'mammoth';
+import WordExtractor from 'word-extractor';
+
+
 
 export const maxDuration = 60; // 1 minute max duration on Vercel Hobby
 
@@ -39,6 +43,63 @@ setInterval(() => {
     }
   }
 }, 60 * 1000);
+
+
+async function processFilesForAI(files: any[]) {
+  const processedFiles = [];
+  for (const f of files) {
+    if (!f.data) continue;
+    try {
+      let isDoc = f.type === 'application/msword' || f.name?.endsWith('.doc');
+      let isDocx = f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || f.name?.endsWith('.docx');
+      
+      // Fallback identification based on data signature if type/name is missing
+      if (!isDoc && !isDocx && f.data.startsWith('0M8R4KGxGuE')) {
+         isDoc = true; // OLE format
+      }
+      if (!isDoc && !isDocx && f.data.startsWith('UEsDBBQ')) {
+         isDocx = true; // ZIP format
+      }
+
+      if (isDocx) {
+        const buffer = Buffer.from(f.data, 'base64');
+        const result = await mammoth.convertToHtml({ buffer });
+        processedFiles.push({
+          inlineData: {
+            data: Buffer.from(result.value).toString('base64'),
+            mimeType: 'text/html'
+          }
+        });
+      } else if (isDoc) {
+        const buffer = Buffer.from(f.data, 'base64');
+        const extractor = new WordExtractor();
+        const extracted = await extractor.extract(buffer);
+        processedFiles.push({
+          inlineData: {
+            data: Buffer.from(extracted.getBody()).toString('base64'),
+            mimeType: 'text/plain'
+          }
+        });
+      } else {
+        processedFiles.push({
+          inlineData: {
+            data: f.data,
+            mimeType: f.type || 'text/plain'
+          }
+        });
+      }
+    } catch (e) {
+      console.error("Error processing file:", e);
+      processedFiles.push({
+        inlineData: {
+          data: f.data,
+          mimeType: f.type || 'text/plain'
+        }
+      });
+    }
+  }
+  return processedFiles;
+}
 
 function resolveFiles(reqBody: any) {
   const files = reqBody.files || [];
@@ -471,7 +532,7 @@ Yêu cầu định dạng và nội dung (dùng cú pháp Markdown):
    - Hoạt động 2: Hình thành kiến thức mới.
    - Hoạt động 3: Luyện tập.
    - Hoạt động 4: Vận dụng.
-   Mỗi hoạt động phải trình bày rõ ràng bằng BẢNG (Mục tiêu, Nội dung, Sản phẩm, Tổ chức thực hiện). Đặc biệt, lồng ghép khéo léo việc sử dụng phần mềm, kỹ năng số, hoặc ứng dụng AI vào phần "Tổ chức thực hiện".
+   Trình bày chi tiết 4 hoạt động chuẩn. Mỗi hoạt động cần trình bày rõ các phần: Mục tiêu, Nội dung, Sản phẩm (cụ thể), Tổ chức thực hiện (gồm 4 bước: Chuyển giao, Thực hiện, Báo cáo, Kết luận). Kèm thời gian dự kiến (phút). Trình bày dưới dạng văn bản rõ ràng, KHÔNG bắt buộc phải kẻ bảng. Đặc biệt, lồng ghép khéo léo việc sử dụng phần mềm, kỹ năng số, hoặc ứng dụng AI vào phần "Tổ chức thực hiện". Tránh nói chung chung.
    
 Văn phong cần chuyên nghiệp, sư phạm, thực tế. Nếu không tìm thấy bài học trong tài liệu, hãy thông báo lỗi nhẹ nhàng và soạn một giáo án dự kiến.`;;
 
@@ -480,12 +541,7 @@ Văn phong cần chuyên nghiệp, sư phạm, thực tế. Nếu không tìm th
           {
             role: "user",
             parts: [
-              ...(files || []).map((f: any) => ({
-                inlineData: {
-                  data: f.data,
-                  mimeType: f.type || 'text/plain'
-                }
-              })),
+              ...(await processFilesForAI(files || [])),
               {
                 text: prompt
               }
@@ -501,7 +557,7 @@ Văn phong cần chuyên nghiệp, sư phạm, thực tế. Nếu không tìm th
     } catch (error: any) {
       const errorMsg = error?.message || "";
       if (errorMsg.includes("Unsupported MIME type")) {
-        return res.status(400).json({ error: "Định dạng file không được AI hỗ trợ. Vui lòng chuyển file sang định dạng PDF và thử lại." });
+        return res.status(400).json({ error: "Định dạng file không được AI hỗ trợ. Vui lòng tải lên PDF, Text hoặc Word (DOC/DOCX) và thử lại." });
       }
       return handleAiError(error, req, res);
     }
@@ -525,7 +581,9 @@ Hãy đọc toàn bộ giáo án cũ này và viết lại toàn bộ giáo án,
 HƯỚNG DẪN CHI TIẾT:
 1. **Phần Mục tiêu**: Hãy thêm hoặc làm rõ các mục tiêu về Năng lực số, Năng lực AI (nếu có thể), và STEM.
 2. **Phần Thiết bị & Học liệu**: Bổ sung các công cụ số, phần mềm, thiết bị tương tác, công cụ AI cần thiết cho bài dạy.
-3. **Phần Tiến trình dạy học**: Với mỗi hoạt động (Khởi động, Hình thành kiến thức, Luyện tập, Vận dụng), hãy khéo léo lồng ghép việc giáo viên hoặc học sinh sử dụng thiết bị số, phần mềm dạy học, công cụ trí tuệ nhân tạo (AI) vào mục "Tổ chức thực hiện" hoặc "Sản phẩm". Không được làm thay đổi quá nhiều bản chất bài cũ, chỉ làm cho nó "số hóa" và "thông minh" hơn.
+3. **Phần Tiến trình dạy học**: 
+   - Với mỗi hoạt động (Khởi động, Hình thành kiến thức, Luyện tập, Vận dụng), hãy khéo léo lồng ghép việc giáo viên hoặc học sinh sử dụng thiết bị số, phần mềm dạy học, công cụ trí tuệ nhân tạo (AI) vào mục "Tổ chức thực hiện" hoặc "Sản phẩm".
+   - GIỮ NGUYÊN hoặc làm chi tiết thêm nội dung chuyên môn, câu hỏi, bài tập của bài cũ, tuyệt đối không được viết chung chung, sơ sài đi so với bản gốc. Phải thể hiện 4 bước rõ ràng (Chuyển giao, Thực hiện, Báo cáo, Kết luận). Trình bày tự do, KHÔNG bắt buộc phải kẻ bảng.
 4. **Tô màu Năng lực số và Năng lực AI**: Khi nhắc đến bất kỳ phần mềm, công cụ thiết bị số, Năng lực số hoặc công cụ AI nào (đặc biệt là những cái bạn vừa bổ sung), BẮT BUỘC phải bọc trong thẻ HTML \`<mark style="background-color: #dbeafe; color: #1d4ed8; font-weight: bold; padding: 2px 4px; border-radius: 4px;">Tên công cụ / NLS</mark>\` để tô màu nổi bật.
 ${MATH_FORMATTING_RULES}
 5. TUYỆT ĐỐI KHÔNG sử dụng thẻ HTML \`<br>\` hoặc \`<br/>\`. Sử dụng dấu xuống dòng chuẩn Markdown.`;
@@ -535,12 +593,7 @@ ${MATH_FORMATTING_RULES}
         {
           role: "user",
           parts: [
-            ...(files || []).map((f: any) => ({
-              inlineData: {
-                data: f.data,
-                mimeType: f.type || 'text/plain'
-              }
-            })),
+            ...(await processFilesForAI(files || [])),
             {
               text: prompt
             }
@@ -556,7 +609,7 @@ ${MATH_FORMATTING_RULES}
   } catch (error: any) {
     const errorMsg = error?.message || "";
     if (errorMsg.includes("Unsupported MIME type")) {
-      return res.status(400).json({ error: "Định dạng file không được AI hỗ trợ. Vui lòng tải lên PDF, Text hoặc Word/Excel đã chuyển sang PDF." });
+      return res.status(400).json({ error: "Định dạng file không được AI hỗ trợ. Vui lòng tải lên PDF, Text hoặc Word (DOC/DOCX)." });
     }
     return handleAiError(error, req, res);
   }
@@ -637,11 +690,11 @@ II. THIẾT BỊ DẠY HỌC VÀ HỌC LIỆU
 - Học sinh: SGK, vở ghi, dụng cụ/thiết bị thực hành theo yêu cầu bài.
 
 III. TIẾN TRÌNH DẠY HỌC (4 HOẠT ĐỘNG CHUẨN)
-Trình bày chi tiết từng hoạt động (Khởi động, Hình thành kiến thức mới, Luyện tập, Vận dụng). Mỗi hoạt động phải trình bày bằng BẢNG (sử dụng chuẩn Markdown table) gồm:
+Trình bày chi tiết từng hoạt động (Hoạt động 1: Khởi động/Xác định vấn đề; Hoạt động 2: Hình thành kiến thức mới; Hoạt động 3: Luyện tập; Hoạt động 4: Vận dụng). Mỗi hoạt động cần trình bày rõ các mục riêng biệt (có thể dùng văn bản tự do hoặc danh sách, KHÔNG bắt buộc phải kẻ bảng) gồm:
 - Mục tiêu
-- Nội dung
-- Sản phẩm
-- Tổ chức thực hiện: 4 bước rõ ràng (Chuyển giao nhiệm vụ -> Thực hiện nhiệm vụ -> Báo cáo, thảo luận -> Kết luận, nhận định).
+- Nội dung (Các câu hỏi, bài tập, tình huống cụ thể)
+- Sản phẩm (Câu trả lời, kết quả mong đợi thật chi tiết)
+- Tổ chức thực hiện (Bao gồm 4 bước rõ ràng: Bước 1: Chuyển giao nhiệm vụ -> Bước 2: Thực hiện nhiệm vụ -> Bước 3: Báo cáo, thảo luận -> Bước 4: Kết luận, nhận định). Trong đó nêu rõ hoạt động của GV và HS, có phân bổ thời gian dự kiến cụ thể (ví dụ: 10 phút, 15 phút...).
 
 \${MATH_FORMATTING_RULES}
 `;
@@ -693,12 +746,7 @@ app.all("/api/generate-plan", async (req, res) => {
           {
             role: "user",
             parts: [
-              ...files.map((f: any) => ({
-                inlineData: {
-                  data: f.data,
-                  mimeType: f.type || 'text/plain'
-                }
-              })),
+              ...(await processFilesForAI(files)),
               {
                 text: prompt
               }
@@ -770,12 +818,7 @@ BẮT BUỘC kiểm tra và SỬA LỖI CHÍNH TẢ tiếng Việt thật cẩn 
           {
             role: "user",
             parts: [
-              ...(files || []).map((f: any) => ({
-                inlineData: {
-                  data: f.data,
-                  mimeType: f.type || 'text/plain'
-                }
-              })),
+              ...(await processFilesForAI(files || [])),
               {
                 text: prompt
               }
@@ -857,12 +900,7 @@ YÊU CẦU NGHIÊM NGẶT:
           {
             role: "user",
             parts: [
-              ...(files || []).map((f: any) => ({
-                inlineData: {
-                  data: f.data,
-                  mimeType: f.type || 'text/plain'
-                }
-              })),
+              ...(await processFilesForAI(files || [])),
               {
                 text: prompt
               }
@@ -912,12 +950,7 @@ YÊU CẦU:
           {
             role: "user",
             parts: [
-              ...(files || []).map((f: any) => ({
-                inlineData: {
-                  data: f.data,
-                  mimeType: f.type || 'text/plain'
-                }
-              })),
+              ...(await processFilesForAI(files || [])),
               {
                 text: prompt
               }

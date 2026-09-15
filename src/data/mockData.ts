@@ -1,9 +1,71 @@
 import { KHGDRow } from "../types";
 
 export const fullPlan: KHGDRow[] = [
+  
+  // NGỮ VĂN 10
+  {
+    id: "nv10-1", subject: "Ngữ văn", grade: 10, stt: 1,
+    lesson: "Bài 1: Sức hấp dẫn của truyện kể", periods: 9,
+    requirement: "Nhận biết và phân tích được một số yếu tố của truyện kể: cốt truyện, người kể chuyện, điểm nhìn, lời người kể chuyện, lời nhân vật.",
+    digitalComp: "2.1.NC1a: Tìm kiếm tài liệu số về tác phẩm.",
+    aiComp: "10.C2.1: Dùng AI tóm tắt tác phẩm, phân tích nhân vật cơ bản.",
+    stem: "Không", note: ""
+  },
+  {
+    id: "nv10-2", subject: "Ngữ văn", grade: 10, stt: 2,
+    lesson: "Bài 2: Vẻ đẹp của thơ ca", periods: 8,
+    requirement: "Nhận biết và phân tích được vai trò của yếu tố tượng trưng trong thơ, đánh giá giá trị thẩm mỹ của ngôn từ.",
+    digitalComp: "3.1.NC1a: Dùng công cụ tạo sơ đồ tư duy phân tích hình ảnh thơ.",
+    aiComp: "10.A1.1: Gợi ý các cách hiểu đa chiều về hình tượng thơ bằng AI.",
+    stem: "Không", note: ""
+  },
+  // VẬT LÍ 10
+  {
+    id: "vl10-1", subject: "Vật lí", grade: 10, stt: 1,
+    lesson: "Bài 1: Làm quen với Vật lí", periods: 2,
+    requirement: "Nêu được đối tượng nghiên cứu, phương pháp nghiên cứu của Vật lí.",
+    digitalComp: "1.1.NC1a: Khai thác thông tin trên Internet về lịch sử Vật lí.",
+    aiComp: "Không yêu cầu",
+    stem: "Không", note: ""
+  },
+  {
+    id: "vl10-2", subject: "Vật lí", grade: 10, stt: 2,
+    lesson: "Bài 2: Các quy tắc an toàn trong phòng thực hành Vật lí", periods: 1,
+    requirement: "Nhận biết biển cảnh báo, thực hiện quy tắc an toàn.",
+    digitalComp: "Không yêu cầu",
+    aiComp: "Không yêu cầu",
+    stem: "Không", note: ""
+  },
+  {
+    id: "vl10-3", subject: "Vật lí", grade: 10, stt: 3,
+    lesson: "Bài 3: Thực hành tính sai số trong phép đo", periods: 2,
+    requirement: "Biết cách tính sai số, ghi kết quả đo.",
+    digitalComp: "3.2.NC1a: Dùng Excel xử lý số liệu đo đạc.",
+    aiComp: "10.D2.1: Phân tích số liệu và sai số bằng công cụ AI.",
+    stem: "Có", note: ""
+  },
+  // TIN HỌC 10
+  {
+    id: "th10-1", subject: "Tin học", grade: 10, stt: 1,
+    lesson: "Bài 1: Thông tin và xử lí thông tin", periods: 2,
+    requirement: "Phân biệt được thông tin và dữ liệu, biết quá trình xử lí thông tin.",
+    digitalComp: "1.1.NC1a: Phân biệt dạng thông tin số.",
+    aiComp: "10.A1.1: Trải nghiệm công cụ AI xử lí ngôn ngữ tự nhiên.",
+    stem: "Không", note: ""
+  },
+  // LỊCH SỬ 10
+  {
+    id: "ls10-1", subject: "Lịch sử", grade: 10, stt: 1,
+    lesson: "Bài 1: Hiện thực lịch sử và nhận thức lịch sử", periods: 2,
+    requirement: "Trình bày được khái niệm lịch sử, phân biệt hiện thực và nhận thức lịch sử.",
+    digitalComp: "2.1.NC1a: Tra cứu tư liệu số lịch sử.",
+    aiComp: "10.C2.1: Phân tích sự khác biệt góc nhìn qua AI.",
+    stem: "Không", note: ""
+  },
+
   // LỚP 10
   {
-    id: "10-1", grade: 10, stt: 1,
+    id: "10-1", subject: "Toán", grade: 10, stt: 1,
     lesson: "§1 Mệnh đề", periods: 4,
     requirement: "Về kiến thức, kỹ năng: Thiết lập và phát biểu mệnh đề phủ định, đảo, kéo theo, tương đương; xác định tính đúng sai.",
     digitalComp: "1.1.NC1a: Kiểm tra tính logic của mệnh đề.",
@@ -11,7 +73,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: ""
   },
   {
-    id: "10-2", grade: 10, stt: 2,
+    id: "10-2", subject: "Toán", grade: 10, stt: 2,
     lesson: "§2. Tập hợp và các phép toán trên tập hợp", periods: 4,
     requirement: "Về kiến thức, kỹ năng: Nhận biết tập hợp, thực hiện phép toán tập hợp, biểu diễn bằng biểu đồ Venn.",
     digitalComp: "3.1.NC1a: Sử dụng công cụ số hóa vẽ biểu đồ Venn.",
@@ -19,7 +81,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: ""
   },
   {
-    id: "10-3", grade: 10, stt: 3,
+    id: "10-3", subject: "Toán", grade: 10, stt: 3,
     lesson: "Bài tập cuối chương I", periods: 1,
     requirement: "Tổng hợp kiến thức, kỹ năng về mệnh đề và tập hợp.",
     digitalComp: "1.1.NC1a: Tổng hợp kiến thức qua sơ đồ tư duy số.",
@@ -27,7 +89,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "10-4", grade: 10, stt: 4,
+    id: "10-4", subject: "Toán", grade: 10, stt: 4,
     lesson: "§3. Bất phương trình bậc nhất hai ẩn", periods: 2,
     requirement: "Nhận biết BPT bậc nhất 2 ẩn, biểu diễn miền nghiệm trên mặt phẳng tọa độ.",
     digitalComp: "3.1.NC1a: Mô phỏng miền nghiệm trên GeoGebra/Desmos.",
@@ -35,7 +97,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "10-5", grade: 10, stt: 5,
+    id: "10-5", subject: "Toán", grade: 10, stt: 5,
     lesson: "§4. Hệ bất phương trình bậc nhất hai ẩn", periods: 3,
     requirement: "Nhận biết hệ BPT bậc nhất 2 ẩn, biểu diễn miền nghiệm, vận dụng bài toán thực tế.",
     digitalComp: "5.3.NC1b: Ứng dụng phần mềm tối ưu hóa miền nghiệm.",
@@ -43,7 +105,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: ""
   },
   {
-    id: "10-6", grade: 10, stt: 6,
+    id: "10-6", subject: "Toán", grade: 10, stt: 6,
     lesson: "Bài tập cuối chương II", periods: 1,
     requirement: "Tổng hợp kiến thức và kỹ năng chương II.",
     digitalComp: "2.1.NC1a: Thảo luận nhóm trực tuyến qua không gian số.",
@@ -51,7 +113,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "10-7", grade: 10, stt: 7,
+    id: "10-7", subject: "Toán", grade: 10, stt: 7,
     lesson: "§5. Giá trị lượng giác của một góc từ 0° đến 180°.", periods: 2,
     requirement: "Giá trị lượng giác, hệ thức liên hệ, tính toán bằng MTCT và ứng dụng thực tiễn.",
     digitalComp: "3.1.NC1a: Tra cứu và tính toán GTLG qua phần mềm.",
@@ -59,7 +121,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "10-8", grade: 10, stt: 8,
+    id: "10-8", subject: "Toán", grade: 10, stt: 8,
     lesson: "§6. Hệ thức lượng trong tam giác.", periods: 4,
     requirement: "Định lí Cosin, Định lí Sin, công thức diện tích tam giác, giải tam giác.",
     digitalComp: "6.1.NC1a: Mô phỏng bài toán đo đạc khoảng cách.",
@@ -67,7 +129,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: "Bài toán đo đạc"
   },
   {
-    id: "10-9", grade: 10, stt: 9,
+    id: "10-9", subject: "Toán", grade: 10, stt: 9,
     lesson: "Bài tập cuối chương III", periods: 1,
     requirement: "Tổng hợp kiến thức và kỹ năng chương III.",
     digitalComp: "1.1.NC1a: Tổng hợp công thức trên file ghi chú số.",
@@ -75,7 +137,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "10-10", grade: 10, stt: 10,
+    id: "10-10", subject: "Toán", grade: 10, stt: 10,
     lesson: "§7. Các khái niệm mở đầu", periods: 2,
     requirement: "Khái niệm vecto, hai vecto cùng phương, cùng hướng, bằng nhau, vectơ-không.",
     digitalComp: "3.1.NC1a: Dùng phần mềm mô phỏng đại lượng vecto.",
@@ -83,7 +145,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "10-11", grade: 10, stt: 11,
+    id: "10-11", subject: "Toán", grade: 10, stt: 11,
     lesson: "§8. Tổng và hiệu của hai vecto", periods: 2,
     requirement: "Phép toán cộng trừ vectơ, trung điểm, trọng tâm, vận dụng tổng hợp lực.",
     digitalComp: "5.2.NC1b: Thực hành tổng hợp lực trực quan bằng mô phỏng số.",
@@ -91,7 +153,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: ""
   },
   {
-    id: "10-12", grade: 10, stt: 12,
+    id: "10-12", subject: "Toán", grade: 10, stt: 12,
     lesson: "§9. Tích của vecto với một số", periods: 2,
     requirement: "Phép nhân vectơ với một số, mối quan hệ cùng phương, cùng hướng.",
     digitalComp: "1.1.NC1a: Phân tích tỉ lệ biểu diễn vecto.",
@@ -99,7 +161,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "10-13", grade: 10, stt: 13,
+    id: "10-13", subject: "Toán", grade: 10, stt: 13,
     lesson: "§10. Vectơ trong mặt phẳng tọa độ", periods: 3,
     requirement: "Tọa độ vectơ, phép toán theo tọa độ, xác định vị trí vật thể.",
     digitalComp: "1.1.NC1a: Xử lý dữ liệu tọa độ vật thể.",
@@ -107,7 +169,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "10-14", grade: 10, stt: 14,
+    id: "10-14", subject: "Toán", grade: 10, stt: 14,
     lesson: "§11. Tích vô hướng của hai vectơ", periods: 3,
     requirement: "Tính góc, tích vô hướng, công thức tọa độ, liên hệ công trong Vật lí.",
     digitalComp: "6.1.NC1a: Tính góc giữa hai vecto.",
@@ -115,7 +177,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: ""
   },
   {
-    id: "10-15", grade: 10, stt: 15,
+    id: "10-15", subject: "Toán", grade: 10, stt: 15,
     lesson: "Bài tập cuối chương IV", periods: 1,
     requirement: "Tổng hợp kiến thức và kỹ năng chương IV.",
     digitalComp: "1.1.NC1a: Tổng hợp kiến thức về vecto.",
@@ -123,7 +185,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "10-16", grade: 10, stt: 16,
+    id: "10-16", subject: "Toán", grade: 10, stt: 16,
     lesson: "§12. Số gần đúng và sai số", periods: 2,
     requirement: "Số gần đúng, sai số tuyệt đối, sai số tương đối, số quy tròn.",
     digitalComp: "1.1.NC1a: Phân biệt số đúng và số gần đúng.",
@@ -131,7 +193,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "10-17", grade: 10, stt: 17,
+    id: "10-17", subject: "Toán", grade: 10, stt: 17,
     lesson: "§13. Các số đặc trưng đo xu thế trung tâm", periods: 2,
     requirement: "Tính số trung bình, trung vị, tứ phân vị, mốt; ý nghĩa thực tiễn.",
     digitalComp: "1.1.NC1a: Tính các số đặc trưng từ tập dữ liệu.",
@@ -139,7 +201,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: ""
   },
   {
-    id: "10-18", grade: 10, stt: 18,
+    id: "10-18", subject: "Toán", grade: 10, stt: 18,
     lesson: "§14. Các số đặc trưng đo độ phân tán", periods: 3,
     requirement: "Tính các số đặc trưng đo độ phân tán, phát hiện giá trị bất thường.",
     digitalComp: "1.1.NC1b: Tìm kiếm công thức và ví dụ về độ phân tán.",
@@ -147,7 +209,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "10-19", grade: 10, stt: 19,
+    id: "10-19", subject: "Toán", grade: 10, stt: 19,
     lesson: "Bài tập cuối chương V", periods: 1,
     requirement: "Tổng hợp kiến thức và kỹ năng chương V.",
     digitalComp: "1.2.NC1a: Đánh giá độ tin cậy của tài liệu ôn tập.",
@@ -155,7 +217,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "10-20", grade: 10, stt: 20,
+    id: "10-20", subject: "Toán", grade: 10, stt: 20,
     lesson: "Hoạt động TH & TN: Tìm hiểu một số kiến thức về tài chính", periods: 2,
     requirement: "Hiểu sự khác biệt giữa tiết kiệm và đầu tư, lập kế hoạch đầu tư cá nhân.",
     digitalComp: "1.1.NC1a: Tìm kiếm và lọc thông tin về tài chính.",
@@ -163,7 +225,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: "Dự án tài chính"
   },
   {
-    id: "10-21", grade: 10, stt: 21,
+    id: "10-21", subject: "Toán", grade: 10, stt: 21,
     lesson: "Hoạt động TH & TN: Mạng xã hội lợi và hại", periods: 2,
     requirement: "Khảo sát lợi ích, bất lợi khi dùng MXH, phân tích thời gian sử dụng.",
     digitalComp: "3.1.NC1a: Thiết kế poster/infographic bằng Canva/AI.",
@@ -171,7 +233,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: "Infographic"
   },
   {
-    id: "10-22", grade: 10, stt: 22,
+    id: "10-22", subject: "Toán", grade: 10, stt: 22,
     lesson: "§15. Hàm số", periods: 4,
     requirement: "Khái niệm hàm số, tập xác định, tập giá trị, tính đồng biến, nghịch biến, đồ thị.",
     digitalComp: "1.1.NC1a; 1.1.NC1b: Phân biệt đại lượng, tìm công cụ vẽ đồ thị.",
@@ -179,7 +241,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "10-23", grade: 10, stt: 23,
+    id: "10-23", subject: "Toán", grade: 10, stt: 23,
     lesson: "§16. Hàm số bậc hai", periods: 3,
     requirement: "Nhận biết hàm số bậc hai, vẽ Parabol, đỉnh, trục đối xứng, ứng dụng.",
     digitalComp: "1.2.NC1a: Đánh giá độ tin cậy tài liệu quy tắc xét dấu.",
@@ -187,7 +249,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "10-24", grade: 10, stt: 24,
+    id: "10-24", subject: "Toán", grade: 10, stt: 24,
     lesson: "§17. Dấu của tam thức bậc hai", periods: 3,
     requirement: "Định lí về dấu tam thức bậc hai, giải bất phương trình bậc hai.",
     digitalComp: "5.1.NC1a: Đánh giá vấn đề kỹ thuật khi dùng môi trường số.",
@@ -195,7 +257,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "10-25", grade: 10, stt: 25,
+    id: "10-25", subject: "Toán", grade: 10, stt: 25,
     lesson: "§18. Phương trình quy về phương trình bậc hai", periods: 2,
     requirement: "Giải một số phương trình chứa căn bậc hai đơn giản quy về bậc hai.",
     digitalComp: "1.1.NC1b: Tìm kiếm dạng phương trình đặc biệt.",
@@ -203,7 +265,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "10-26", grade: 10, stt: 26,
+    id: "10-26", subject: "Toán", grade: 10, stt: 26,
     lesson: "Bài tập cuối chương VI", periods: 1,
     requirement: "Tổng hợp kiến thức và kỹ năng chương VI.",
     digitalComp: "2.1.NC1a: Tổ chức buổi ôn tập trực tuyến.",
@@ -211,7 +273,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "10-27", grade: 10, stt: 27,
+    id: "10-27", subject: "Toán", grade: 10, stt: 27,
     lesson: "§19. Phương trình đường thẳng", periods: 2,
     requirement: "Mô tả PTTQ, PTTS của đường thẳng, lập phương trình đường thẳng.",
     digitalComp: "1.1.NC1a: Xử lý tọa độ tìm phương trình đường thẳng.",
@@ -219,7 +281,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "10-28", grade: 10, stt: 28,
+    id: "10-28", subject: "Toán", grade: 10, stt: 28,
     lesson: "§20. Vị trí tương đối giữa hai đường thẳng. Góc và khoảng cách", periods: 3,
     requirement: "Nhận biết vị trí tương đối, tính góc và khoảng cách.",
     digitalComp: "1.2.NC1a: Đánh giá độ tin cậy công cụ tính góc, khoảng cách.",
@@ -227,7 +289,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "10-29", grade: 10, stt: 29,
+    id: "10-29", subject: "Toán", grade: 10, stt: 29,
     lesson: "§21. Đường tròn trong mặt phẳng tọa độ", periods: 2,
     requirement: "Lập phương trình đường tròn, tiếp tuyến của đường tròn.",
     digitalComp: "6.1.NC1a: Phân tích cách AI hoạt động.",
@@ -235,7 +297,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "10-30", grade: 10, stt: 30,
+    id: "10-30", subject: "Toán", grade: 10, stt: 30,
     lesson: "§22. Ba đường conic", periods: 4,
     requirement: "Nhận biết ba đường conic, phương trình chính tắc và ứng dụng thực tiễn.",
     digitalComp: "1.1.NC1b: Tìm kiếm hình ảnh động Elip, Hypebol, Parabol.",
@@ -243,7 +305,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: "Mô hình Conic"
   },
   {
-    id: "10-31", grade: 10, stt: 31,
+    id: "10-31", subject: "Toán", grade: 10, stt: 31,
     lesson: "Bài tập cuối chương VII", periods: 1,
     requirement: "Tổng hợp kiến thức và kỹ năng chương VII.",
     digitalComp: "1.1.NC1a: Tổng hợp kiến thức hình học tọa độ.",
@@ -251,7 +313,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "10-32", grade: 10, stt: 32,
+    id: "10-32", subject: "Toán", grade: 10, stt: 32,
     lesson: "§23. Quy tắc đếm", periods: 4,
     requirement: "Vận dụng quy tắc cộng, quy tắc nhân, sơ đồ cây.",
     digitalComp: "1.1.NC1a; 1.1.NC1b: Tổ chức trường hợp, bài toán đếm lập trình.",
@@ -259,7 +321,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "10-33", grade: 10, stt: 33,
+    id: "10-33", subject: "Toán", grade: 10, stt: 33,
     lesson: "§24. Hoán vị, chỉnh hợp, tổ hợp", periods: 4,
     requirement: "Tính số hoán vị, chỉnh hợp, tổ hợp bằng tay và MTCT.",
     digitalComp: "3.1.NC1a: Sử dụng bảng tính Excel/Sheet tính Pn, Ank, Cnk.",
@@ -267,7 +329,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "10-34", grade: 10, stt: 34,
+    id: "10-34", subject: "Toán", grade: 10, stt: 34,
     lesson: "§25. Nhị thức Newton", periods: 2,
     requirement: "Khai triển nhị thức Newton (a+b)^n với n = 4, 5.",
     digitalComp: "1.1.NC1b: Tìm kiếm công thức khai triển.",
@@ -275,7 +337,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "10-35", grade: 10, stt: 35,
+    id: "10-35", subject: "Toán", grade: 10, stt: 35,
     lesson: "Bài tập cuối chương VIII", periods: 1,
     requirement: "Tổng hợp kiến thức chương VIII.",
     digitalComp: "1.1.NC1a: Tổng hợp kiến thức tổ hợp.",
@@ -283,7 +345,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "10-36", grade: 10, stt: 36,
+    id: "10-36", subject: "Toán", grade: 10, stt: 36,
     lesson: "§26. Biến cố và định nghĩa cổ điển của xác suất", periods: 2,
     requirement: "Nhận biết phép thử ngẫu nhiên, không gian mẫu, biến cố, tính xác suất.",
     digitalComp: "1.1.NC1a: Phân tích dữ liệu xác định biến cố.",
@@ -291,7 +353,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "10-37", grade: 10, stt: 37,
+    id: "10-37", subject: "Toán", grade: 10, stt: 37,
     lesson: "§27. Thực hành tính xác suất theo định nghĩa cổ điển", periods: 3,
     requirement: "Tính xác suất bằng phương pháp tổ hợp và sơ đồ hình cây.",
     digitalComp: "2.1.NC1a: Hợp tác trực tuyến thiết kế thí nghiệm xác suất ảo.",
@@ -299,7 +361,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: ""
   },
   {
-    id: "10-38", grade: 10, stt: 38,
+    id: "10-38", subject: "Toán", grade: 10, stt: 38,
     lesson: "Bài tập cuối chương IX", periods: 1,
     requirement: "Tổng hợp kiến thức chương IX.",
     digitalComp: "1.1.NC1a: Tổng hợp kiến thức xác suất.",
@@ -307,7 +369,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "10-39", grade: 10, stt: 39,
+    id: "10-39", subject: "Toán", grade: 10, stt: 39,
     lesson: "Hoạt động TH & TN: Một số nội dung cho hoạt động trải nghiệm hình học", periods: 1,
     requirement: "Ứng dụng mô hình hình học trong thực tế.",
     digitalComp: "1.1.NC1b: Tìm kiếm dự án, mô hình hình học ứng dụng.",
@@ -315,7 +377,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: "Mô hình hình học"
   },
   {
-    id: "10-40", grade: 10, stt: 40,
+    id: "10-40", subject: "Toán", grade: 10, stt: 40,
     lesson: "Hoạt động TH & TN: Ước tính số cá thể trong một quần thể", periods: 1,
     requirement: "Ứng dụng xác suất ước tính kích thước quần thể.",
     digitalComp: "6.1.NC1a: Sử dụng AI xử lý dữ liệu lớn.",
@@ -323,7 +385,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: "Dự án sinh thái"
   },
   {
-    id: "10-41", grade: 10, stt: 41,
+    id: "10-41", subject: "Toán", grade: 10, stt: 41,
     lesson: "Chuyên đề 1: Bài 1. Hệ phương trình bậc nhất ba ẩn", periods: 5,
     requirement: "Nhận biết được hệ PT bậc nhất ba ẩn và nghiệm của hệ; giải bằng phương pháp Gauss; bấm MTCT.",
     digitalComp: "3.1.NC1a: Dùng MTCT và phần mềm CAS (GeoGebra, Maple) giải nhanh hệ PT.",
@@ -331,7 +393,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: "Chuyên đề"
   },
   {
-    id: "10-42", grade: 10, stt: 42,
+    id: "10-42", subject: "Toán", grade: 10, stt: 42,
     lesson: "Chuyên đề 1: Bài 2. Ứng dụng của hệ phương trình bậc nhất ba ẩn", periods: 4,
     requirement: "Vận dụng vào Vật lí, Hóa học, Sinh học, bài toán thực tiễn tài chính.",
     digitalComp: "6.1.NC1a: Sử dụng AI hỗ trợ phân tích dữ liệu thực tế và xây dựng mô hình toán học.",
@@ -339,7 +401,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: "Chuyên đề"
   },
   {
-    id: "10-43", grade: 10, stt: 43,
+    id: "10-43", subject: "Toán", grade: 10, stt: 43,
     lesson: "Chuyên đề 2: Bài 3. Phương pháp quy nạp toán học", periods: 5,
     requirement: "Mô tả các bước chứng minh quy nạp; chứng minh đẳng thức, BĐT, chia hết; bài toán thực tiễn lãi kép.",
     digitalComp: "1.1.NC1b; 3.1.NC1a: Tìm kiếm và tra cứu các ví dụ quy nạp trên môi trường số.",
@@ -347,7 +409,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: "Chuyên đề"
   },
   {
-    id: "10-44", grade: 10, stt: 44,
+    id: "10-44", subject: "Toán", grade: 10, stt: 44,
     lesson: "Chuyên đề 2: Bài 4. Nhị thức Newton", periods: 5,
     requirement: "Khai triển (a+b)^n với n cụ thể bằng Pascal hoặc C_n^k; tìm hệ số của x^k.",
     digitalComp: "1.1.NC1b; 3.1.NC1a: Tìm kiếm ví dụ; dùng Excel lập tam giác Pascal và kiểm tra hệ số.",
@@ -355,7 +417,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: "Chuyên đề"
   },
   {
-    id: "10-45", grade: 10, stt: 45,
+    id: "10-45", subject: "Toán", grade: 10, stt: 45,
     lesson: "Chuyên đề 3: Bài 5. Elip", periods: 3,
     requirement: "Nhận biết các yếu tố đặc trưng của Elip; lập PT chính tắc và ứng dụng thực tiễn.",
     digitalComp: "1.1.NC1b: Tìm kiếm mô phỏng vẽ Elip bằng phần mềm GeoGebra/Desmos.",
@@ -363,7 +425,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: "Chuyên đề"
   },
   {
-    id: "10-46", grade: 10, stt: 46,
+    id: "10-46", subject: "Toán", grade: 10, stt: 46,
     lesson: "Chuyên đề 3: Bài 6. Hypebol", periods: 3,
     requirement: "Nhận biết các yếu tố đặc trưng của Hypebol; lập PT chính tắc và ứng dụng.",
     digitalComp: "1.1.NC1b: Tìm kiếm mô phỏng vẽ Hypebol và khảo sát đồ thị bằng phần mềm.",
@@ -371,7 +433,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: "Chuyên đề"
   },
   {
-    id: "10-47", grade: 10, stt: 47,
+    id: "10-47", subject: "Toán", grade: 10, stt: 47,
     lesson: "Chuyên đề 3: Bài 7. Parabol", periods: 2,
     requirement: "Nhận biết các yếu tố đặc trưng Parabol; lập PT chính tắc và ứng dụng.",
     digitalComp: "1.1.NC1b: Tìm kiếm mô phỏng Parabol và hình ảnh ứng dụng thực tế.",
@@ -381,7 +443,7 @@ export const fullPlan: KHGDRow[] = [
 
   // LỚP 11
   {
-    id: "11-1", grade: 11, stt: 1,
+    id: "11-1", subject: "Toán", grade: 11, stt: 1,
     lesson: "Bài 1. Giá trị lượng giác của góc lượng giác", periods: 3,
     requirement: "Khái niệm góc LGIAC, đường tròn LGIAC, GTLG, hệ thức cơ bản, dùng MTCT.",
     digitalComp: "1.1.NC1a: Sử dụng MTCT và phần mềm mô phỏng vòng tròn LGIAC.",
@@ -389,7 +451,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "11-2", grade: 11, stt: 2,
+    id: "11-2", subject: "Toán", grade: 11, stt: 2,
     lesson: "Bài 2. Công thức lượng giác", periods: 2,
     requirement: "Phép biến đổi LGIAC: cộng, nhân đôi, tích thành tổng, tổng thành tích.",
     digitalComp: "3.1.NC1a: Dùng công cụ tính toán kiểm tra kết quả biến đổi.",
@@ -397,7 +459,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "11-3", grade: 11, stt: 3,
+    id: "11-3", subject: "Toán", grade: 11, stt: 3,
     lesson: "Bài 3. Hàm số lượng giác", periods: 2,
     requirement: "Hàm số chẵn, lẻ, tuần hoàn, đồ thị sin, cos, tan, cot, dao động điều hòa.",
     digitalComp: "3.1.NC1a: Sử dụng GeoGebra/Desmos vẽ và mô phỏng đồ thị.",
@@ -405,7 +467,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: ""
   },
   {
-    id: "11-4", grade: 11, stt: 4,
+    id: "11-4", subject: "Toán", grade: 11, stt: 4,
     lesson: "Bài 4. Phương trình lượng giác cơ bản", periods: 2,
     requirement: "Công thức nghiệm PTLG cơ bản, tính nghiệm gần đúng, ứng dụng dao động.",
     digitalComp: "6.1.NC1a: Ứng dụng AI hỗ trợ phân tích và tìm tập nghiệm PTLG.",
@@ -413,7 +475,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "11-5", grade: 11, stt: 5,
+    id: "11-5", subject: "Toán", grade: 11, stt: 5,
     lesson: "Bài tập cuối chương I", periods: 1,
     requirement: "Củng cố kiến thức và kỹ năng chương I.",
     digitalComp: "1.1.NC1a: Hệ thống hóa công thức LGIAC trên sơ đồ số.",
@@ -421,7 +483,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "11-6", grade: 11, stt: 6,
+    id: "11-6", subject: "Toán", grade: 11, stt: 6,
     lesson: "Bài 5. Dãy số", periods: 2,
     requirement: "Dãy số hữu hạn, vô hạn, tính tăng, giảm, bị chặn.",
     digitalComp: "1.1.NC1b: Tìm kiếm ví dụ thực tế về dãy số.",
@@ -429,7 +491,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "11-7", grade: 11, stt: 7,
+    id: "11-7", subject: "Toán", grade: 11, stt: 7,
     lesson: "Bài 6. Cấp số cộng", periods: 2,
     requirement: "Nhận biết CSC, số hạng tổng quát, tổng n số hạng đầu, bài toán thực tiễn.",
     digitalComp: "3.1.NC1a: Dùng bảng tính Excel lập bảng giá trị CSC.",
@@ -437,7 +499,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: "Bài toán dân số"
   },
   {
-    id: "11-8", grade: 11, stt: 8,
+    id: "11-8", subject: "Toán", grade: 11, stt: 8,
     lesson: "Bài 7. Cấp số nhân", periods: 2,
     requirement: "Nhận biết CSN, số hạng tổng quát, tổng n số hạng đầu, tăng trưởng.",
     digitalComp: "3.1.NC1a: Sử dụng Excel tính tổng và mô phỏng sự tăng trưởng CSN.",
@@ -445,7 +507,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: "Tăng trưởng vi khuẩn"
   },
   {
-    id: "11-9", grade: 11, stt: 9,
+    id: "11-9", subject: "Toán", grade: 11, stt: 9,
     lesson: "Bài tập cuối chương II", periods: 1,
     requirement: "Củng cố kiến thức và kỹ năng chương II.",
     digitalComp: "2.4.NC1a: Thảo luận nhóm trực tuyến giải bài toán thực tế.",
@@ -453,7 +515,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "11-10", grade: 11, stt: 10,
+    id: "11-10", subject: "Toán", grade: 11, stt: 10,
     lesson: "Bài 8. Mẫu số liệu ghép nhóm", periods: 1,
     requirement: "Đọc, giải thích và ghép nhóm mẫu số liệu.",
     digitalComp: "1.3.NC1a: Tổ chức và lưu trữ mẫu số liệu trên bảng tính.",
@@ -461,7 +523,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "11-11", grade: 11, stt: 11,
+    id: "11-11", subject: "Toán", grade: 11, stt: 11,
     lesson: "Bài 9. Các số đặc trưng đo xu thế trung tâm", periods: 2,
     requirement: "Tính các số đặc trưng đo xu thế trung tâm mẫu số liệu ghép nhóm.",
     digitalComp: "5.2.NC1b: Sử dụng Excel/R để tự động tính các số đặc trưng.",
@@ -469,7 +531,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: "Thống kê thực tế"
   },
   {
-    id: "11-12", grade: 11, stt: 12,
+    id: "11-12", subject: "Toán", grade: 11, stt: 12,
     lesson: "Bài 10. Đường thẳng và mặt phẳng trong không gian", periods: 3,
     requirement: "Quan hệ liên thuộc, 3 cách xác định mặt phẳng, giao tuyến, giao điểm.",
     digitalComp: "3.1.NC1a: Mô phỏng hình học không gian bằng GeoGebra 3D.",
@@ -477,7 +539,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: "Mô hình kiến trúc"
   },
   {
-    id: "11-13", grade: 11, stt: 13,
+    id: "11-13", subject: "Toán", grade: 11, stt: 13,
     lesson: "Bài 11. Hai đường thẳng song song trong không gian", periods: 3,
     requirement: "Vị trí tương đối của hai đường thẳng trong không gian.",
     digitalComp: "3.1.NC1a: Sử dụng GeoGebra 3D quan sát góc nhìn không gian.",
@@ -485,7 +547,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "11-14", grade: 11, stt: 14,
+    id: "11-14", subject: "Toán", grade: 11, stt: 14,
     lesson: "Bài 12. Đường thẳng và mặt phẳng song song", periods: 2,
     requirement: "Điều kiện đường thẳng song song mặt phẳng.",
     digitalComp: "3.1.NC1a: Dựng hình 3D kiểm chứng quan hệ song song.",
@@ -493,7 +555,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "11-15", grade: 11, stt: 15,
+    id: "11-15", subject: "Toán", grade: 11, stt: 15,
     lesson: "Bài 13. Hai mặt phẳng song song", periods: 4,
     requirement: "Hai mặt phẳng song song, định lí Thalès không gian, lăng trụ, hình hộp.",
     digitalComp: "3.1.NC1a: Trực quan hóa hình lăng trụ, hình hộp trong 3D.",
@@ -501,7 +563,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: ""
   },
   {
-    id: "11-16", grade: 11, stt: 16,
+    id: "11-16", subject: "Toán", grade: 11, stt: 16,
     lesson: "Bài 14. Phép chiếu song song.", periods: 2,
     requirement: "Phép chiếu song song, vẽ hình biểu diễn của khối đơn giản.",
     digitalComp: "3.1.NC1a: Tạo mô phỏng chiếu song song bằng phần mềm 3D.",
@@ -509,7 +571,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: "Vẽ kỹ thuật"
   },
   {
-    id: "11-17", grade: 11, stt: 17,
+    id: "11-17", subject: "Toán", grade: 11, stt: 17,
     lesson: "Bài 15. Giới hạn dãy số", periods: 2,
     requirement: "Giới hạn dãy số, cấp số nhân lùi vô hạn và ứng dụng thực tiễn.",
     digitalComp: "1.1.NC1b: Tìm kiếm ví dụ thực tế thể hiện dãy có giới hạn.",
@@ -517,7 +579,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "11-18", grade: 11, stt: 18,
+    id: "11-18", subject: "Toán", grade: 11, stt: 18,
     lesson: "Bài 16, Giới hạn hàm số", periods: 2,
     requirement: "Giới hạn hữu hạn, giới hạn vô cực của hàm số tại một điểm.",
     digitalComp: "1.1.NC1b: Tìm kiếm đồ thị và ví dụ mô phỏng giới hạn.",
@@ -525,7 +587,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "11-19", grade: 11, stt: 19,
+    id: "11-19", subject: "Toán", grade: 11, stt: 19,
     lesson: "Bài 17. Hàm số liên tục", periods: 2,
     requirement: "Nhận dạng hàm số liên tục tại điểm, trên khoảng, đoạn.",
     digitalComp: "3.1.NC1a: Tạo và chỉnh sửa đồ thị số thể hiện liên tục gián đoạn.",
@@ -533,7 +595,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "11-20", grade: 11, stt: 20,
+    id: "11-20", subject: "Toán", grade: 11, stt: 20,
     lesson: "Hoạt động TH & TN: Một vài áp dụng của Toán học trong tài chính", periods: 2,
     requirement: "Bài toán gửi tiết kiệm tích lũy, trả góp.",
     digitalComp: "1.1.NC1b: Tìm kiếm thông tin lãi suất tiết kiệm, vay vốn.",
@@ -541,7 +603,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: "Dự án tài chính"
   },
   {
-    id: "11-21", grade: 11, stt: 21,
+    id: "11-21", subject: "Toán", grade: 11, stt: 21,
     lesson: "Hoạt động TH & TN: Lực căng mặt ngoài của nước", periods: 2,
     requirement: "Thí nghiệm thu thập dữ liệu, dùng số đặc trưng so sánh kết quả.",
     digitalComp: "1.1.NC1b: Tìm kiếm video, hình ảnh thí nghiệm lực căng mặt ngoài.",
@@ -549,7 +611,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: "STEM Vật lý"
   },
   {
-    id: "11-22", grade: 11, stt: 22,
+    id: "11-22", subject: "Toán", grade: 11, stt: 22,
     lesson: "Bài 18. Lũy thừa với số mũ thực", periods: 2,
     requirement: "Lũy thừa số mũ thực, tính chất và bài toán lãi suất, tăng trưởng.",
     digitalComp: "1.1.NC1b: Tìm kiếm ví dụ hiện tượng tăng trưởng cấp số nhân.",
@@ -557,7 +619,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "11-23", grade: 11, stt: 23,
+    id: "11-23", subject: "Toán", grade: 11, stt: 23,
     lesson: "Bài 19. Logarit", periods: 2,
     requirement: "Khái niệm logarit, tính chất, tính giá trị và ứng dụng độ pH.",
     digitalComp: "3.1.NC1a: Dùng MTCT hoặc phần mềm số tính giá trị lôgarit.",
@@ -565,7 +627,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: "Ứng dụng pH"
   },
   {
-    id: "11-24", grade: 11, stt: 24,
+    id: "11-24", subject: "Toán", grade: 11, stt: 24,
     lesson: "Bài 20. Hàm số mũ và Hàm số lôgarit", periods: 1,
     requirement: "Hàm số mũ, logarit, đồ thị và tính chất.",
     digitalComp: "3.1.NC1a: Sử dụng GeoGebra/Desmos vẽ và quan sát sự biến thiên.",
@@ -573,7 +635,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "11-25", grade: 11, stt: 25,
+    id: "11-25", subject: "Toán", grade: 11, stt: 25,
     lesson: "Bài 21. Phương trình, bất phương trình mũ và lôgarit", periods: 2,
     requirement: "Giải phương trình, BPT mũ, logarit đơn giản và ứng dụng thực tế.",
     digitalComp: "3.2.NC1a: Dùng GeoGebra CAS kiểm tra nghiệm và mô phỏng đồ thị.",
@@ -581,7 +643,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "11-26", grade: 11, stt: 26,
+    id: "11-26", subject: "Toán", grade: 11, stt: 26,
     lesson: "Bài 22. Hai đường thẳng vuông góc", periods: 2,
     requirement: "Góc giữa 2 đường thẳng, 2 đường thẳng vuông góc.",
     digitalComp: "3.1.NC1a: Dùng GeoGebra 3D mô phỏng vị trí hai đường thẳng.",
@@ -589,7 +651,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "11-27", grade: 11, stt: 27,
+    id: "11-27", subject: "Toán", grade: 11, stt: 27,
     lesson: "Bài 23. Đường thẳng vuông góc với mặt phẳng", periods: 3,
     requirement: "Điều kiện đường thẳng vuông góc mặt phẳng, định lí 3 đường vuông góc.",
     digitalComp: "3.1.NC1a: Sử dụng GeoGebra 3D dựng và kiểm chứng vuông góc.",
@@ -597,7 +659,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: "Mô hình dựng xây"
   },
   {
-    id: "11-28", grade: 11, stt: 28,
+    id: "11-28", subject: "Toán", grade: 11, stt: 28,
     lesson: "Bài 24. Phép chiếu vuông góc. Góc giữa đường thẳng và mặt phẳng", periods: 2,
     requirement: "Góc giữa đường thẳng và mặt phẳng, góc nhị diện.",
     digitalComp: "3.1.NC1a: Dùng phần mềm mô phỏng phép chiếu vuông góc và đo góc.",
@@ -605,7 +667,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "11-29", grade: 11, stt: 29,
+    id: "11-29", subject: "Toán", grade: 11, stt: 29,
     lesson: "Bài 25. Hai mặt phẳng vuông góc", periods: 4,
     requirement: "Nhận biết và điều kiện hai mặt phẳng vuông góc.",
     digitalComp: "3.1.NC1a: Sử dụng phần mềm mô phỏng và đo góc nhị diện 3D.",
@@ -613,7 +675,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: ""
   },
   {
-    id: "11-30", grade: 11, stt: 30,
+    id: "11-30", subject: "Toán", grade: 11, stt: 30,
     lesson: "Bài 26. Khoảng cách", periods: 3,
     requirement: "Tính khoảng cách từ điểm đến đường, mặt, khoảng cách 2 đường chéo nhau.",
     digitalComp: "3.1.NC1a: Mô phỏng các khoảng cách trong GeoGebra 3D.",
@@ -621,7 +683,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "11-31", grade: 11, stt: 31,
+    id: "11-31", subject: "Toán", grade: 11, stt: 31,
     lesson: "Bài 27. Thể tích", periods: 2,
     requirement: "Công thức tính thể tích khối chóp, lăng trụ, hình hộp.",
     digitalComp: "3.1.NC1a: Mô phỏng khối đa diện trong GeoGebra 3D.",
@@ -629,7 +691,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: "Mô hình kiến trúc"
   },
   {
-    id: "11-32", grade: 11, stt: 32,
+    id: "11-32", subject: "Toán", grade: 11, stt: 32,
     lesson: "Bài 28. Biến cố hợp, biến cố giao, biến cố độc lập", periods: 3,
     requirement: "Khái niệm biến cố hợp, giao, độc lập.",
     digitalComp: "1.1.NC1b: Tìm kiếm tình huống thực tế có yếu tố ngẫu nhiên.",
@@ -637,7 +699,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "11-33", grade: 11, stt: 33,
+    id: "11-33", subject: "Toán", grade: 11, stt: 33,
     lesson: "Bài 29. Công thức cộng xác suất", periods: 3,
     requirement: "Tính xác suất biến cố hợp bằng công thức cộng.",
     digitalComp: "5.2.NC1b: Dùng công cụ số tính và kiểm tra xác suất.",
@@ -645,7 +707,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "11-34", grade: 11, stt: 34,
+    id: "11-34", subject: "Toán", grade: 11, stt: 34,
     lesson: "Bài 30. Công thức nhân xác suất cho hai biến cố độc lập", periods: 2,
     requirement: "Tính xác suất biến cố giao bằng công thức nhân.",
     digitalComp: "3.1.NC1a: Mô phỏng thí nghiệm độc lập (tung xu, xúc xắc).",
@@ -653,7 +715,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: ""
   },
   {
-    id: "11-35", grade: 11, stt: 35,
+    id: "11-35", subject: "Toán", grade: 11, stt: 35,
     lesson: "Bài 31. Định nghĩa và ý nghĩa của đạo hàm", periods: 2,
     requirement: "Ý nghĩa hình học, phương trình tiếp tuyến, định nghĩa đạo hàm.",
     digitalComp: "3.1.NC1a: Mô phỏng tiếp tuyến và quan sát sự thay đổi hệ số góc.",
@@ -661,7 +723,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: "Vận tốc tức thời"
   },
   {
-    id: "11-36", grade: 11, stt: 36,
+    id: "11-36", subject: "Toán", grade: 11, stt: 36,
     lesson: "Bài 32. Các quy tắc tính đạo hàm", periods: 3,
     requirement: "Tính đạo hàm hàm sơ cấp, quy tắc tổng, hiệu, tích, thương, hàm hợp.",
     digitalComp: "5.2.NC1b: Sử dụng bảng tính hoặc CAS kiểm tra kết quả đạo hàm.",
@@ -669,7 +731,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "11-37", grade: 11, stt: 37,
+    id: "11-37", subject: "Toán", grade: 11, stt: 37,
     lesson: "Bài 33. Đạo hàm cấp hai", periods: 1,
     requirement: "Khái niệm và tính đạo hàm cấp hai, gia tốc chuyển động.",
     digitalComp: "3.1.NC1a: Mô phỏng gia tốc và vận tốc trên phần mềm đồ thị.",
@@ -677,7 +739,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: "Gia tốc chuyển động"
   },
   {
-    id: "11-38", grade: 11, stt: 38,
+    id: "11-38", subject: "Toán", grade: 11, stt: 38,
     lesson: "Chuyên đề 1: Bài 1. Phép biến hình", periods: 2,
     requirement: "Nhận biết khái niệm phép biến hình, ảnh của điểm, hình; phép đồng nhất.",
     digitalComp: "3.1.NC1a: Dùng GeoGebra mô phỏng quy tắc biến hình.",
@@ -685,7 +747,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: "Chuyên đề"
   },
   {
-    id: "11-39", grade: 11, stt: 39,
+    id: "11-39", subject: "Toán", grade: 11, stt: 39,
     lesson: "Chuyên đề 1: Bài 2. Phép tịnh tiến", periods: 2,
     requirement: "Khái niệm và tính chất phép tịnh tiến; xác định ảnh của hình qua phép tịnh tiến.",
     digitalComp: "3.1.NC1a; 1.1.NC1b: GeoGebra tạo chuyển động tịnh tiến; tìm kiếm hoa văn lát sàn.",
@@ -693,7 +755,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: "Chuyên đề"
   },
   {
-    id: "11-40", grade: 11, stt: 40,
+    id: "11-40", subject: "Toán", grade: 11, stt: 40,
     lesson: "Chuyên đề 1: Bài 3. Phép đối xứng trục", periods: 2,
     requirement: "Khái niệm và tính chất bảo toàn khoảng cách; ứng dụng thiết kế họa tiết.",
     digitalComp: "3.1.NC1a; 2.2.NC1a: Dựng hình đối xứng trên phần mềm; chia sẻ sản phẩm.",
@@ -701,7 +763,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: "Chuyên đề"
   },
   {
-    id: "11-41", grade: 11, stt: 41,
+    id: "11-41", subject: "Toán", grade: 11, stt: 41,
     lesson: "Chuyên đề 1: Bài 4. Phép quay và đối xứng tâm", periods: 2,
     requirement: "Khái niệm phép quay, góc quay, tâm quay; phép đối xứng tâm.",
     digitalComp: "3.1.NC1a; 1.1.NC1b: Mô phỏng động tác quay; dùng AI tra cứu ứng dụng kỹ thuật.",
@@ -709,7 +771,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: "Chuyên đề"
   },
   {
-    id: "11-42", grade: 11, stt: 42,
+    id: "11-42", subject: "Toán", grade: 11, stt: 42,
     lesson: "Chuyên đề 1: Bài 5. Phép dời hình", periods: 2,
     requirement: "Khái niệm phép dời hình, hợp thành các phép dời hình; hai hình bằng nhau.",
     digitalComp: "3.1.NC1a; 1.1.NC1b: Dựng hình vị tự; tra cứu ứng dụng xử lý ảnh.",
@@ -717,7 +779,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: "Chuyên đề"
   },
   {
-    id: "11-43", grade: 11, stt: 43,
+    id: "11-43", subject: "Toán", grade: 11, stt: 43,
     lesson: "Chuyên đề 1: Bài 6. Phép vị tự", periods: 2,
     requirement: "Khái niệm phép vị tự, tỉ số vị tự; phóng to thu nhỏ hình ảnh.",
     digitalComp: "3.1.NC1a; 1.1.NC1b: Tìm kiếm ứng dụng fractal; xử lý ảnh đúng tỉ lệ.",
@@ -725,7 +787,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: "Chuyên đề"
   },
   {
-    id: "11-44", grade: 11, stt: 44,
+    id: "11-44", subject: "Toán", grade: 11, stt: 44,
     lesson: "Chuyên đề 1: Bài 7. Phép đồng dạng", periods: 2,
     requirement: "Khái niệm đồng dạng; mối quan hệ với dời hình và vị tự; ứng dụng đo đạc.",
     digitalComp: "1.1.NC1b: Tìm kiếm ứng dụng đồng dạng trong kiến trúc.",
@@ -733,7 +795,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: "Chuyên đề"
   },
   {
-    id: "11-45", grade: 11, stt: 45,
+    id: "11-45", subject: "Toán", grade: 11, stt: 45,
     lesson: "Chuyên đề 2: Bài 8. Một vài khái niệm cơ bản", periods: 2,
     requirement: "Đồ thị, đỉnh, cạnh, đỉnh kề; đơn đồ thị, đa đồ thị; định lí bắt tay.",
     digitalComp: "3.1.NC1a; 1.1.NC1b: Dùng Graph Theory App vẽ đỉnh và cạnh.",
@@ -741,7 +803,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: "Chuyên đề"
   },
   {
-    id: "11-46", grade: 11, stt: 46,
+    id: "11-46", subject: "Toán", grade: 11, stt: 46,
     lesson: "Chuyên đề 2: Bài 9. Đường đi Euler và đường đi Hamilton", periods: 2,
     requirement: "Phân biệt đường đi Euler và Hamilton; điều kiện tồn tại; bài toán 7 cây cầu.",
     digitalComp: "1.1.NC1b; 3.1.NC1a: Tìm kiếm ứng dụng; mô phỏng thuật toán Euler.",
@@ -749,7 +811,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: "Chuyên đề"
   },
   {
-    id: "11-47", grade: 11, stt: 47,
+    id: "11-47", subject: "Toán", grade: 11, stt: 47,
     lesson: "Chuyên đề 2: Bài 10. Bài toán tìm đường đi tối ưu", periods: 2,
     requirement: "Đồ thị có trọng số; giải bài toán tìm đường đi ngắn nhất (Dijkstra).",
     digitalComp: "1.1.NC1b; 3.1.NC1a: Dùng Python/Google Maps mô phỏng đường đi tối ưu.",
@@ -757,7 +819,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: "Chuyên đề"
   },
   {
-    id: "11-48", grade: 11, stt: 48,
+    id: "11-48", subject: "Toán", grade: 11, stt: 48,
     lesson: "Chuyên đề 3: Bài 11. Hình chiếu vuông góc và hình chiếu trục đo", periods: 6,
     requirement: "Phương pháp chiếu vuông góc; quy tắc hình chiếu trục đo (đẳng cự, xiên góc).",
     digitalComp: "3.1.NC1a; 3.1.NC1b: Đọc và vẽ bản vẽ trên AutoCAD/GeoGebra 3D.",
@@ -765,7 +827,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: "Chuyên đề"
   },
   {
-    id: "11-49", grade: 11, stt: 49,
+    id: "11-49", subject: "Toán", grade: 11, stt: 49,
     lesson: "Chuyên đề 3: Bài 12. Bản vẽ kỹ thuật", periods: 4,
     requirement: "Đọc thông tin bản vẽ kỹ thuật đơn giản; lập bản vẽ kỹ thuật gồm các hình chiếu.",
     digitalComp: "3.1.NC1a; 2.1.NC1a: Dựng hình chiếu 3D sang 2D; xuất file chuẩn PDF.",
@@ -775,7 +837,7 @@ export const fullPlan: KHGDRow[] = [
 
   // LỚP 12
   {
-    id: "12-1", grade: 12, stt: 1,
+    id: "12-1", subject: "Toán", grade: 12, stt: 1,
     lesson: "Bài 1: Tính đơn điệu và cực trị của hàm số", periods: 6,
     requirement: "Nhận biết tính đơn điệu, mối liên hệ với dấu đạo hàm, điểm cực trị.",
     digitalComp: "3.1.NC1a: Sử dụng GeoGebra quan sát cực trị và tính đơn điệu.",
@@ -783,7 +845,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "12-2", grade: 12, stt: 2,
+    id: "12-2", subject: "Toán", grade: 12, stt: 2,
     lesson: "Bài 2: GTLN-GTNN của hàm số", periods: 3,
     requirement: "Nhận biết và tìm GTLN, GTNN của hàm số trên một đoạn.",
     digitalComp: "1.1.NC1b; 5.2.NC1b: Dùng công cụ CAS tìm GTLN/GTNN.",
@@ -791,7 +853,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: "Bài toán tối ưu"
   },
   {
-    id: "12-3", grade: 12, stt: 3,
+    id: "12-3", subject: "Toán", grade: 12, stt: 3,
     lesson: "Bài 3: Đường tiệm cận của đồ thị hàm số", periods: 4,
     requirement: "Nhận biết tiệm cận đứng, tiệm cận ngang, tiệm cận xiên.",
     digitalComp: "3.1.NC1a: Trực quan hóa đường tiệm cận trên đồ thị số.",
@@ -799,7 +861,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "12-4", grade: 12, stt: 4,
+    id: "12-4", subject: "Toán", grade: 12, stt: 4,
     lesson: "Bài 4: Khảo sát sự biến thiên và vẽ đồ thị của hàm số", periods: 5,
     requirement: "Sơ đồ khảo sát hàm số bậc ba, hàm phân thức hữu tỉ.",
     digitalComp: "6.1.NC1a; 6.2.NC1a: Ứng dụng AI phân tích dáng điệu đồ thị.",
@@ -807,7 +869,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: "Đồ thị kĩ thuật"
   },
   {
-    id: "12-5", grade: 12, stt: 5,
+    id: "12-5", subject: "Toán", grade: 12, stt: 5,
     lesson: "Bài 5: Ứng dụng đạo hàm giải quyết một số vấn đề liên quan đến thực tiễn", periods: 4,
     requirement: "Vận dụng đạo hàm và khảo sát hàm số giải quyết bài toán thực tế.",
     digitalComp: "1.1.NC1b; 2.1.NC1a: Tìm kiếm dữ liệu thực tế.",
@@ -815,7 +877,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: "Tối ưu sản xuất"
   },
   {
-    id: "12-6", grade: 12, stt: 6,
+    id: "12-6", subject: "Toán", grade: 12, stt: 6,
     lesson: "Bài 6: Vectơ trong không gian", periods: 6,
     requirement: "Khái niệm vectơ trong không gian, quy tắc hình hộp, các phép toán.",
     digitalComp: "5.2.NC1b: Áp dụng các công cụ số giải quyết vấn đề.",
@@ -823,7 +885,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "12-7", grade: 12, stt: 7,
+    id: "12-7", subject: "Toán", grade: 12, stt: 7,
     lesson: "Bài 7: Hệ trục tọa độ trong không gian", periods: 3,
     requirement: "Tọa độ điểm, vectơ đối với hệ trục Oxyz vận dụng bài toán thực tế.",
     digitalComp: "5.2.NC1b: Áp dụng các công cụ số trong Oxyz.",
@@ -831,7 +893,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: "Định vị GPS"
   },
   {
-    id: "12-8", grade: 12, stt: 8,
+    id: "12-8", subject: "Toán", grade: 12, stt: 8,
     lesson: "Bài 8: Biểu thức tọa độ của các phép toán vecto", periods: 3,
     requirement: "Biểu thức tọa độ cộng, trừ, nhân số, tích vô hướng, độ dài vectơ.",
     digitalComp: "5.3.NC1a; 6.2.NC1a: Trực quan hóa và kiểm chứng tích vô hướng 3D.",
@@ -839,7 +901,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "12-9", grade: 12, stt: 9,
+    id: "12-9", subject: "Toán", grade: 12, stt: 9,
     lesson: "Bài 9: Khoảng biến thiên, khoảng tứ phân vị", periods: 1,
     requirement: "Tính khoảng biến thiên, khoảng tứ phân vị và hiểu ý nghĩa.",
     digitalComp: "1.3.NC1a; 5.2.NC1b: Tổ chức dữ liệu trong Excel.",
@@ -847,7 +909,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "12-10", grade: 12, stt: 10,
+    id: "12-10", subject: "Toán", grade: 12, stt: 10,
     lesson: "Bài 10: Phương sai và độ lệch chuẩn", periods: 2,
     requirement: "Tính phương sai, độ lệch chuẩn mẫu ghép nhóm; ý nghĩa thực tiễn.",
     digitalComp: "1.1.NC1b; 2.1.NC1a: Tìm kiếm dữ liệu thống kê.",
@@ -855,7 +917,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: "Phân tích rủi ro"
   },
   {
-    id: "12-11", grade: 12, stt: 11,
+    id: "12-11", subject: "Toán", grade: 12, stt: 11,
     lesson: "Hoạt động TH & TN: Khảo sát và vẽ đồ thị hàm số với phần mềm Geogebra", periods: 2,
     requirement: "Sử dụng GeoGebra khảo sát và vẽ đồ thị hàm số phức tạp.",
     digitalComp: "2.1.NC1a; 5.2.NC1b: Tương tác và giải quyết vấn đề số.",
@@ -863,7 +925,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: "Thực hành CNTT"
   },
   {
-    id: "12-12", grade: 12, stt: 12,
+    id: "12-12", subject: "Toán", grade: 12, stt: 12,
     lesson: "Hoạt động TH & TN: Vẽ vecto tổng của ba vecto bằng phần mềm Geogebra", periods: 1,
     requirement: "Sử dụng GeoGebra vẽ vecto tổng của ba vectơ trong không gian.",
     digitalComp: "2.1.NC1a; 5.2.NC1b: Tương tác phần mềm 3D.",
@@ -871,7 +933,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: "Thực hành CNTT"
   },
   {
-    id: "12-13", grade: 12, stt: 13,
+    id: "12-13", subject: "Toán", grade: 12, stt: 13,
     lesson: "Hoạt động TH & TN: Độ dài gang tay (gang tay của bạn dài bao nhiêu?)", periods: 2,
     requirement: "Thu thập và phân tích dữ liệu so sánh độ dài gang tay nam/nữ.",
     digitalComp: "1.1.NC1b; 1.3.NC1b; 2.1.NC1a: Tổ chức dữ liệu cấu trúc.",
@@ -879,7 +941,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: "Dự án thống kê"
   },
   {
-    id: "12-14", grade: 12, stt: 14,
+    id: "12-14", subject: "Toán", grade: 12, stt: 14,
     lesson: "Bài 11: Nguyên hàm", periods: 5,
     requirement: "Khái niệm nguyên hàm, nguyên hàm hàm sơ cấp, vận dụng thực tiễn.",
     digitalComp: "1.1.NC1a; 6.1.NC1a: Quét mã QR khảo sát, xem video AI đạo hàm.",
@@ -887,7 +949,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: ""
   },
   {
-    id: "12-15", grade: 12, stt: 15,
+    id: "12-15", subject: "Toán", grade: 12, stt: 15,
     lesson: "Bài 12: Tích phân", periods: 5,
     requirement: "Định nghĩa, tính chất tích phân và bài toán thực tế.",
     digitalComp: "5.3.NC1a; 1.2.NC1a: Trực quan diện tích hình thang cong.",
@@ -895,7 +957,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: "Tính công/quãng đường"
   },
   {
-    id: "12-16", grade: 12, stt: 16,
+    id: "12-16", subject: "Toán", grade: 12, stt: 16,
     lesson: "Bài 13: Ứng dụng hình học của tích phân", periods: 5,
     requirement: "Tính diện tích hình phẳng, thể tích vật thể tròn xoay.",
     digitalComp: "5.3.NC1a; 3.1.NC1a: Video AI tổng Riemann, mô phỏng 3D.",
@@ -903,7 +965,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: "Thiết kế thể tích"
   },
   {
-    id: "12-17", grade: 12, stt: 17,
+    id: "12-17", subject: "Toán", grade: 12, stt: 17,
     lesson: "Bài 14. Phương trình mặt phẳng", periods: 6,
     requirement: "Viết PT mặt phẳng, điều kiện song song/vuông góc, khoảng cách.",
     digitalComp: "2.1.NC1a; 1.1.NC1a: Xử lý dữ liệu không gian.",
@@ -911,7 +973,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: "Kiến trúc Oxyz"
   },
   {
-    id: "12-18", grade: 12, stt: 18,
+    id: "12-18", subject: "Toán", grade: 12, stt: 18,
     lesson: "Bài 15. Phương trình đường thẳng trong không gian", periods: 4,
     requirement: "PT tham số, chính tắc, vị trí tương đối giữa hai đường thẳng.",
     digitalComp: "1.1.NC1a; 2.1.NC1a: Tìm kiếm và xử lý phương trình.",
@@ -919,7 +981,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "12-19", grade: 12, stt: 19,
+    id: "12-19", subject: "Toán", grade: 12, stt: 19,
     lesson: "Bài 16. Công thức tính góc trong không gian", periods: 2,
     requirement: "Tính góc giữa 2 đường thẳng, đường và mặt, 2 mặt phẳng.",
     digitalComp: "1.1.NC1b; 1.2.NC1b: Tra cứu và tính toán số liệu góc.",
@@ -927,7 +989,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: ""
   },
   {
-    id: "12-20", grade: 12, stt: 20,
+    id: "12-20", subject: "Toán", grade: 12, stt: 20,
     lesson: "Bài 17. Phương trình mặt cầu", periods: 3,
     requirement: "Nhận diện, xác định tâm, bán kính, lập phương trình mặt cầu.",
     digitalComp: "2.1.NC1a: Tương tác trực quan mô hình số.",
@@ -935,7 +997,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: "Mô hình GPS"
   },
   {
-    id: "12-21", grade: 12, stt: 21,
+    id: "12-21", subject: "Toán", grade: 12, stt: 21,
     lesson: "Bài 18. Xác suất có điều kiện", periods: 5,
     requirement: "Khái niệm xác suất có điều kiện, công thức nhân xác suất.",
     digitalComp: "1.2.NC1b; 2.NC1a: Google Sheets, Sơ đồ cây.",
@@ -943,7 +1005,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: "Bài toán Y tế/Chẩn đoán"
   },
   {
-    id: "12-22", grade: 12, stt: 22,
+    id: "12-22", subject: "Toán", grade: 12, stt: 22,
     lesson: "Bài 19. Công thức xác suất toàn phần và công thức Bayes", periods: 5,
     requirement: "Vận dụng công thức xác suất toàn phần, công thức Bayes.",
     digitalComp: "1.2.NC1b; 2.1.NC1a: Xử lý số liệu xác suất trên máy.",
@@ -951,7 +1013,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Có", note: "Dự báo rủi ro"
   },
   {
-    id: "12-23", grade: 12, stt: 23,
+    id: "12-23", subject: "Toán", grade: 12, stt: 23,
     lesson: "Chuyên đề 1: Bài 1. Biến ngẫu nhiên rời rạc và các số đặc trưng", periods: 5,
     requirement: "Nhận biết khái niệm biến ngẫu nhiên rời rạc; lập bảng phân bố xác suất; tính E(X), V(X), sigma(X).",
     digitalComp: "3.1.NC1a: Lập bảng phân phối xác suất bằng Excel.",
@@ -959,7 +1021,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: "Chuyên đề"
   },
   {
-    id: "12-24", grade: 12, stt: 24,
+    id: "12-24", subject: "Toán", grade: 12, stt: 24,
     lesson: "Chuyên đề 1: Bài 2. Biến ngẫu nhiên có phân bố nhị thức và áp dụng", periods: 5,
     requirement: "Phép thử lặp, công thức Bernoulli; phân bố nhị thức B(n,p); bài toán thực tiễn.",
     digitalComp: "5.2.NC1b: Tính xác suất phân bố nhị thức bằng phần mềm.",
@@ -967,7 +1029,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: "Chuyên đề"
   },
   {
-    id: "12-25", grade: 12, stt: 25,
+    id: "12-25", subject: "Toán", grade: 12, stt: 25,
     lesson: "Chuyên đề 2: Bài 3. Vận dụng hệ BPT bậc nhất giải bài toán quy hoạch tuyến tính", periods: 5,
     requirement: "Vận dụng hệ BPT bậc nhất hai ẩn giải bài toán tối ưu F(x,y)=Ax+By; xác định phương án tối ưu.",
     digitalComp: "5.3.NC1b: Sử dụng Solver trong Excel để giải bài toán QHTT.",
@@ -975,7 +1037,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: "Chuyên đề"
   },
   {
-    id: "12-26", grade: 12, stt: 26,
+    id: "12-26", subject: "Toán", grade: 12, stt: 26,
     lesson: "Chuyên đề 2: Bài 4. Vận dụng đạo hàm để giải quyết một số bài toán tối ưu", periods: 5,
     requirement: "Vận dụng đạo hàm giải bài toán tối ưu trong kinh tế, kinh doanh.",
     digitalComp: "5.3.NC1b: Sử dụng Solver/GeoGebra giải bài toán tối ưu phi tuyến.",
@@ -983,7 +1045,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: "Chuyên đề"
   },
   {
-    id: "12-27", grade: 12, stt: 27,
+    id: "12-27", subject: "Toán", grade: 12, stt: 27,
     lesson: "Chuyên đề 3: Bài 5. Tiền tệ, lãi suất", periods: 5,
     requirement: "Tiền vốn, lãi suất, tiền vay, lãi suất thực tế có lạm phát.",
     digitalComp: "1.1.NC1b: Dùng công cụ tính lãi suất trực tuyến lập kế hoạch.",
@@ -991,7 +1053,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: "Chuyên đề"
   },
   {
-    id: "12-28", grade: 12, stt: 28,
+    id: "12-28", subject: "Toán", grade: 12, stt: 28,
     lesson: "Chuyên đề 3: Bài 6. Tín dụng. Vay nợ", periods: 5,
     requirement: "Thẻ tín dụng, tính phí và lãi suất thẻ tín dụng; kế hoạch trả góp.",
     digitalComp: "1.1.NC1b: Dùng công cụ tính lãi suất trực tuyến để lập kế hoạch.",
@@ -999,7 +1061,7 @@ export const fullPlan: KHGDRow[] = [
     stem: "Không", note: "Chuyên đề"
   },
   {
-    id: "12-29", grade: 12, stt: 29,
+    id: "12-29", subject: "Toán", grade: 12, stt: 29,
     lesson: "Chuyên đề 3: Bài 7. Đầu tư tài chính. Lập kế hoạch tài chính cá nhân", periods: 5,
     requirement: "Kênh đầu tư, quy đổi lãi suất, tính thời gian đạt mục tiêu tài chính.",
     digitalComp: "1.1.NC1b: Dùng công cụ tính lãi suất trực tuyến để lập kế hoạch tài chính.",
