@@ -5,6 +5,16 @@ import { GoogleGenAI, Type } from "@google/genai";
 
 export const maxDuration = 60; // 1 minute max duration on Vercel Hobby
 
+const MATH_FORMATTING_RULES = `
+QUY TẮC ĐỊNH DẠNG TOÁN HỌC VÀ VĂN BẢN (BẮT BUỘC TUÂN THỦ NGHIÊM NGẶT):
+1. Mọi công thức Toán bắt buộc viết bằng cú pháp chuẩn LaTeX (tuyệt đối không dùng ký tự Unicode như √, ∫, ², ³, ≤, ≥ dạng chữ thông thường).
+2. Công thức nằm cùng dòng văn bản: Luôn kẹp trong cặp dấu $...$ (ví dụ: $y = \\dfrac{ax+b}{cx+d}$, $x \\in [1; 5]$). LUÔN CÓ KHOẢNG TRẮNG trước và sau dấu $ để không bị dính chữ.
+3. Công thức nằm riêng một dòng độc lập: Luôn kẹp trong cặp dấu $$...$$ (ví dụ: $$\\int_a^b f(x)\\,dx = F(b) - F(a)$$).
+4. Ký hiệu bắt buộc: Phân số dùng \\dfrac{a}{b}, căn thức dùng \\sqrt{x}, hệ phương trình hoặc điều kiện dùng \\begin{cases} ... \\end{cases}.
+5. Bố cục văn bản dùng định dạng Markdown rõ ràng: tiêu đề dùng ##, ###; danh sách ý dùng dấu gạch đầu dòng (-); từ khóa quan trọng in đậm (**từ khóa**).
+6. LƯU Ý TỐI QUAN TRỌNG VỀ BẢNG (TABLE): Bảng trong Markdown sẽ BỊ LỖI NẶNG nếu có dấu xuống dòng. TUYỆT ĐỐI KHÔNG ĐƯỢC XUỐNG DÒNG bên trong các ô của bảng. Nếu viết hệ phương trình trong bảng, BẮT BUỘC phải viết liền trên 1 dòng (ví dụ: $\\begin{cases} x=1 \\\\\\\\ y=2 \\end{cases}$).
+`;
+
 const app = express();
 app.use(express.json({ limit: '50mb' }));
 
@@ -314,7 +324,7 @@ app.all("/api/generate-exam", async (req, res) => {
 - Trắc nghiệm Đúng/Sai (tf): ${tf} câu.
 - Trắc nghiệm trả lời ngắn (sa): ${sa} câu.
 - Tự luận (essay): ${essay} câu.
-- BẮT BUỘC dùng chuẩn LaTeX bọc trong dấu $ cho mọi công thức. LUÔN LUÔN CÓ KHOẢNG TRẮNG trước và sau dấu $ để tránh lỗi dính chữ khi xuất file (Ví dụ đúng: "Có $x = 2$ nghiệm", sai: "Có$x=2$nghiệm").
+\${MATH_FORMATTING_RULES}
 - BẮT BUỘC soát lỗi chính tả tiếng Việt thật cẩn thận.`;
 
     const promptText = `Bạn là chuyên gia ra đề thi môn ${subject} Lớp ${grade}.
@@ -452,9 +462,8 @@ Yêu cầu định dạng và nội dung (dùng cú pháp Markdown):
 1. **Phân chia tiết học**: BẮT BUỘC dựa vào số tiết trích xuất được để phân bổ rõ ràng tiến trình dạy học. Ví dụ bài có 2 tiết thì phải ghi rõ "Tiết 1: ... (45 phút)", "Tiết 2: ... (45 phút)". Mỗi tiết đảm bảo thời lượng đúng 45 phút.
 2. **Tuyệt đối KHÔNG sử dụng thẻ HTML \`<br>\` hoặc \`<br/>\`**: Hãy sử dụng dấu xuống dòng chuẩn của Markdown (Enter 2 lần) để ngắt đoạn.
 3. **Tô màu Năng lực số (NLS) và Năng lực AI**: Khi nhắc đến phần mềm, công cụ thiết bị số, Năng lực số hoặc công cụ AI trong bài, BẮT BUỘC phải bọc trong thẻ HTML \`<mark style="background-color: #dbeafe; color: #1d4ed8; font-weight: bold; padding: 2px 4px; border-radius: 4px;">Tên phần mềm / NLS</mark>\` để tô màu xanh nổi bật.
-4. **Toán học và công thức**: Bắt buộc sử dụng chuẩn LaTeX. Sử dụng duy nhất dấu $ cho công thức trong dòng (ví dụ: $a+b=c$) và $$ cho công thức riêng (ví dụ: $x^2$). Không dùng các ký tự Unicode mô phỏng công thức.
-5. **Bảng biểu**: Sử dụng chuẩn bảng Markdown đẹp mắt (Markdown tables) để phân chia rõ ràng Mục tiêu, Nội dung, Sản phẩm, Tổ chức thực hiện.
-6. **I. MỤC TIÊU**: Trình bày rõ ràng Kiến thức, Năng lực số, Năng lực AI, và Yêu cầu STEM. Các mã chỉ báo (như [3.1.NC1a]) phải được giữ nguyên và giải thích ngắn gọn cách đạt được trong bài.
+\${MATH_FORMATTING_RULES}
+5. **I. MỤC TIÊU**: Trình bày rõ ràng Kiến thức, Năng lực số, Năng lực AI, và Yêu cầu STEM. Các mã chỉ báo (như [3.1.NC1a]) phải được giữ nguyên và giải thích ngắn gọn cách đạt được trong bài.
 7. **II. THIẾT BỊ DẠY HỌC VÀ HỌC LIỆU**: Ghi rõ các thiết bị số, phần mềm, công cụ AI cần thiết.
 8. **III. TIẾN TRÌNH DẠY HỌC**:
    Trình bày tiến trình giảng dạy rõ ràng theo từng tiết (Tiết 1, Tiết 2...). Phải thiết kế theo 4 hoạt động chuẩn: 
@@ -580,7 +589,8 @@ Trình bày chi tiết từng hoạt động (Khởi động, Hình thành kiế
 - Sản phẩm
 - Tổ chức thực hiện: 4 bước rõ ràng (Chuyển giao nhiệm vụ -> Thực hiện nhiệm vụ -> Báo cáo, thảo luận -> Kết luận, nhận định).
 
-Định dạng văn bản rõ ràng, phân cấp khoa học bằng Markdown, công thức Toán học dùng ký hiệu chuẩn TeX (sử dụng dấu $ cho công thức trong dòng và $ cho công thức độc lập). KHÔNG dùng các ký tự Unicode mô phỏng công thức.`;
+\${MATH_FORMATTING_RULES}
+`;
 
     
     const response = await generateWithFallback(req, {
@@ -620,7 +630,7 @@ app.all("/api/generate-plan", async (req, res) => {
       - Cột "Năng lực AI": BẮT BUỘC phải bắt đầu bằng mã chỉ báo cụ thể trong dấu ngoặc vuông theo QĐ 2422 (ví dụ: [10.A1.1], [10.C2.1], [12.D2.1]...). Theo sau là yêu cầu cần đạt về AI tương ứng.
       - Cột "Giáo dục STEM/STEAM": Đề xuất hợp lý nhất các bài có thể tích hợp Stem/Steam phù hợp với năng lực và điều kiện thực tế.
       - Giữ nguyên các cột gốc: Bài học, Số tiết/bài, Yêu cầu cần đạt.
-      
+      \${MATH_FORMATTING_RULES}
       Trả về kết quả dưới dạng danh sách JSON array với các thuộc tính: lesson, periods, requirement, digitalComp, aiComp, stem, note.`;
 
       let contents: any = prompt;
@@ -698,7 +708,7 @@ YÊU CẦU:
 ## Lời giải chi tiết
 [Các bước giải chi tiết cho đề tương tự]
 
-LƯU Ý ĐỐI VỚI CÔNG THỨC: BẮT BUỘC sử dụng chuẩn LaTeX cho MỌI công thức toán học, lý, hóa. Sử dụng duy nhất dấu $ cho công thức trong dòng. ĐẶC BIỆT QUAN TRỌNG: LUÔN LUÔN CÓ KHOẢNG TRẮNG trước và sau dấu $ để không bị dính chữ (Ví dụ đúng: "Ta có $x=2$ là", sai: "Ta có$x=2$là"). KHÔNG sử dụng ký tự Unicode mô phỏng công thức.
+\${MATH_FORMATTING_RULES}
 BẮT BUỘC kiểm tra và SỬA LỖI CHÍNH TẢ tiếng Việt thật cẩn thận trước khi trả kết quả.`;
 
       const response = await generateWithFallback(req, {
@@ -747,13 +757,9 @@ app.all("/api/generate-worksheet", async (req, res) => {
          - Hình thức: ${type || "Kết hợp trắc nghiệm và tự luận"}.
          - Phân hóa từ cơ bản đến vận dụng.
       4. Trình bày rõ ràng, để lại khoảng trống hợp lý giả định học sinh sẽ làm trực tiếp vào phiếu.
-      5. KHOA HỌC/TOÁN: BẮT BUỘC sử dụng chuẩn LaTeX cho MỌI công thức. TẤT CẢ các biến số (như $x, V$) ĐỀU PHẢI bọc trong dấu $.
-         - Sử dụng dấu $ cho công thức trong dòng.
-         - Sử dụng dấu $$ cho công thức đứng độc lập.
-         - LƯU Ý TỐI QUAN TRỌNG VỀ BẢNG (TABLE): Bảng trong Markdown sẽ BỊ LỖI NẶNG nếu có dấu xuống dòng. Do đó, TUYỆT ĐỐI KHÔNG ĐƯỢC XUỐNG DÒNG bên trong các ô của bảng. Nếu viết hệ phương trình (cases) trong bảng, BẮT BUỘC phải viết liền trên 1 dòng (ví dụ: $\\begin{cases} x=1 \\\\\\\\ y=2 \\end{cases}$).
-         - LUÔN LUÔN CÓ KHOẢNG TRẮNG trước và sau dấu $ để không bị dính chữ.
-      6. ĐÁP ÁN: Ở cuối tài liệu, hãy cung cấp phần Hướng dẫn giải/Đáp án, phân cách bằng tiêu đề "--- HƯỚNG DẪN CHẤM / ĐÁP ÁN ---".
-      7. BẮT BUỘC kiểm tra và SỬA LỖI CHÍNH TẢ tiếng Việt thật cẩn thận trước khi trả kết quả.`;
+      \${MATH_FORMATTING_RULES}
+      5. ĐÁP ÁN: Ở cuối tài liệu, hãy cung cấp phần Hướng dẫn giải/Đáp án, phân cách bằng tiêu đề "--- HƯỚNG DẪN CHẤM / ĐÁP ÁN ---".
+      6. BẮT BUỘC kiểm tra và SỬA LỖI CHÍNH TẢ tiếng Việt thật cẩn thận trước khi trả kết quả.`;
 
       const response = await generateWithFallback(req, {
         contents: prompt,
@@ -785,14 +791,10 @@ app.all("/api/pdf-to-word", async (req, res) => {
 
 YÊU CẦU NGHIÊM NGẶT:
 1. TUYỆT ĐỐI GIỮ NGUYÊN cấu trúc, số thứ tự câu, các mục lục, phân chương phân bài. Không được tự ý tóm tắt hay lược bỏ bất kỳ từ nào.
-2. CHUYỂN TOÀN BỘ CÔNG THỨC, KÝ HIỆU Toán học, Vật lý, Hóa học sang định dạng chuẩn LaTeX:
-   - TẤT CẢ các biến số (VD: $x, y, V, S$), các giá trị đại lượng (VD: $500\text{ cm}^3, 50\text{ kg}$), biểu thức, phương trình ĐỀU PHẢI được bọc trong dấu $.
-   - Sử dụng một dấu $ (VD: $x^2 + 1 = 0$) cho công thức/ký hiệu nằm trong dòng chữ.
-   - Sử dụng hai dấu $ (VD: $\int_0^1 x dx$) cho công thức đứng riêng một dòng.
-   - KHÔNG dùng ký tự Unicode mô phỏng công thức (như x² hay ½).
-3. HÌNH ẢNH / HÌNH VẼ: Do hạn chế kỹ thuật số hóa, nếu gặp biểu đồ, hình vẽ, đồ thị, hãy thêm một chú thích rõ ràng bằng chữ ở vị trí đó (Ví dụ: [Hình vẽ đồ thị hàm số...] hoặc [Hình ảnh mô tả...]) để giáo viên biết vị trí cần chèn lại ảnh gốc.
-4. GIỮ NGUYÊN BẢNG BIỂU: Dùng cú pháp Markdown table để tạo lại chính xác các bảng biểu trong tài liệu.
-5. Nếu trong tài liệu gốc có các thẻ HTML (như <img>) được truyền vào, TUYỆT ĐỐI GIỮ NGUYÊN Y HỆT các thẻ đó ở đúng vị trí.
+\${MATH_FORMATTING_RULES}
+2. HÌNH ẢNH / HÌNH VẼ: Do hạn chế kỹ thuật số hóa, nếu gặp biểu đồ, hình vẽ, đồ thị, hãy thêm một chú thích rõ ràng bằng chữ ở vị trí đó (Ví dụ: [Hình vẽ đồ thị hàm số...] hoặc [Hình ảnh mô tả...]) để giáo viên biết vị trí cần chèn lại ảnh gốc.
+3. GIỮ NGUYÊN BẢNG BIỂU: Dùng cú pháp Markdown table để tạo lại chính xác các bảng biểu trong tài liệu.
+4. Nếu trong tài liệu gốc có các thẻ HTML (như <img>) được truyền vào, TUYỆT ĐỐI GIỮ NGUYÊN Y HỆT các thẻ đó ở đúng vị trí.
 
 Đầu ra của bạn phải hoàn toàn là nội dung tài liệu đã được số hóa, không thêm các câu chào hỏi thừa.`;
 
@@ -848,8 +850,8 @@ YÊU CẦU:
 ## Lời giải chi tiết
 [Các bước giải chi tiết]
 
-5. KHOA HỌC/TOÁN: BẮT BUỘC sử dụng chuẩn LaTeX cho MỌI công thức. TẤT CẢ các biến số (như $x, V$), giá trị (như $500\\text{ cm}^3$) ĐỀU PHẢI bọc trong dấu $. Sử dụng duy nhất dấu $ cho công thức trong dòng. ĐẶC BIỆT QUAN TRỌNG: LUÔN LUÔN CÓ KHOẢNG TRẮNG trước và sau dấu $ để không bị dính chữ (Ví dụ đúng: "Ta có $x=2$ là", sai: "Ta có$x=2$là").
-6. BẮT BUỘC kiểm tra và SỬA LỖI CHÍNH TẢ tiếng Việt thật cẩn thận trước khi trả kết quả.`;
+\${MATH_FORMATTING_RULES}
+5. BẮT BUỘC kiểm tra và SỬA LỖI CHÍNH TẢ tiếng Việt thật cẩn thận trước khi trả kết quả.`;
 
       const response = await generateWithFallback(req, {
         contents: [
