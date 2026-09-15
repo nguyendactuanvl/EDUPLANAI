@@ -213,7 +213,7 @@ const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
 async function generateWithFallback(req: any, payloadOptions: any) {
   const client = getAiClient(req);
-  const models = ["gemini-2.5-flash", "gemini-1.5-flash"];
+  const models = ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.5-flash-8b"];
   let primaryError: any = null;
   
   const maxRetries = 3;
@@ -227,6 +227,12 @@ async function generateWithFallback(req: any, payloadOptions: any) {
         const status = e?.status;
         
         const lowerMsg = (e?.message || "").toLowerCase();
+        
+        // Immediately throw if it's an invalid API key to notify user
+        if (lowerMsg.includes("api_key_invalid") || lowerMsg.includes("api key not valid")) {
+          throw e;
+        }
+        
         if (
           lowerMsg.includes("429") || status === 429 || lowerMsg.includes("resource_exhausted") || lowerMsg.includes("quota") ||
           lowerMsg.includes("503") || status === 503 || lowerMsg.includes("unavailable") || lowerMsg.includes("overloaded")
@@ -234,7 +240,9 @@ async function generateWithFallback(req: any, payloadOptions: any) {
           if (!primaryError) primaryError = e;
           continue; 
         }
-        if (errorMsg.includes("not found") || status === 404) {
+        if (lowerMsg.includes("not found") || status === 404 || lowerMsg.includes("is not found") || lowerMsg.includes("not exist") || status === 400) {
+          // It's likely a model availability issue or a bad request for this specific model, so we can try the next model.
+          if (!primaryError) primaryError = e;
           continue;
         }
         throw e; // Non-retryable
