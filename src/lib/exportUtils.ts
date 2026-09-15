@@ -72,7 +72,7 @@ export function exportHtmlToWord(element: HTMLElement, filename: string, keepLat
       
       const mathNode = el.querySelector(".katex-mathml math");
       if (mathNode) {
-        const mathClone = mathNode.cloneNode(true);
+        const mathClone = mathNode.cloneNode(true) as Element;
         // IMPORTANT: Add MathML namespace for MS Word
         mathClone.setAttribute("xmlns", "http://www.w3.org/1998/Math/MathML");
         

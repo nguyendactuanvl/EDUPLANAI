@@ -3,9 +3,9 @@ import { exportHtmlToWord } from '../lib/exportUtils';
 import React, { useState, useRef } from 'react';
 import { Upload, X, FileText, Loader2, Download, AlertCircle } from 'lucide-react';
 import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
-import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import mammoth from 'mammoth';
 

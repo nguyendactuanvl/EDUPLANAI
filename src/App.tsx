@@ -54,8 +54,12 @@ export default function App() {
   
   const urlParams = new URLSearchParams(window.location.search);
   const studentExamId = urlParams.get('examId');
+  const studentExamData = urlParams.get('examData');
   if (studentExamId) {
     return <StudentExamView examId={studentExamId} />;
+  }
+  if (studentExamData) {
+    return <StudentExamView examRawData={studentExamData} />;
   }
   
   return (

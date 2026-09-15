@@ -5,9 +5,9 @@ import { Sparkles, Save, BookOpen, Download, AlertCircle, Upload, Edit3, Eye, Pr
 import pptxgen from "pptxgenjs";
 import { fullPlan } from "../data/mockData";
 import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
-import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import { saveToHistory } from '../lib/history';
 import { TextbookManager } from '../components/TextbookManager';
@@ -16,7 +16,7 @@ import { printElement } from '../lib/print';
 
 
 export function LessonPlan() {
-  const [activeTab, setActiveTab] = useState<"system" | "upload">("system");
+  const [activeTab, setActiveTab] = useState<"system" | "upload" | "upgrade">("system");
   const [selectedGrade, setSelectedGrade] = useState<number>(10);
   const [selectedLessonId, setSelectedLessonId] = useState<string>("");
   

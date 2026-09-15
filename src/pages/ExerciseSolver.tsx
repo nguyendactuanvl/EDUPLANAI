@@ -4,9 +4,9 @@ import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { Copy, Save, Upload, X, Sparkles, Loader2, Download, Presentation, ChevronLeft, ChevronRight, Maximize2, FileText, BookmarkPlus, Camera, Image as ImageIcon, Send, ArrowLeft } from 'lucide-react';
 
 import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
-import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 
 import mammoth from 'mammoth';
@@ -214,7 +214,7 @@ const handleSolve = async () => {
         const text = await response.text();
       let data;
       try { data = JSON.parse(text); } catch(e) { throw new Error(`Lỗi phản hồi từ máy chủ (không phải JSON). Chi tiết: ${text ? text.substring(0, 150) : ""}`); }
-        throw new Error(errorData.error || 'Có lỗi xảy ra khi xử lý file');
+        throw new Error(data.error || 'Có lỗi xảy ra khi xử lý file');
       }
 
       const text = await response.text();

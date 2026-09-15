@@ -60,7 +60,7 @@ export async function apiFetch(url: string, options: RequestInit = {}): Promise<
     let customKeyUsed = !skipCustomKey && !!localStorage.getItem(API_KEY_STORAGE);
     
     // First try with custom key (if exists), or system key
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
+    const baseUrl = (import.meta as any).env.VITE_API_BASE_URL || "";
     let response = await fetch(baseUrl + url, {
       credentials: 'include',
       ...options,
@@ -134,7 +134,7 @@ export async function apiFetch(url: string, options: RequestInit = {}): Promise<
 }
 
 export async function uploadFileChunked(fileData: string, type: string): Promise<string> {
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || '';
+  const baseUrl = (import.meta as any).env.VITE_API_BASE_URL || '';
   const fileId = Math.random().toString(36).substring(2) + Date.now().toString(36);
   // Max payload is ~1MB for Nginx, so we use 500KB chunks
   const chunkSize = 500 * 1024;

@@ -519,6 +519,7 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT MỘT ĐỐI TƯỢNG JSON VỚI CẤU TRÚC:
         correct: rightAns,
         correctAnswer: correctAnsStr,
         correctOptionIndex: correctOptionIndex,
+        tfStatements: q.tfStatements || [],
         explanation: explain,
         level: q.level || 'Nhận biết',
         topic: q.topic || 'Chung',
@@ -1192,7 +1193,7 @@ app.use("/api", (req, res) => {
 });
 
 app.use((err: any, req: any, res: any, next: any) => {
-  if (err instanceof SyntaxError && err.status === 400 && "body" in err) {
+  if (err instanceof SyntaxError && (err as any).status === 400 && "body" in err) {
     return res.status(400).json({ error: "Dữ liệu JSON không hợp lệ." });
   }
   if (err.type === "entity.too.large") {

@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Loader2, FileText, Trophy, CheckCircle2, XCircle } from 'lucide-react';
 import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { apiFetch } from '../lib/apiFetch';
+import LZString from 'lz-string';
+import { Clock, Copy } from 'lucide-react';
 
-export function StudentExamView({ examId }: { examId: string }) {
+export function StudentExamView({ examId, examRawData }: { examId?: string, examRawData?: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [examData, setExamData] = useState<any>(null);
@@ -17,9 +20,34 @@ export function StudentExamView({ examId }: { examId: string }) {
   const [answers, setAnswers] = useState<Record<number, any>>({});
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [score, setScore] = useState(0);
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const [timeSpent, setTimeSpent] = useState<number>(0);
 
   useEffect(() => {
-    apiFetch(`/api/exams/${examId}`)
+    if (examRawData) {
+      try {
+        const decompressed = LZString.decompressFromEncodedURIComponent(examRawData);
+        if (decompressed) {
+          const data = JSON.parse(decompressed);
+          setExamData(data);
+          if (data.codes && data.codes.length > 0) {
+            const randomCode = data.codes[Math.floor(Math.random() * data.codes.length)].code;
+            setSelectedCode(randomCode);
+          }
+          setLoading(false);
+          return;
+        } else {
+          throw new Error("Dữ liệu đề thi không hợp lệ.");
+        }
+      } catch (e) {
+        setError("Lỗi tải đề thi: " + e.message);
+        setLoading(false);
+        return;
+      }
+    }
+    
+    if (examId) {
+      apiFetch(`/api/exams/${examId}`)
       .then(res => {
         if (!res.ok) throw new Error("Không tìm thấy đề thi. Có thể link đã hết hạn.");
         return res.json();
@@ -33,7 +61,22 @@ export function StudentExamView({ examId }: { examId: string }) {
       })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false));
-  }, [examId]);
+    }
+  }, [examId, examRawData]);
+
+  useEffect(() => {
+    let timer: any;
+    if (isStarted && !isSubmitted && timeLeft !== null && timeLeft > 0) {
+      timer = setInterval(() => {
+        setTimeLeft(prev => (prev !== null && prev > 0) ? prev - 1 : 0);
+        setTimeSpent(prev => prev + 1);
+      }, 1000);
+    } else if (timeLeft === 0 && !isSubmitted) {
+      handleSubmit();
+      alert("Đã hết thời gian làm bài! Hệ thống tự động nộp bài.");
+    }
+    return () => clearInterval(timer);
+  }, [isStarted, isSubmitted, timeLeft]);
 
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="w-10 h-10 animate-spin text-emerald-600" /></div>;
   if (error) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><div className="bg-red-50 text-red-700 p-6 rounded-xl max-w-md text-center">{error}</div></div>;
@@ -122,7 +165,13 @@ export function StudentExamView({ examId }: { examId: string }) {
           
           <button 
             disabled={!studentInfo.name || !studentInfo.class}
-            onClick={() => setIsStarted(true)}
+            onClick={() => {
+              setIsStarted(true);
+              if (examData?.examData?.duration) {
+                const mins = parseInt(examData.examData.duration);
+                if (!isNaN(mins)) setTimeLeft(mins * 60);
+              }
+            }}
             className="w-full py-3.5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             Bắt đầu làm bài
@@ -140,6 +189,12 @@ export function StudentExamView({ examId }: { examId: string }) {
             <h1 className="font-bold text-slate-800 truncate">{examData.examData.examName}</h1>
             <p className="text-xs text-slate-500">Học sinh: {studentInfo.name} - Lớp: {studentInfo.class}</p>
           </div>
+          {isStarted && !isSubmitted && timeLeft !== null && (
+            <div className="flex items-center gap-2 bg-amber-50 text-amber-700 px-4 py-2 rounded-lg font-bold border border-amber-200">
+              <Clock className="w-5 h-5" />
+              <span>{Math.floor(timeLeft / 60).toString().padStart(2, '0')}:{(timeLeft % 60).toString().padStart(2, '0')}</span>
+            </div>
+          )}
           {!isSubmitted && (
             <button onClick={handleSubmit} className="px-6 py-2 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700">
               Nộp Bài
@@ -153,7 +208,14 @@ export function StudentExamView({ examId }: { examId: string }) {
             <div className="absolute top-0 left-0 w-full h-2 bg-emerald-500"></div>
             <Trophy className="w-16 h-16 mx-auto text-yellow-500 mb-4" />
             <h2 className="text-3xl font-bold text-slate-800 mb-2">Điểm của bạn: {score.toFixed(1)}/10</h2>
-            <p className="text-slate-600">Bạn đã hoàn thành bài kiểm tra. Xem chi tiết đáp án bên dưới.</p>
+            <p className="text-slate-600 mb-4">Bạn đã hoàn thành bài kiểm tra. Xem chi tiết đáp án bên dưới.</p>
+            <button onClick={() => {
+              const txt = `Học sinh: ${studentInfo.name} - Lớp: ${studentInfo.class}\nĐã hoàn thành Đề: ${examData.examData.examName}\nMã đề: ${currentExam.code}\nĐiểm số: ${score.toFixed(1)}/10\nThời gian làm bài: ${Math.floor(timeSpent/60)} phút ${timeSpent%60} giây`;
+              navigator.clipboard.writeText(txt);
+              alert("Đã sao chép kết quả! Bạn có thể gửi cho Giáo viên qua Zalo.");
+            }} className="px-6 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 inline-flex items-center gap-2">
+               <Copy className="w-4 h-4" /> Sao chép Kết quả gửi GV
+            </button>
           </div>
         )}
         
@@ -196,7 +258,7 @@ export function StudentExamView({ examId }: { examId: string }) {
           return (
             <div key={idx} className={`bg-white p-6 rounded-xl shadow-sm border ${isSubmitted && showRedBorder ? 'border-red-200' : isSubmitted ? 'border-emerald-200' : 'border-slate-200'}`}>
               <h3 className="font-medium text-slate-800 mb-4 leading-relaxed">
-                <span className="font-bold">Câu {idx + 1}:</span> <div className="markdown-body inline-block"><Markdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} >{q.content}</Markdown></div>
+                <span className="font-bold">Câu {idx + 1}:</span> <div className="markdown-body inline-block"><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]} >{q.content}</Markdown></div>
               </h3>
               
               <div className="space-y-3">
@@ -224,7 +286,7 @@ export function StudentExamView({ examId }: { examId: string }) {
                       <div className={`w-6 h-6 rounded-full border flex items-center justify-center shrink-0 ${isSelected && !isSubmitted ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-slate-300'}`}>
                         {String.fromCharCode(65 + oIdx)}
                       </div>
-                      <span className="flex-1"><div className="markdown-body inline-block"><Markdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} >{opt.replace(/^[A-D][\.\:\)]\s*/i, '')}</Markdown></div></span>
+                      <span className="flex-1"><div className="markdown-body inline-block"><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]} >{opt.replace(/^[A-D][\.\:\)]\s*/i, '')}</Markdown></div></span>
                       {isSubmitted && isCorrect && <CheckCircle2 className="w-5 h-5 text-emerald-600" />}
                       {isSubmitted && isSelected && !isCorrect && <XCircle className="w-5 h-5 text-red-600" />}
                     </button>
@@ -241,7 +303,7 @@ export function StudentExamView({ examId }: { examId: string }) {
                       
                       return (
                         <div key={sIdx} className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-xl border border-slate-200 bg-slate-50">
-                          <div className="flex-1"><div className="markdown-body inline-block"><Markdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} >{stmt.statement}</Markdown></div></div>
+                          <div className="flex-1"><div className="markdown-body inline-block"><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]} >{stmt.statement}</Markdown></div></div>
                           <div className="flex items-center gap-2 shrink-0">
                             <button 
                               disabled={isSubmitted}
@@ -319,7 +381,7 @@ export function StudentExamView({ examId }: { examId: string }) {
                     {isSubmitted && (
                       <div className="mt-4 p-4 bg-slate-100 rounded-lg border border-slate-200">
                         <span className="text-slate-500 font-semibold block mb-2">Gợi ý chấm / Đáp án chuẩn:</span>
-                        <div className="markdown-body text-sm"><Markdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} >{q.correctAnswer || q.explanation || q.correct || ''}</Markdown></div>
+                        <div className="markdown-body text-sm"><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]} >{q.correctAnswer || q.explanation || q.correct || ''}</Markdown></div>
                       </div>
                     )}
                   </div>
@@ -329,7 +391,7 @@ export function StudentExamView({ examId }: { examId: string }) {
                 {isSubmitted && q.explanation && q.type !== 'essay' && (
                    <div className="mt-4 p-4 bg-slate-100 rounded-lg border border-slate-200">
                      <span className="text-slate-500 font-semibold block mb-2">Giải thích:</span>
-                     <div className="markdown-body text-sm"><Markdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} >{q.explanation}</Markdown></div>
+                     <div className="markdown-body text-sm"><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]} >{q.explanation}</Markdown></div>
                    </div>
                 )}
               </div>
