@@ -1,20 +1,20 @@
-import { apiFetch } from '../lib/apiFetch';
-
+import React, { useState, useEffect } from 'react';
+import { Loader2, FileText, Trophy, CheckCircle2, XCircle } from 'lucide-react';
 import Markdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css';
-import { useState, useEffect } from "react";
-import { CheckCircle2, XCircle, Trophy, FileText, Loader2 } from "lucide-react";
+import { apiFetch } from '../lib/apiFetch';
 
 export function StudentExamView({ examId }: { examId: string }) {
-  const [examData, setExamData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [studentInfo, setStudentInfo] = useState({ name: "", class: "" });
+  const [examData, setExamData] = useState<any>(null);
+  
   const [isStarted, setIsStarted] = useState(false);
+  const [studentInfo, setStudentInfo] = useState({ name: '', class: '' });
+  
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
-  const [answers, setAnswers] = useState<Record<number, number>>({});
+  const [answers, setAnswers] = useState<Record<number, any>>({});
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [score, setScore] = useState(0);
 
@@ -27,7 +27,6 @@ export function StudentExamView({ examId }: { examId: string }) {
       .then(data => {
         setExamData(data);
         if (data.codes && data.codes.length > 0) {
-          // randomly assign a code to student
           const randomCode = data.codes[Math.floor(Math.random() * data.codes.length)].code;
           setSelectedCode(randomCode);
         }
@@ -44,20 +43,57 @@ export function StudentExamView({ examId }: { examId: string }) {
 
   const handleSubmit = () => {
     if (!currentExam) return;
-    if (Object.keys(answers).length < currentExam.questions.length) {
+    
+    // Check if fully answered
+    let answeredCount = 0;
+    currentExam.questions.forEach((q: any, idx: number) => {
+      const ans = answers[idx];
+      if (q.type === 'mc' || (!q.type && q.options)) {
+        if (ans !== undefined) answeredCount++;
+      } else if (q.type === 'tf') {
+        if (ans && Object.keys(ans).length === 4) answeredCount++; // Vietnam standard TF has 4 statements
+        else if (ans !== undefined) answeredCount++; // Or single TF
+      } else if (q.type === 'sa' || q.type === 'essay') {
+        if (ans && ans.trim().length > 0) answeredCount++;
+      }
+    });
+
+    if (answeredCount < currentExam.questions.length) {
       if (!confirm("Bạn chưa làm hết các câu hỏi. Bạn có chắc chắn muốn nộp bài?")) return;
     }
     
-    let correct = 0;
-    let totalMc = 0;
+    let totalScore = 0;
+    
     currentExam.questions.forEach((q: any, idx: number) => {
-      if (q.type === 'mc' || q.options) {
-        totalMc++;
-        if (answers[idx] === q.correctOptionIndex) correct++;
+      const ans = answers[idx];
+      if (q.type === 'mc' || (!q.type && q.options)) {
+        if (ans === q.correctOptionIndex) totalScore += 1;
+      } else if (q.type === 'tf') {
+        if (q.tfStatements && q.tfStatements.length > 0) {
+           let correctCount = 0;
+           q.tfStatements.forEach((stmt: any, sIdx: number) => {
+             const studentAns = ans ? ans[sIdx] : undefined;
+             const isTrue = stmt.correct === true || String(stmt.correct).toLowerCase() === 'true';
+             if (studentAns === isTrue) correctCount++;
+           });
+           if (correctCount === 1) totalScore += 0.1;
+           else if (correctCount === 2) totalScore += 0.25;
+           else if (correctCount === 3) totalScore += 0.5;
+           else if (correctCount === 4) totalScore += 1.0;
+        } else {
+           const isTrue = q.correct === true || String(q.correct).toLowerCase() === 'true' || String(q.correctAnswer).toLowerCase().includes('đúng');
+           if (ans === isTrue) totalScore += 1;
+        }
+      } else if (q.type === 'sa') {
+         const correctAns = String(q.correctAnswer || q.correct || '').trim().toLowerCase();
+         const studentAns = String(ans || '').trim().toLowerCase();
+         if (correctAns && studentAns === correctAns) totalScore += 1;
       }
+      // essay logic requires manual grading, so 0 point auto
     });
     
-    setScore(totalMc > 0 ? (correct / totalMc) * 10 : 0);
+    const finalScore = currentExam.questions.length > 0 ? (totalScore / currentExam.questions.length) * 10 : 0;
+    setScore(finalScore);
     setIsSubmitted(true);
   };
 
@@ -111,7 +147,6 @@ export function StudentExamView({ examId }: { examId: string }) {
           )}
         </div>
       </header>
-
       <main className="max-w-4xl mx-auto px-4 py-8 space-y-8">
         {isSubmitted && (
           <div className="bg-white p-8 rounded-2xl shadow-sm border border-emerald-200 text-center relative overflow-hidden">
@@ -121,53 +156,186 @@ export function StudentExamView({ examId }: { examId: string }) {
             <p className="text-slate-600">Bạn đã hoàn thành bài kiểm tra. Xem chi tiết đáp án bên dưới.</p>
           </div>
         )}
+        
+        {currentExam.questions.map((q: any, idx: number) => {
+          
+          let isCorrectQuestion = false;
+          let showRedBorder = false;
+          
+          if (isSubmitted) {
+            const ans = answers[idx];
+            if (q.type === 'mc' || (!q.type && q.options)) {
+              isCorrectQuestion = ans === q.correctOptionIndex;
+              showRedBorder = !isCorrectQuestion;
+            } else if (q.type === 'tf') {
+              if (q.tfStatements && q.tfStatements.length > 0) {
+                 let correctCount = 0;
+                 q.tfStatements.forEach((stmt: any, sIdx: number) => {
+                   const studentAns = ans ? ans[sIdx] : undefined;
+                   const isTrue = stmt.correct === true || String(stmt.correct).toLowerCase() === 'true';
+                   if (studentAns === isTrue) correctCount++;
+                 });
+                 isCorrectQuestion = correctCount === q.tfStatements.length;
+                 showRedBorder = correctCount < q.tfStatements.length;
+              } else {
+                 const isTrue = q.correct === true || String(q.correct).toLowerCase() === 'true' || String(q.correctAnswer).toLowerCase().includes('đúng');
+                 isCorrectQuestion = ans === isTrue;
+                 showRedBorder = !isCorrectQuestion;
+              }
+            } else if (q.type === 'sa') {
+               const correctAns = String(q.correctAnswer || q.correct || '').trim().toLowerCase();
+               const studentAns = String(ans || '').trim().toLowerCase();
+               isCorrectQuestion = !!(correctAns && studentAns === correctAns);
+               showRedBorder = !isCorrectQuestion;
+            } else {
+               showRedBorder = false;
+               isCorrectQuestion = true;
+            }
+          }
 
-        {currentExam.questions.map((q: any, idx: number) => (
-          <div key={idx} className={`bg-white p-6 rounded-xl shadow-sm border ${isSubmitted && answers[idx] !== q.correctOptionIndex ? 'border-red-200' : isSubmitted ? 'border-emerald-200' : 'border-slate-200'}`}>
-            <h3 className="font-medium text-slate-800 mb-4 leading-relaxed">
-              <span className="font-bold">Câu {idx + 1}:</span> <div className="markdown-body"><Markdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} >{q.content}</Markdown></div>
-            </h3>
-            <div className="space-y-3">
-              {q.type !== 'mc' && !q.options ? (
-                <div className="p-4 bg-amber-50 text-amber-700 rounded-lg text-sm border border-amber-200">
-                  Phần mềm chấm điểm tự động hiện tại chỉ hỗ trợ trắc nghiệm. Vui lòng làm câu này ra giấy.
-                </div>
-              ) : q.options?.map((opt: string, oIdx: number) => {
-                const isSelected = answers[idx] === oIdx;
-                const isCorrect = oIdx === q.correctOptionIndex;
-                
-                let btnClass = "w-full text-left p-4 rounded-xl border transition-colors flex items-center gap-3 ";
-                if (!isSubmitted) {
-                  btnClass += isSelected ? "bg-emerald-50 border-emerald-500 text-emerald-900" : "bg-white border-slate-200 hover:border-emerald-300 hover:bg-slate-50 text-slate-700";
-                } else {
-                  if (isCorrect) {
-                    btnClass += "bg-emerald-50 border-emerald-500 text-emerald-900";
-                  } else if (isSelected && !isCorrect) {
-                    btnClass += "bg-red-50 border-red-500 text-red-900";
+          return (
+            <div key={idx} className={`bg-white p-6 rounded-xl shadow-sm border ${isSubmitted && showRedBorder ? 'border-red-200' : isSubmitted ? 'border-emerald-200' : 'border-slate-200'}`}>
+              <h3 className="font-medium text-slate-800 mb-4 leading-relaxed">
+                <span className="font-bold">Câu {idx + 1}:</span> <div className="markdown-body inline-block"><Markdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} >{q.content}</Markdown></div>
+              </h3>
+              
+              <div className="space-y-3">
+                {/* MULTIPLE CHOICE */}
+                {(q.type === 'mc' || (!q.type && q.options)) && q.options?.map((opt: string, oIdx: number) => {
+                  const isSelected = answers[idx] === oIdx;
+                  const isCorrect = oIdx === q.correctOptionIndex;
+                  
+                  let btnClass = "w-full text-left p-4 rounded-xl border transition-colors flex items-center gap-3 ";
+                  if (!isSubmitted) {
+                    btnClass += isSelected ? "bg-emerald-50 border-emerald-500 text-emerald-900" : "bg-white border-slate-200 hover:border-emerald-300 hover:bg-slate-50 text-slate-700";
                   } else {
-                    btnClass += "bg-white border-slate-200 text-slate-500 opacity-60";
+                    if (isCorrect) btnClass += "bg-emerald-50 border-emerald-500 text-emerald-900";
+                    else if (isSelected && !isCorrect) btnClass += "bg-red-50 border-red-500 text-red-900";
+                    else btnClass += "bg-white border-slate-200 text-slate-500 opacity-60";
                   }
-                }
+                  
+                  return (
+                    <button 
+                      key={oIdx} 
+                      onClick={() => !isSubmitted && setAnswers({...answers, [idx]: oIdx})}
+                      disabled={isSubmitted}
+                      className={btnClass}
+                    >
+                      <div className={`w-6 h-6 rounded-full border flex items-center justify-center shrink-0 ${isSelected && !isSubmitted ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-slate-300'}`}>
+                        {String.fromCharCode(65 + oIdx)}
+                      </div>
+                      <span className="flex-1"><div className="markdown-body inline-block"><Markdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} >{opt.replace(/^[A-D][\.\:\)]\s*/i, '')}</Markdown></div></span>
+                      {isSubmitted && isCorrect && <CheckCircle2 className="w-5 h-5 text-emerald-600" />}
+                      {isSubmitted && isSelected && !isCorrect && <XCircle className="w-5 h-5 text-red-600" />}
+                    </button>
+                  );
+                })}
 
-                return (
-                  <button 
-                    key={oIdx} 
-                    onClick={() => !isSubmitted && setAnswers({...answers, [idx]: oIdx})}
-                    disabled={isSubmitted}
-                    className={btnClass}
-                  >
-                    <div className={`w-6 h-6 rounded-full border flex items-center justify-center shrink-0 ${isSelected && !isSubmitted ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-slate-300'}`}>
-                      {String.fromCharCode(65 + oIdx)}
-                    </div>
-                    <span className="flex-1"><div className="markdown-body"><Markdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} >{opt.replace(/^[A-D][\.\:\)]\s*/i, '')}</Markdown></div></span>
-                    {isSubmitted && isCorrect && <CheckCircle2 className="w-5 h-5 text-emerald-600" />}
-                    {isSubmitted && isSelected && !isCorrect && <XCircle className="w-5 h-5 text-red-600" />}
-                  </button>
-                );
-              })}
+                {/* TRUE / FALSE (4 Statements format) */}
+                {q.type === 'tf' && q.tfStatements && q.tfStatements.length > 0 && (
+                  <div className="space-y-4">
+                    {q.tfStatements.map((stmt: any, sIdx: number) => {
+                      const ansMap = answers[idx] || {};
+                      const studentAns = ansMap[sIdx];
+                      const isTrue = stmt.correct === true || String(stmt.correct).toLowerCase() === 'true';
+                      
+                      return (
+                        <div key={sIdx} className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-xl border border-slate-200 bg-slate-50">
+                          <div className="flex-1"><div className="markdown-body inline-block"><Markdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} >{stmt.statement}</Markdown></div></div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button 
+                              disabled={isSubmitted}
+                              onClick={() => !isSubmitted && setAnswers({...answers, [idx]: {...ansMap, [sIdx]: true}})}
+                              className={`px-4 py-2 rounded-lg border font-medium text-sm transition-colors ${studentAns === true ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'} ${(isSubmitted && isTrue) ? 'ring-2 ring-emerald-500' : ''}`}
+                            >
+                              Đúng
+                            </button>
+                            <button 
+                              disabled={isSubmitted}
+                              onClick={() => !isSubmitted && setAnswers({...answers, [idx]: {...ansMap, [sIdx]: false}})}
+                              className={`px-4 py-2 rounded-lg border font-medium text-sm transition-colors ${studentAns === false ? 'bg-red-600 text-white border-red-600' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'} ${(isSubmitted && !isTrue) ? 'ring-2 ring-emerald-500' : ''}`}
+                            >
+                              Sai
+                            </button>
+                            {isSubmitted && studentAns === isTrue && <CheckCircle2 className="w-5 h-5 text-emerald-600 ml-2" />}
+                            {isSubmitted && studentAns !== undefined && studentAns !== isTrue && <XCircle className="w-5 h-5 text-red-600 ml-2" />}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+                
+                {/* TRUE / FALSE (Single statement) */}
+                {q.type === 'tf' && (!q.tfStatements || q.tfStatements.length === 0) && (
+                   <div className="flex items-center gap-3">
+                     <button 
+                        disabled={isSubmitted}
+                        onClick={() => !isSubmitted && setAnswers({...answers, [idx]: true})}
+                        className={`flex-1 py-4 rounded-xl border font-bold transition-colors ${answers[idx] === true ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'}`}
+                      >
+                        Đúng
+                      </button>
+                      <button 
+                        disabled={isSubmitted}
+                        onClick={() => !isSubmitted && setAnswers({...answers, [idx]: false})}
+                        className={`flex-1 py-4 rounded-xl border font-bold transition-colors ${answers[idx] === false ? 'bg-red-600 text-white border-red-600' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'}`}
+                      >
+                        Sai
+                      </button>
+                   </div>
+                )}
+
+                {/* SHORT ANSWER */}
+                {q.type === 'sa' && (
+                  <div className="space-y-2">
+                    <input 
+                      type="text" 
+                      disabled={isSubmitted}
+                      value={answers[idx] || ''}
+                      onChange={(e) => setAnswers({...answers, [idx]: e.target.value})}
+                      placeholder="Nhập câu trả lời ngắn của bạn..."
+                      className={`w-full p-4 rounded-xl border focus:ring-2 focus:ring-emerald-500 outline-none ${isSubmitted && isCorrectQuestion ? 'border-emerald-500 bg-emerald-50 text-emerald-900' : isSubmitted && !isCorrectQuestion ? 'border-red-500 bg-red-50 text-red-900' : 'border-slate-300 bg-white text-slate-800'}`}
+                    />
+                    {isSubmitted && (
+                      <div className="mt-2 text-sm">
+                        <span className="text-slate-500">Đáp án chuẩn: </span>
+                        <span className="font-semibold text-emerald-600">{q.correctAnswer || q.correct}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ESSAY */}
+                {q.type === 'essay' && (
+                  <div className="space-y-2">
+                    <textarea 
+                      disabled={isSubmitted}
+                      value={answers[idx] || ''}
+                      onChange={(e) => setAnswers({...answers, [idx]: e.target.value})}
+                      placeholder="Nhập câu trả lời tự luận..."
+                      className="w-full p-4 rounded-xl border border-slate-300 bg-white text-slate-800 min-h-[150px] focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                    {isSubmitted && (
+                      <div className="mt-4 p-4 bg-slate-100 rounded-lg border border-slate-200">
+                        <span className="text-slate-500 font-semibold block mb-2">Gợi ý chấm / Đáp án chuẩn:</span>
+                        <div className="markdown-body text-sm"><Markdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} >{q.correctAnswer || q.explanation || q.correct || ''}</Markdown></div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {/* EXPLANATION */}
+                {isSubmitted && q.explanation && q.type !== 'essay' && (
+                   <div className="mt-4 p-4 bg-slate-100 rounded-lg border border-slate-200">
+                     <span className="text-slate-500 font-semibold block mb-2">Giải thích:</span>
+                     <div className="markdown-body text-sm"><Markdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} >{q.explanation}</Markdown></div>
+                   </div>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </main>
     </div>
   );
