@@ -28,7 +28,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState("khgd");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [retryStatus, setRetryStatus] = useState<{ attempt: number, maxRetries: number } | null>(null);
+  const [retryStatus, setRetryStatus] = useState<{ attempt: number, maxRetries: number, message?: string } | null>(null);
 
   useEffect(() => {
     const handleShowModal = () => setIsSettingsOpen(true);
@@ -68,7 +68,7 @@ export default function App() {
         <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-[100] bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-in fade-in slide-in-from-top-5">
           <AlertCircle className="w-5 h-5 text-amber-500 animate-pulse" />
           <div className="text-sm">
-            <p className="font-semibold">Hệ thống AI đang bận (Lỗi quá tải - 429)</p>
+            <p className="font-semibold">{retryStatus.message || "Hệ thống AI đang bận (Lỗi quá tải - 429)"}</p>
             <p>Đang tự động thử lại... ({retryStatus.attempt}/{retryStatus.maxRetries})</p>
           </div>
         </div>

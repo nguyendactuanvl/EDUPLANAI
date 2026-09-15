@@ -112,9 +112,14 @@ export async function apiFetch(url: string, options: RequestInit = {}): Promise<
     
     if (isQuotaError || response.status === 503 || errorMsg.toLowerCase().includes("overloaded")) {
       if (customKeyUsed) {
-        console.warn(`[apiFetch] Custom API key rate limited. Switching to system key...`);
-        skipCustomKey = true;
-        continue;
+        if (attempt < maxRetries) {
+          console.warn(`[apiFetch] Custom API key rate limited (429/503). Retrying... (Attempt ${attempt + 1} of ${maxRetries})`);
+          window.dispatchEvent(new CustomEvent('api-retry-status', { detail: { attempt: attempt + 1, maxRetries, message: "API Key cá nhân đang quá tải (429). Đang thử lại..." } }));
+          await delay(15000);
+          continue;
+        } else {
+          throw new Error("API Key cá nhân của bạn hiện đang quá tải do nhận quá nhiều yêu cầu (Lỗi 429/503). Vui lòng đợi 1-2 phút rồi thử lại.");
+        }
       }
       if (attempt < maxRetries) {
         console.warn(`[apiFetch] Rate limited (429/503). Retrying in 15 seconds... (Attempt ${attempt + 1} of ${maxRetries})`);

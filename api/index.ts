@@ -1123,7 +1123,13 @@ YÊU CẦU:
 [Các bước giải chi tiết]
 
 ${MATH_FORMATTING_RULES}
-5. BẮT BUỘC kiểm tra và SỬA LỖI CHÍNH TẢ tiếng Việt thật cẩn thận trước khi trả kết quả.`;
+5. BẮT BUỘC kiểm tra và SỬA LỖI CHÍNH TẢ tiếng Việt thật cẩn thận trước khi trả kết quả.
+6. [QUAN TRỌNG] BẮT BUỘC vẽ bảng biến thiên (BBT), đồ thị hàm số, hoặc hình học (nếu có yêu cầu hoặc cần thiết cho bài toán) bằng code TikZ. Đặt toàn bộ code TikZ (bắt đầu bằng \\begin{tikzpicture} và kết thúc bằng \\end{tikzpicture}) vào trong một block markdown có định dạng:
+\`\`\`tikz
+\begin{tikzpicture}
+...
+\end{tikzpicture}
+\`\`\``;
 
       const response = await generateWithFallback(req, {
         contents: [

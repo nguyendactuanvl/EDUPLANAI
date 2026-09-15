@@ -4,6 +4,7 @@ import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { Copy, Save, Upload, X, Sparkles, Loader2, Download, Presentation, ChevronLeft, ChevronRight, Maximize2, FileText, BookmarkPlus, Camera, Image as ImageIcon, Send, ArrowLeft } from 'lucide-react';
 
 import Markdown from 'react-markdown';
+import TikzJax from 'react-tikzjax';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
@@ -477,6 +478,19 @@ const handleSolve = async () => {
                 <Markdown 
                   remarkPlugins={[remarkMath, remarkGfm]} 
                   rehypePlugins={[rehypeRaw, rehypeKatex]}
+                  components={{
+                    code({node, inline, className, children, ...props}: any) {
+                      const match = /language-(w+)/.exec(className || '')
+                      if (!inline && match && match[1] === 'tikz') {
+                        return (
+                          <div className="flex justify-center my-6 overflow-x-auto">
+                            <TikzJax content={String(children).replace(/\n$/, '')} />
+                          </div>
+                        )
+                      }
+                      return <code className={className} {...props}>{children}</code>
+                    }
+                  }}
                 >
                   {solution}
                 </Markdown>
@@ -513,6 +527,19 @@ const handleSolve = async () => {
               <Markdown 
                 remarkPlugins={[remarkMath, remarkGfm]} 
                 rehypePlugins={[rehypeRaw, rehypeKatex]}
+                components={{
+                    code({node, inline, className, children, ...props}: any) {
+                      const match = /language-(w+)/.exec(className || '')
+                      if (!inline && match && match[1] === 'tikz') {
+                        return (
+                          <div className="flex justify-center my-6 overflow-x-auto bg-white p-4 rounded-xl">
+                            <TikzJax content={String(children).replace(/\n$/, '')} />
+                          </div>
+                        )
+                      }
+                      return <code className={className} {...props}>{children}</code>
+                    }
+                  }}
               >
                 {presentationSlides[currentSlide]}
               </Markdown>
