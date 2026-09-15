@@ -91,6 +91,10 @@ export function LessonPlan() {
       setError("Vui lòng nhập tên bài học và tải lên file Kế hoạch giáo dục.");
       return;
     }
+    if (activeTab === "upgrade" && (!customLessonName.trim() || uploadedFiles.length === 0)) {
+      setError("Vui lòng nhập tên bài học và tải lên file Giáo án cũ cần nâng cấp.");
+      return;
+    }
     
     setIsLoading(true);
     setError(null);
@@ -112,8 +116,15 @@ export function LessonPlan() {
           subject: subject,
           textbook: selectedTextbook?.name || "Kết nối tri thức với cuộc sống"
         };
-      } else {
+      } else if (activeTab === "upload") {
         endpoint = '/api/generate-lesson-plan-file';
+        payload = {
+          lesson: customLessonName,
+          subject: subject,
+          files: uploadedFiles
+        };
+      } else if (activeTab === "upgrade") {
+        endpoint = '/api/upgrade-lesson-plan';
         payload = {
           lesson: customLessonName,
           subject: subject,
@@ -287,13 +298,19 @@ export function LessonPlan() {
             className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'system' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
             onClick={() => setActiveTab('system')}
           >
-            Từ hệ thống
+            Hệ thống
           </button>
           <button 
             className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'upload' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
             onClick={() => setActiveTab('upload')}
           >
-            Từ tệp tải lên
+            Tải Kế hoạch
+          </button>
+          <button 
+            className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'upgrade' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
+            onClick={() => setActiveTab('upgrade')}
+          >
+            Nâng cấp Giáo án
           </button>
         </div>
 
@@ -380,7 +397,7 @@ export function LessonPlan() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Tên bài học cần soạn</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{activeTab === 'upgrade' ? 'Tên bài học cần nâng cấp' : 'Tên bài học cần soạn'}</label>
               <input 
                 type="text" 
                 placeholder="VD: Bài 1: Mệnh đề..."
@@ -391,14 +408,14 @@ export function LessonPlan() {
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Tải lên tệp Kế hoạch giáo dục</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{activeTab === 'upgrade' ? 'Tải lên giáo án cũ cần nâng cấp' : 'Tải lên tệp Kế hoạch giáo dục'}</label>
               <div 
                 onClick={() => fileInputRef.current?.click()}
                 className="border-2 border-dashed border-slate-300 rounded-lg p-6 flex flex-col items-center justify-center text-slate-500 hover:bg-slate-50 hover:border-emerald-400 hover:text-emerald-600 transition-colors cursor-pointer"
               >
                 <Upload className="w-8 h-8 mb-2" />
                 <span className="text-sm font-medium text-center">
-                  Nhấn để tải lên tài liệu tham khảo (Sách, Văn bản...) <br/> ({uploadedFiles.length} tệp đã chọn)
+                  Nhấn để tải lên tài liệu {activeTab === 'upgrade' ? 'Giáo án cũ' : 'tham khảo (Sách, Văn bản...)'} <br/> ({uploadedFiles.length} tệp đã chọn)
                 </span>
                 <input 
                   type="file" 
@@ -410,7 +427,9 @@ export function LessonPlan() {
                 />
               </div>
               <p className="text-xs text-slate-500 mt-2">
-                Hệ thống AI sẽ tự động đọc tệp để tìm kiếm các yêu cầu cần đạt, năng lực số, năng lực AI và STEM của bài học bạn yêu cầu.
+                {activeTab === 'upgrade' 
+                  ? 'Hệ thống AI sẽ tự động đọc giáo án cũ của bạn và viết lại, bổ sung chi tiết việc ứng dụng công nghệ, năng lực số, và AI vào các hoạt động.'
+                  : 'Hệ thống AI sẽ tự động đọc tệp để tìm kiếm các yêu cầu cần đạt, năng lực số, năng lực AI và STEM của bài học bạn yêu cầu.'}
               </p>
               {uploadedFiles.length > 0 && (
                 <div className="flex gap-2 mt-2 flex-wrap">
@@ -439,7 +458,7 @@ export function LessonPlan() {
           className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-70 disabled:cursor-not-allowed mt-2 shadow-sm"
         >
           <Sparkles className="h-5 w-5" />
-          {isLoading ? "AI đang soạn bài..." : "Soạn Giáo án chuẩn công văn 5512"}
+          {isLoading ? (activeTab === 'upgrade' ? "Đang nâng cấp..." : "AI đang soạn bài...") : (activeTab === 'upgrade' ? "Nâng cấp Giáo án (Thêm NLS & AI)" : "Soạn Giáo án chuẩn công văn 5512")}
         </button>
       </div>
 

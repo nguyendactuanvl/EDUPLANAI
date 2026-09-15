@@ -508,6 +508,60 @@ Văn phong cần chuyên nghiệp, sư phạm, thực tế. Nếu không tìm th
 
 });
 
+app.all("/api/upgrade-lesson-plan", async (req, res) => {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ message: 'Method not allowed' });
+  }
+  
+  try {
+    const { lesson, subject } = req.body;
+    const files = resolveFiles(req.body);
+    
+    const prompt = `Bạn là một chuyên gia giáo dục và công nghệ thông tin. Tôi đã tải lên một tài liệu Giáo án cũ (Kế hoạch bài dạy) môn ${subject || "chung"} cho bài học: "${lesson}".
+
+YÊU CẦU:
+Hãy đọc toàn bộ giáo án cũ này và viết lại toàn bộ giáo án, giữ nguyên cấu trúc và những nội dung cốt lõi, nhưng TÍCH HỢP VÀ BỔ SUNG CHI TIẾT việc ứng dụng công nghệ, năng lực số (NLS), năng lực AI, và STEM vào các hoạt động dạy học.
+
+HƯỚNG DẪN CHI TIẾT:
+1. **Phần Mục tiêu**: Hãy thêm hoặc làm rõ các mục tiêu về Năng lực số, Năng lực AI (nếu có thể), và STEM.
+2. **Phần Thiết bị & Học liệu**: Bổ sung các công cụ số, phần mềm, thiết bị tương tác, công cụ AI cần thiết cho bài dạy.
+3. **Phần Tiến trình dạy học**: Với mỗi hoạt động (Khởi động, Hình thành kiến thức, Luyện tập, Vận dụng), hãy khéo léo lồng ghép việc giáo viên hoặc học sinh sử dụng thiết bị số, phần mềm dạy học, công cụ trí tuệ nhân tạo (AI) vào mục "Tổ chức thực hiện" hoặc "Sản phẩm". Không được làm thay đổi quá nhiều bản chất bài cũ, chỉ làm cho nó "số hóa" và "thông minh" hơn.
+4. **Tô màu Năng lực số và Năng lực AI**: Khi nhắc đến bất kỳ phần mềm, công cụ thiết bị số, Năng lực số hoặc công cụ AI nào (đặc biệt là những cái bạn vừa bổ sung), BẮT BUỘC phải bọc trong thẻ HTML \`<mark style="background-color: #dbeafe; color: #1d4ed8; font-weight: bold; padding: 2px 4px; border-radius: 4px;">Tên công cụ / NLS</mark>\` để tô màu nổi bật.
+${MATH_FORMATTING_RULES}
+5. TUYỆT ĐỐI KHÔNG sử dụng thẻ HTML \`<br>\` hoặc \`<br/>\`. Sử dụng dấu xuống dòng chuẩn Markdown.`;
+
+    const response = await generateWithFallback(req, {
+      contents: [
+        {
+          role: "user",
+          parts: [
+            ...(files || []).map((f: any) => ({
+              inlineData: {
+                data: f.data,
+                mimeType: f.type || 'text/plain'
+              }
+            })),
+            {
+              text: prompt
+            }
+          ]
+        }
+      ],
+      config: {
+        temperature: 0.7,
+      }
+    });
+
+    res.json({ result: response.text });
+  } catch (error: any) {
+    const errorMsg = error?.message || "";
+    if (errorMsg.includes("Unsupported MIME type")) {
+      return res.status(400).json({ error: "Định dạng file không được AI hỗ trợ. Vui lòng tải lên PDF, Text hoặc Word/Excel đã chuyển sang PDF." });
+    }
+    return handleAiError(error, req, res);
+  }
+});
+
 app.all("/api/generate-lesson-plan", async (req, res) => {
 
   res.setHeader('Access-Control-Allow-Origin', '*');
