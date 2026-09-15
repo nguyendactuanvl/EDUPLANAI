@@ -213,7 +213,7 @@ const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
 async function generateWithFallback(req: any, payloadOptions: any) {
   const client = getAiClient(req);
-  const models = ["gemini-3.6-flash"];
+  const models = ["gemini-2.5-flash", "gemini-1.5-flash"];
   let primaryError: any = null;
   
   const maxRetries = 3;

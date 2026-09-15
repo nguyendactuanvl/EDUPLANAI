@@ -10,7 +10,7 @@ import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import { exportHtmlToWord } from '../lib/exportUtils';
 import { useState, useRef, useEffect } from "react";
-import { FileCheck, Sparkles, Shuffle, Download, Share2, Plus, Trash2, Printer, UploadCloud } from "lucide-react";
+import { FileCheck, Sparkles, Shuffle, Download, Share2, Plus, Trash2, Printer, UploadCloud, FileSpreadsheet, FileText, X, ExternalLink } from "lucide-react";
 
 interface Question {
   type?: "mc" | "tf" | "sa" | "essay";
@@ -57,7 +57,103 @@ const MultiPointInput = ({ count, value, onChange, disabled }: { count: number, 
   }
 
   if (count > 0 && count <= 6) {
-    return (
+  
+  const handleExportCSV = () => {
+    if (shuffledExams.length === 0) return;
+    let csvContent = "\uFEFF"; // BOM for UTF-8
+    csvContent += "Câu," + shuffledExams.map(e => e.code).join(",") + "\n";
+    const numQuestions = shuffledExams[0].questions.length;
+    for (let i = 0; i < numQuestions; i++) {
+        const row = [i + 1];
+        for (const exam of shuffledExams) {
+            const q = exam.questions[i];
+            let ans = "";
+            if (q.type === 'mc') {
+                ans = String.fromCharCode(65 + (q.correctOptionIndex || 0));
+            } else if (q.type === 'tf' && q.tfStatements) {
+                ans = q.tfStatements.map(s => s.correct ? 'D' : 'S').join('');
+            } else {
+                ans = (q.correctAnswer || '').replace(/<[^>]*>?/gm, '').substring(0, 10);
+            }
+            row.push(ans);
+        }
+        csvContent += row.join(",") + "\n";
+    }
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Dap_An_${examName.replace(/\s+/g, '_')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handlePrintBubbleSheet = () => {
+    const windowPrint = window.open('', '', 'width=900,height=650');
+    if (!windowPrint) return;
+    let gridHtml = '';
+    for (let col = 0; col < 4; col++) {
+      gridHtml += '<div style="flex: 1; min-width: 150px;">';
+      for (let row = 1; row <= 10; row++) {
+        const num = col * 10 + row;
+        gridHtml += `
+          <div style="display: flex; align-items: center; margin-bottom: 15px;">
+            <span style="width: 35px; font-weight: bold; font-size: 14px;">${num.toString().padStart(2, '0')}.</span>
+            ${['A', 'B', 'C', 'D'].map(letter => `
+              <div style="width: 26px; height: 26px; border-radius: 50%; border: 1px solid #000; display: flex; align-items: center; justify-content: center; margin: 0 4px; font-size: 12px; font-weight: bold;">
+                ${letter}
+              </div>
+            `).join('')}
+          </div>
+        `;
+      }
+      gridHtml += '</div>';
+    }
+    
+    windowPrint.document.write(`
+      <html>
+        <head>
+          <title>Phiếu Tô Trắc Nghiệm</title>
+          <style>
+            body { font-family: "Times New Roman", Times, serif; padding: 20px; }
+            .header { text-align: center; margin-bottom: 30px; }
+            .title { font-size: 24px; font-weight: bold; margin-bottom: 5px; }
+            .info-grid { display: flex; justify-content: space-between; margin-bottom: 40px; border: 1px solid #000; padding: 15px; border-radius: 8px; }
+            .info-col { flex: 1; }
+            .info-line { border-bottom: 1px dotted #000; display: inline-block; min-width: 200px; margin-left: 5px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="title">PHIẾU TRẢ LỜI TRẮC NGHIỆM</div>
+            <div>Dành cho bài thi trắc nghiệm (Tối đa 40 câu)</div>
+          </div>
+          <div class="info-grid">
+            <div class="info-col">
+              <p style="margin: 10px 0;"><strong>Họ và tên:</strong> <span class="info-line" style="min-width: 250px;"></span></p>
+              <p style="margin: 10px 0;"><strong>Lớp:</strong> <span class="info-line"></span></p>
+            </div>
+            <div class="info-col">
+              <p style="margin: 10px 0;"><strong>Môn thi:</strong> <span class="info-line"></span></p>
+              <p style="margin: 10px 0;"><strong>Mã đề:</strong> <span class="info-line" style="min-width: 100px;"></span></p>
+            </div>
+          </div>
+          <div style="display: flex; gap: 20px; justify-content: space-between;">
+            ${gridHtml}
+          </div>
+        </body>
+      </html>
+    `);
+    windowPrint.document.close();
+    windowPrint.focus();
+    setTimeout(() => {
+      windowPrint.print();
+      windowPrint.close();
+    }, 250);
+  };
+
+  return (
       <div className="flex flex-wrap gap-1 justify-center">
         {currentPoints.map((pt, i) => (
           <input 
@@ -237,6 +333,7 @@ const [examName, setExamName] = useState("");
   const [shuffledExams, setShuffledExams] = useState<{code: string, questions: Question[]}[]>([]);
   const [numCodes, setNumCodes] = useState(4);
   const [shareLink, setShareLink] = useState("");
+  const [showBubbleSheetModal, setShowBubbleSheetModal] = useState(false);
 
   const applyPresetBGD3Phan = () => {
     setQEnabled({ mc: true, tf: true, sa: true, essay: false });
@@ -1156,9 +1253,16 @@ ${customPrompt}
                       <h3 className="font-bold text-emerald-800">Đã trộn thành công {shuffledExams.length} mã đề</h3>
                       <p className="text-sm text-emerald-600 mt-1">Sẵn sàng in ấn, xuất file hoặc chia sẻ cho học sinh làm bài Online.</p>
                     </div>
-                    <div className="flex gap-3">
-                      <button onClick={handleShare} className="px-4 py-2 bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-700 flex items-center gap-2">
-                        <Share2 className="w-4 h-4" /> Chia sẻ HS Online
+                    
+                    <div className="flex flex-wrap gap-2 sm:gap-3">
+                      <button onClick={handleShare} className="px-3 sm:px-4 py-2 bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-700 flex items-center gap-2">
+                        <Share2 className="w-4 h-4" /> <span className="hidden sm:inline">Chia sẻ Online</span>
+                      </button>
+                      <button onClick={handleExportCSV} className="px-3 sm:px-4 py-2 bg-white border border-emerald-600 text-emerald-700 font-medium rounded-lg hover:bg-emerald-50 flex items-center gap-2">
+                        <FileSpreadsheet className="w-4 h-4" /> <span className="hidden sm:inline">Excel Đáp Án (TNMaker)</span>
+                      </button>
+                      <button onClick={() => setShowBubbleSheetModal(true)} className="px-3 sm:px-4 py-2 bg-white border border-emerald-600 text-emerald-700 font-medium rounded-lg hover:bg-emerald-50 flex items-center gap-2">
+                        <FileText className="w-4 h-4" /> <span className="hidden sm:inline">In Phiếu Tô</span>
                       </button>
                     </div>
                   </div>
@@ -1228,14 +1332,36 @@ ${customPrompt}
                               </div>
                             ))}
                             <div style={{pageBreakBefore: 'always'}}></div>
-                            <div className="answers-title">Đáp án Mã đề {exam.code}:</div>
-                            <div className="answers-grid" style={{display: 'flex', flexWrap: 'wrap', marginTop: '10px', gap: '15px'}}>
-                              {exam.questions.map((q, idx) => (
-                                <div key={idx} style={{minWidth: '60px'}}>
-                                  <strong>{idx + 1}.</strong> {q.type === 'mc' ? String.fromCharCode(65 + (q.correctOptionIndex || 0)) : (q.type === 'tf' && q.tfStatements ? q.tfStatements.map(s => s.correct ? 'Đ' : 'S').join('-') : <div className="markdown-body inline-markdown" style={{display: 'inline'}}><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]} >{q.correctAnswer || ''}</Markdown></div>)}
-                                </div>
-                              ))}
-                            </div>
+                            
+                            <div className="answers-title text-center uppercase mt-8 mb-4">BẢNG ĐÁP ÁN (Mã đề {exam.code})</div>
+                            <table className="w-full border-collapse border border-black mt-2 text-center text-sm" style={{fontFamily: '"Times New Roman", Times, serif'}}>
+                              <tbody>
+                                {Array.from({ length: Math.ceil(exam.questions.length / 10) }).map((_, rowIndex) => (
+                                  <tr key={rowIndex}>
+                                    {exam.questions.slice(rowIndex * 10, rowIndex * 10 + 10).map((q, colIndex) => {
+                                      const ansIndex = rowIndex * 10 + colIndex;
+                                      let ans = "";
+                                      if (q.type === 'mc') {
+                                        ans = String.fromCharCode(65 + (q.correctOptionIndex || 0));
+                                      } else if (q.type === 'tf' && q.tfStatements) {
+                                        ans = q.tfStatements.map(s => s.correct ? 'Đ' : 'S').join('');
+                                      }
+                                      return (
+                                        <td key={colIndex} className="border border-black p-1">
+                                          <strong>{ansIndex + 1}.</strong> {q.type !== 'mc' && q.type !== 'tf' ? (
+                                            <div className="markdown-body inline-markdown" style={{display: 'inline'}}><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]} >{q.correctAnswer || ''}</Markdown></div>
+                                          ) : ans}
+                                        </td>
+                                      )
+                                    })}
+                                    {/* Fill empty cells if the last row has less than 10 columns */}
+                                    {Array.from({ length: 10 - exam.questions.slice(rowIndex * 10, rowIndex * 10 + 10).length }).map((_, emptyColIndex) => (
+                                      <td key={'empty-' + emptyColIndex} className="border border-black p-1"></td>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
                           </div>
                         </div>
                       </div>
@@ -1247,7 +1373,67 @@ ${customPrompt}
           )}
 
         </div>
-      </div>
+      
+      {showBubbleSheetModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+              <h3 className="font-bold text-lg text-slate-800">Tải/In Phiếu Tô Trắc Nghiệm</h3>
+              <button onClick={() => setShowBubbleSheetModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                 <p className="font-semibold text-slate-700 mb-2">1. Mẫu hệ thống (In trực tiếp - Trắc nghiệm 4 đáp án)</p>
+                 <button onClick={handlePrintBubbleSheet} className="w-full text-left px-4 py-3 border border-slate-200 rounded-lg hover:bg-emerald-50 hover:border-emerald-200 flex items-center justify-between group transition-colors">
+                   <div>
+                     <p className="font-medium text-slate-800 group-hover:text-emerald-700">Phiếu tô 40 câu cơ bản</p>
+                     <p className="text-sm text-slate-500">In siêu tốc trực tiếp từ trình duyệt</p>
+                   </div>
+                   <Printer className="w-5 h-5 text-slate-400 group-hover:text-emerald-600" />
+                 </button>
+              </div>
+              
+              <div>
+                 <p className="font-semibold text-slate-700 mb-2">2. Mẫu chuẩn Bộ GD&ĐT 2025 (TNMaker)</p>
+                 <a href="https://tnmaker.net/phieu-tltn-2025-bgd/" target="_blank" rel="noreferrer" className="w-full text-left px-4 py-3 border border-slate-200 rounded-lg hover:bg-blue-50 hover:border-blue-200 flex items-center justify-between group mb-2 transition-colors">
+                   <div>
+                     <p className="font-medium text-slate-800 group-hover:text-blue-700">Xem toàn bộ Kho Phiếu BGD 2025</p>
+                     <p className="text-sm text-slate-500">Gồm Trắc nghiệm, Đúng/Sai, Trả lời ngắn</p>
+                   </div>
+                   <ExternalLink className="w-5 h-5 text-slate-400 group-hover:text-blue-600" />
+                 </a>
+                 <div className="grid grid-cols-2 gap-2">
+                   <a href="https://tnmaker.net/wp-content/uploads/2023/12/Phieu-TLTN-50-cau-2025.pdf" target="_blank" rel="noreferrer" className="px-3 py-2 border border-slate-200 rounded-lg hover:bg-blue-50 hover:border-blue-200 flex items-center justify-between group transition-colors">
+                     <span className="text-sm font-medium text-slate-700 group-hover:text-blue-700">Mẫu 50 Câu</span>
+                     <Download className="w-4 h-4 text-slate-400 group-hover:text-blue-600" />
+                   </a>
+                   <a href="https://tnmaker.net/wp-content/uploads/2023/12/Phieu-TLTN-40-cau-2025.pdf" target="_blank" rel="noreferrer" className="px-3 py-2 border border-slate-200 rounded-lg hover:bg-blue-50 hover:border-blue-200 flex items-center justify-between group transition-colors">
+                     <span className="text-sm font-medium text-slate-700 group-hover:text-blue-700">Mẫu 40 Câu</span>
+                     <Download className="w-4 h-4 text-slate-400 group-hover:text-blue-600" />
+                   </a>
+                 </div>
+              </div>
+
+              <div>
+                 <p className="font-semibold text-slate-700 mb-2">3. Mẫu phần mềm chấm thi QM 2025</p>
+                 <a href="https://qmapp.vn/phieu-mau/" target="_blank" rel="noreferrer" className="w-full text-left px-4 py-3 border border-slate-200 rounded-lg hover:bg-orange-50 hover:border-orange-200 flex items-center justify-between group mb-2 transition-colors">
+                   <div>
+                     <p className="font-medium text-slate-800 group-hover:text-orange-700">Xem toàn bộ Kho Phiếu QM</p>
+                     <p className="text-sm text-slate-500">Mẫu quét cực nhạy cho Toán/Văn/Anh 2025</p>
+                   </div>
+                   <ExternalLink className="w-5 h-5 text-slate-400 group-hover:text-orange-600" />
+                 </a>
+              </div>
+            </div>
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end">
+              <button onClick={() => setShowBubbleSheetModal(false)} className="px-4 py-2 bg-slate-200 text-slate-700 font-medium rounded-lg hover:bg-slate-300 transition-colors">Đóng</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
     </div>
   );
 }
