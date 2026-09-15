@@ -54,10 +54,10 @@ export async function apiFetch(url: string, options: RequestInit = {}): Promise<
   };
 
   const maxRetries = 5; // Up to 5 retries (total ~1 minute wait)
+  let skipCustomKey = false;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    let skipCustomKey = false;
-    let customKeyUsed = !!localStorage.getItem(API_KEY_STORAGE);
+    let customKeyUsed = !skipCustomKey && !!localStorage.getItem(API_KEY_STORAGE);
     
     // First try with custom key (if exists), or system key
     const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
@@ -111,17 +111,18 @@ export async function apiFetch(url: string, options: RequestInit = {}): Promise<
     }
     
     if (isQuotaError || response.status === 503 || errorMsg.toLowerCase().includes("overloaded")) {
+      if (customKeyUsed) {
+        console.warn(`[apiFetch] Custom API key rate limited. Switching to system key...`);
+        skipCustomKey = true;
+        continue;
+      }
       if (attempt < maxRetries) {
         console.warn(`[apiFetch] Rate limited (429/503). Retrying in 15 seconds... (Attempt ${attempt + 1} of ${maxRetries})`);
         window.dispatchEvent(new CustomEvent('api-retry-status', { detail: { attempt: attempt + 1, maxRetries } }));
         await delay(15000);
         continue;
       } else {
-        if (customKeyUsed) {
-          throw new Error(`API Key cá nhân của bạn hiện đang nhận quá nhiều yêu cầu (Lỗi 429) hoặc tài khoản của bạn bị giới hạn. Hệ thống đã tự động thử lại nhiều lần nhưng chưa thành công. Chi tiết từ Google: ${errorMsg}`);
-        } else {
-          throw new Error("Hệ thống (API Key mặc định) hiện đang nhận quá nhiều yêu cầu hoặc đã hết hạn mức. Vui lòng thử lại sau, hoặc thiết lập API Key cá nhân của riêng bạn trong Cài đặt để sử dụng ổn định hơn.");
-        }
+        throw new Error("Hệ thống (API Key mặc định) hiện đang nhận quá nhiều yêu cầu hoặc đã hết hạn mức. Vui lòng thử lại sau, hoặc thiết lập API Key cá nhân của riêng bạn trong Cài đặt để sử dụng ổn định hơn.");
       }
     }
 

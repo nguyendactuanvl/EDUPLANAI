@@ -25,7 +25,7 @@ import { Gamification } from './pages/Gamification';
 
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState("gamification");
+  const [activeTab, setActiveTab] = useState("khgd");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [retryStatus, setRetryStatus] = useState<{ attempt: number, maxRetries: number } | null>(null);
@@ -40,6 +40,11 @@ export default function App() {
     window.addEventListener('show-api-key-modal', handleShowModal);
     window.addEventListener('api-retry-status', handleRetryStatus);
     
+    const storedKey = localStorage.getItem("eduplan_gemini_api_key_v2");
+    if (!storedKey) {
+      setIsSettingsOpen(true);
+    }
+
     return () => {
       window.removeEventListener('show-api-key-modal', handleShowModal);
       window.removeEventListener('api-retry-status', handleRetryStatus);
