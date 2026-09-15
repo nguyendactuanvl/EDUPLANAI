@@ -213,7 +213,7 @@ const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
 async function generateWithFallback(req: any, payloadOptions: any) {
   const client = getAiClient(req);
-  const models = ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.5-flash-8b"];
+  const models = ["gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-1.5-pro"];
   let primaryError: any = null;
   
   const maxRetries = 3;
@@ -233,15 +233,16 @@ async function generateWithFallback(req: any, payloadOptions: any) {
           throw e;
         }
         
-        if (
-          lowerMsg.includes("429") || status === 429 || lowerMsg.includes("resource_exhausted") || lowerMsg.includes("quota") ||
-          lowerMsg.includes("503") || status === 503 || lowerMsg.includes("unavailable") || lowerMsg.includes("overloaded")
-        ) {
-          if (!primaryError) primaryError = e;
+        const is429 = lowerMsg.includes("429") || status === 429 || lowerMsg.includes("resource_exhausted") || lowerMsg.includes("quota") || lowerMsg.includes("503") || status === 503 || lowerMsg.includes("unavailable") || lowerMsg.includes("overloaded");
+        const is404 = lowerMsg.includes("not found") || status === 404 || lowerMsg.includes("is not found") || lowerMsg.includes("not exist") || status === 400;
+        
+        if (is429) {
+          // Always overwrite primary error with 429, as it's the most actionable rate-limit error.
+          primaryError = e;
           continue; 
         }
-        if (lowerMsg.includes("not found") || status === 404 || lowerMsg.includes("is not found") || lowerMsg.includes("not exist") || status === 400) {
-          // It's likely a model availability issue or a bad request for this specific model, so we can try the next model.
+        if (is404) {
+          // Only set primary error to 404 if we don't already have one (like a 429).
           if (!primaryError) primaryError = e;
           continue;
         }
