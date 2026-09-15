@@ -1,4 +1,4 @@
-export function exportHtmlToWord(element: HTMLElement, filename: string) {
+export function exportHtmlToWord(element: HTMLElement, filename: string, keepLatex: boolean = false) {
     const clone = element.cloneNode(true) as HTMLElement;
     
     // Transform grid into tables for MS Word
@@ -58,6 +58,18 @@ export function exportHtmlToWord(element: HTMLElement, filename: string) {
 // Extract MathML from KaTeX for native Word Equation support
     const katexElements = clone.querySelectorAll(".katex");
     katexElements.forEach(el => {
+      if (keepLatex) {
+          const annotationNode = el.querySelector("annotation[encoding='application/x-tex']");
+          if (annotationNode && el.parentNode) {
+              const texString = annotationNode.textContent || "";
+              const isBlock = el.parentElement?.classList.contains("katex-display") || el.classList.contains("katex-display");
+              const delimiter = isBlock ? "$$" : "$";
+              const textNode = document.createTextNode(`${delimiter}${texString}${delimiter}`);
+              el.parentNode.replaceChild(textNode, el);
+              return;
+          }
+      }
+      
       const mathNode = el.querySelector(".katex-mathml math");
       if (mathNode) {
         const mathClone = mathNode.cloneNode(true);
@@ -163,8 +175,8 @@ h2 { font-size: 16pt; margin-top: 15pt; margin-bottom: 5pt; font-weight: bold; }
 h3 { font-size: 14pt; margin-top: 15px; font-weight: bold; }
 p { margin: 0 0 6pt 0; }
 .katex-html { display: none; }
-.katex-mathml { display: inline; font-family: "Cambria Math", serif; }
-math { font-family: "Cambria Math", serif; }
+.katex-mathml { display: inline; }
+math { }
 </style>
 </head>
 <body>

@@ -262,6 +262,16 @@ export function LessonPlan() {
     exportHtmlToWord(exportRef.current, `GiaoAn_${(activeTab === 'system' && selectedLesson ? selectedLesson.lesson : customLessonName).replace(/\s+/g, '_')}.doc`);
   };
 
+  const handleExportWordLatex = () => {
+    if (!suggestion || !exportRef.current) {
+      if (isEditing) {
+        alert("Vui lòng tắt chế độ chỉnh sửa (ấn biểu tượng Con mắt) để lưu tệp Word có định dạng đầy đủ.");
+      }
+      return;
+    }
+    exportHtmlToWord(exportRef.current, `GiaoAn_${(activeTab === 'system' && selectedLesson ? selectedLesson.lesson : customLessonName).replace(/\s+/g, '_')}_LaTeX.doc`, true);
+  };
+
   return (
     <div className="flex-1 bg-slate-50 min-h-screen p-4 lg:p-8 flex flex-col lg:flex-row gap-4 lg:gap-8 overflow-y-auto">
       <div className="w-full lg:w-1/3 bg-white p-4 lg:p-6 rounded-xl border border-slate-200 shadow-sm self-start flex flex-col gap-6 shrink-0">
@@ -457,6 +467,15 @@ export function LessonPlan() {
             disabled={!suggestion}
           >
             <Download className="h-5 w-5" />
+          </button>
+          <button 
+            className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors flex items-center gap-1"
+            title="Tải xuống Word (Giữ nguyên LaTeX cho MathType)"
+            onClick={handleExportWordLatex}
+            disabled={!suggestion}
+          >
+            <Download className="h-5 w-5" />
+            <span className="text-xs font-medium">LaTeX</span>
           </button>
           <button 
             className="p-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors"

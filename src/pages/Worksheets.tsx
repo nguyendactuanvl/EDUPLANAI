@@ -209,6 +209,16 @@ export function Worksheets() {
     }
   };
 
+  const handleExportWordLatex = () => {
+    if (isEditing) {
+      alert("Vui lòng chuyển sang chế độ 'Xem trước' (con mắt) trước khi tải xuống.");
+      return;
+    }
+    if (exportRef.current) {
+      exportHtmlToWord(exportRef.current, `PhieuHocTap_${customLessonName.replace(/\s+/g, '_')}_LaTeX.doc`, true);
+    }
+  };
+
   return (
     <div className="flex flex-col lg:flex-row h-full bg-slate-50 overflow-hidden">
       {/* Left Sidebar - Settings */}
@@ -379,6 +389,16 @@ export function Worksheets() {
                   title={isEditing ? "Chuyển sang chế độ xem trước để tải xuống" : ""}
                 >
                   <Download className="w-4 h-4" /> Xuất Word
+                </button>
+                <button
+                  onClick={handleExportWordLatex}
+                  className={cn(
+                    "px-4 py-2 text-white font-medium rounded-lg flex items-center gap-2 shadow-sm transition-colors",
+                    isEditing ? "bg-slate-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"
+                  )}
+                  title={isEditing ? "Chuyển sang chế độ xem trước để tải xuống" : "Xuất Word giữ nguyên mã LaTeX để dùng chức năng Toggle TeX của MathType"}
+                >
+                  <Download className="w-4 h-4" /> Xuất Word (LaTeX)
                 </button>
                 <button
                   onClick={handleExportPPTX}

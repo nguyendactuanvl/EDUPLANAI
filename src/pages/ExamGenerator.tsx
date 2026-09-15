@@ -369,6 +369,12 @@ ${customPrompt}
     exportHtmlToWord(printContent, `De_kiem_tra_Ma_${code}.doc`);
   };
 
+  const handleExportWordLatex = (contentId: string, code: string) => {
+    const printContent = document.getElementById(contentId);
+    if (!printContent) return;
+    exportHtmlToWord(printContent, `De_kiem_tra_Ma_${code}_LaTeX.doc`, true);
+  };
+
   const handlePrint = (contentId: string) => {
     const printContent = document.getElementById(contentId);
     if (!printContent) return;
@@ -1168,6 +1174,9 @@ ${customPrompt}
                             </button>
                             <button onClick={() => handleExportWord(`print-exam-${exam.code}`, exam.code)} className="px-3 py-1.5 bg-white border border-slate-300 text-slate-700 text-sm font-medium rounded hover:bg-slate-50 flex items-center gap-2">
                               <Download className="w-4 h-4" /> Xuất Word
+                            </button>
+                            <button onClick={() => handleExportWordLatex(`print-exam-${exam.code}`, exam.code)} className="px-3 py-1.5 bg-white border border-slate-300 text-slate-700 text-sm font-medium rounded hover:bg-slate-50 flex items-center gap-2" title="Xuất Word giữ nguyên mã LaTeX để dùng chức năng Toggle TeX của MathType">
+                              <Download className="w-4 h-4" /> Xuất Word (LaTeX)
                             </button>
                           </div>
                         </div>
