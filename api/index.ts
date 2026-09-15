@@ -16,7 +16,22 @@ QUY TẮC ĐỊNH DẠNG TOÁN HỌC VÀ VĂN BẢN (BẮT BUỘC TUÂN THỦ NG
 3. Công thức nằm riêng một dòng độc lập: Luôn kẹp trong cặp dấu $$...$$ (ví dụ: $$\\int_a^b f(x)\\,dx = F(b) - F(a)$$).
 4. Ký hiệu bắt buộc: Phân số dùng \\dfrac{a}{b}, căn thức dùng \\sqrt{x}, hệ phương trình hoặc điều kiện dùng \\begin{cases} ... \\end{cases}.
 5. Bố cục văn bản dùng định dạng Markdown rõ ràng: tiêu đề dùng ##, ###; danh sách ý dùng dấu gạch đầu dòng (-); từ khóa quan trọng in đậm (**từ khóa**).
-6. LƯU Ý TỐI QUAN TRỌNG VỀ BẢNG (TABLE): Bảng trong Markdown sẽ BỊ LỖI NẶNG nếu có dấu xuống dòng. TUYỆT ĐỐI KHÔNG ĐƯỢC XUỐNG DÒNG bên trong các ô của bảng. Nếu viết hệ phương trình trong bảng, BẮT BUỘC phải viết liền trên 1 dòng (ví dụ: $\\begin{cases} x=1 \\\\\\\\ y=2 \\end{cases}$).
+6. LƯU Ý TỐI QUAN TRỌNG VỀ BẢNG BIẾN THIÊN VÀ ĐỒ THỊ: 
+   - Với **Bảng biến thiên**, KHÔNG DÙNG Markdown Table thông thường vì dễ vỡ. HÃY dùng môi trường LaTeX dạng ma trận \`array\` kẹp trong khối $$...$$. 
+     Ví dụ Bảng xét dấu hoặc Bảng biến thiên: 
+     $$
+     \\begin{array}{|c|lcccr|}
+     \\hline
+     x & -\\infty & & 0 & & +\\infty \\\\
+     \\hline
+     f'(x) & & - & 0 & + & \\\\
+     \\hline
+     f(x) & +\\infty & \\searrow & 1 & \\nearrow & +\\infty \\\\
+     \\hline
+     \\end{array}
+     $$
+   - Với **Đồ thị**: Hãy miêu tả chi tiết bằng văn bản đặc điểm của đồ thị (ví dụ: "Đồ thị hàm số là đường cong đi qua điểm (0; 1), có tiệm cận đứng x=0...").
+7. LƯU Ý KHÁC VỀ BẢNG: Bảng trong Markdown sẽ BỊ LỖI NẶNG nếu có dấu xuống dòng. TUYỆT ĐỐI KHÔNG ĐƯỢC XUỐNG DÒNG bên trong các ô của bảng Markdown. Nếu viết hệ phương trình trong bảng, BẮT BUỘC phải viết liền trên 1 dòng (ví dụ: $\\begin{cases} x=1 \\\\\\\\ y=2 \\end{cases}$).
 `;
 
 const app = express();
@@ -102,7 +117,16 @@ async function processFilesForAI(files: any[]) {
 }
 
 function resolveFiles(reqBody: any) {
-  const files = reqBody.files || [];
+  let files = reqBody.files || [];
+  files = files.map(f => {
+    if (f.data && typeof f.data === "string" && f.data.startsWith("data:")) {
+      const matches = f.data.match(/^data:(.*?);base64,(.*)$/);
+      if (matches) {
+        return { ...f, type: matches[1], data: matches[2] };
+      }
+    }
+    return f;
+  });
   const fileIds = reqBody.fileIds || [];
   for (const id of fileIds) {
     const entry = chunkStore.get(id);
@@ -397,7 +421,7 @@ app.all("/api/generate-exam", async (req, res) => {
 - Trắc nghiệm Đúng/Sai (tf): ${tf} câu.
 - Trắc nghiệm trả lời ngắn (sa): ${sa} câu.
 - Tự luận (essay): ${essay} câu.
-\${MATH_FORMATTING_RULES}
+${MATH_FORMATTING_RULES}
 - BẮT BUỘC soát lỗi chính tả tiếng Việt thật cẩn thận.`;
 
     const promptText = `Bạn là chuyên gia ra đề thi môn ${subject} Lớp ${grade}.
@@ -548,7 +572,7 @@ Yêu cầu định dạng và nội dung (dùng cú pháp Markdown):
 1. **Phân chia tiết học**: BẮT BUỘC dựa vào số tiết trích xuất được để phân bổ rõ ràng tiến trình dạy học. Ví dụ bài có 2 tiết thì phải ghi rõ "Tiết 1: ... (45 phút)", "Tiết 2: ... (45 phút)". Mỗi tiết đảm bảo thời lượng đúng 45 phút.
 2. **Tuyệt đối KHÔNG sử dụng thẻ HTML \`<br>\` hoặc \`<br/>\`**: Hãy sử dụng dấu xuống dòng chuẩn của Markdown (Enter 2 lần) để ngắt đoạn.
 3. **Tô màu Năng lực số (NLS) và Năng lực AI**: Khi nhắc đến phần mềm, công cụ thiết bị số, Năng lực số hoặc công cụ AI trong bài, BẮT BUỘC phải bọc trong thẻ HTML \`<mark style="background-color: #dbeafe; color: #1d4ed8; font-weight: bold; padding: 2px 4px; border-radius: 4px;">Tên phần mềm / NLS</mark>\` để tô màu xanh nổi bật.
-\${MATH_FORMATTING_RULES}
+${MATH_FORMATTING_RULES}
 5. **I. MỤC TIÊU**: Trình bày rõ ràng Kiến thức, Năng lực số, Năng lực AI, và Yêu cầu STEM. Các mã chỉ báo (như [3.1.NC1a]) phải được giữ nguyên và giải thích ngắn gọn cách đạt được trong bài.
 7. **II. THIẾT BỊ DẠY HỌC VÀ HỌC LIỆU**: Ghi rõ các thiết bị số, phần mềm, công cụ AI cần thiết.
 8. **III. TIẾN TRÌNH DẠY HỌC**:
@@ -727,7 +751,7 @@ Trình bày chi tiết từng hoạt động (Hoạt động 1: Khởi động/X
 - Sản phẩm (Câu trả lời, kết quả mong đợi thật chi tiết)
 - Tổ chức thực hiện (Bao gồm 4 bước rõ ràng: Bước 1: Chuyển giao nhiệm vụ -> Bước 2: Thực hiện nhiệm vụ -> Bước 3: Báo cáo, thảo luận -> Bước 4: Kết luận, nhận định). Trong đó nêu rõ hoạt động của GV và HS, có phân bổ thời gian dự kiến cụ thể (ví dụ: 10 phút, 15 phút...).
 
-\${MATH_FORMATTING_RULES}
+${MATH_FORMATTING_RULES}
 `;
 
     
@@ -774,7 +798,7 @@ app.all("/api/generate-plan", async (req, res) => {
       - Cột "Năng lực AI": BẮT BUỘC phải bắt đầu bằng mã chỉ báo cụ thể trong dấu ngoặc vuông theo QĐ 2422 (ví dụ: [10.A1.1], [10.C2.1], [12.D2.1]...). Theo sau là yêu cầu cần đạt về AI tương ứng.
       - Cột "Giáo dục STEM/STEAM": Đề xuất hợp lý nhất các bài có thể tích hợp Stem/Steam phù hợp với năng lực và điều kiện thực tế.
       - Giữ nguyên các cột gốc: Bài học, Số tiết/bài, Yêu cầu cần đạt.
-      \${MATH_FORMATTING_RULES}
+      ${MATH_FORMATTING_RULES}
       Trả về kết quả dưới dạng danh sách JSON array với các thuộc tính: lesson, periods, requirement, digitalComp, aiComp, stem, note.`;
 
       let contents: any = prompt;
@@ -853,7 +877,7 @@ YÊU CẦU:
 ## Lời giải chi tiết
 [Các bước giải chi tiết cho đề tương tự]
 
-\${MATH_FORMATTING_RULES}
+${MATH_FORMATTING_RULES}
 BẮT BUỘC kiểm tra và SỬA LỖI CHÍNH TẢ tiếng Việt thật cẩn thận trước khi trả kết quả.`;
 
       const response = await generateWithFallback(req, {
@@ -997,7 +1021,7 @@ app.all("/api/generate-worksheet", async (req, res) => {
          - Hình thức: ${type || "Kết hợp trắc nghiệm và tự luận"}.
          - Phân hóa từ cơ bản đến vận dụng.
       4. Trình bày rõ ràng, để lại khoảng trống hợp lý giả định học sinh sẽ làm trực tiếp vào phiếu.
-      \${MATH_FORMATTING_RULES}
+      ${MATH_FORMATTING_RULES}
       5. ĐÁP ÁN: Ở cuối tài liệu, hãy cung cấp phần Hướng dẫn giải/Đáp án, phân cách bằng tiêu đề "--- HƯỚNG DẪN CHẤM / ĐÁP ÁN ---".
       6. BẮT BUỘC kiểm tra và SỬA LỖI CHÍNH TẢ tiếng Việt thật cẩn thận trước khi trả kết quả.`;
 
@@ -1037,9 +1061,9 @@ app.all("/api/pdf-to-word", async (req, res) => {
 
 YÊU CẦU NGHIÊM NGẶT:
 1. TUYỆT ĐỐI GIỮ NGUYÊN cấu trúc, số thứ tự câu, các mục lục, phân chương phân bài. Không được tự ý tóm tắt hay lược bỏ bất kỳ từ nào.
-\${MATH_FORMATTING_RULES}
+${MATH_FORMATTING_RULES}
 2. HÌNH ẢNH / HÌNH VẼ: Do hạn chế kỹ thuật số hóa, nếu gặp biểu đồ, hình vẽ, đồ thị, hãy thêm một chú thích rõ ràng bằng chữ ở vị trí đó (Ví dụ: [Hình vẽ đồ thị hàm số...] hoặc [Hình ảnh mô tả...]) để giáo viên biết vị trí cần chèn lại ảnh gốc.
-3. GIỮ NGUYÊN BẢNG BIỂU: Dùng cú pháp Markdown table để tạo lại chính xác các bảng biểu trong tài liệu.
+3. GIỮ NGUYÊN BẢNG BIỂU: Dùng cú pháp Markdown table để tạo lại chính xác các bảng biểu thông thường. ĐỐI VỚI BẢNG BIẾN THIÊN HOẶC BẢNG XÉT DẤU TOÁN HỌC, TUYỆT ĐỐI KHÔNG DÙNG Markdown Table, HÃY DÙNG CÚ PHÁP LaTeX array (như đã quy định ở trên).
 4. Nếu trong tài liệu gốc có các thẻ HTML (như <img>) được truyền vào, TUYỆT ĐỐI GIỮ NGUYÊN Y HỆT các thẻ đó ở đúng vị trí.
 
 Đầu ra của bạn phải hoàn toàn là nội dung tài liệu đã được số hóa, không thêm các câu chào hỏi thừa.`;
@@ -1097,7 +1121,7 @@ YÊU CẦU:
 ## Lời giải chi tiết
 [Các bước giải chi tiết]
 
-\${MATH_FORMATTING_RULES}
+${MATH_FORMATTING_RULES}
 5. BẮT BUỘC kiểm tra và SỬA LỖI CHÍNH TẢ tiếng Việt thật cẩn thận trước khi trả kết quả.`;
 
       const response = await generateWithFallback(req, {

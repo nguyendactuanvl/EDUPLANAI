@@ -1,7 +1,7 @@
 import { apiFetch } from '../lib/apiFetch';
 import { exportHtmlToWord } from "../lib/exportUtils";
 import { useState, useRef, useEffect } from "react";
-import { Sparkles, Save, BookOpen, Download, AlertCircle, Edit3, Eye } from "lucide-react";
+import { Sparkles, Save, BookOpen, Download, AlertCircle, Edit3, Eye, Printer, Share2, Copy } from "lucide-react";
 import Markdown from "react-markdown";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";

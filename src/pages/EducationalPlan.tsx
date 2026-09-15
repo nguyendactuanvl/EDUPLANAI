@@ -11,6 +11,7 @@ import { printElement } from '../lib/print';
 export function EducationalPlan() {
   const [plans, setPlans] = useState<KHGDRow[]>(fullPlan);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [selectedGrade, setSelectedGrade] = useState<number>(10);
   const exportRef = useRef<HTMLDivElement>(null);
   const [subject, setSubject] = useState("Toán");
@@ -88,6 +89,7 @@ export function EducationalPlan() {
 
   const generateAIPlan = async () => {
     setIsGenerating(true);
+    setError(null);
     try {
       const response = await apiFetch("/api/generate-plan", {
         method: "POST",
