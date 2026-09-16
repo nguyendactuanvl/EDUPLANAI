@@ -35,3 +35,30 @@
   background-color: #f8fafc;
   font-weight: 600;
 }
+
+
+
+
+
+
+
+
+/* Wait, KaTeX arrays don't use td, they use spans! */
+/* Let's just make sure border-width is not reset to 0 if KaTeX sets it */
+
+/* Protect KaTeX borders from Tailwind's reset */
+.katex, .katex * {
+  border-color: currentColor !important;
+}
+/* Ensure hline and vline are visible */
+.katex .katex-hline {
+  border-bottom: 1px solid currentColor !important;
+  background-color: currentColor !important;
+}
+.katex .vertical-separator {
+  border-right: 1px solid currentColor !important;
+  background-color: currentColor !important;
+}
+.katex .array {
+  border-collapse: collapse;
+}

@@ -1,31 +1,22 @@
 const fs = require('fs');
 
-function replaceMarkdown(filePath) {
-  let content = fs.readFileSync(filePath, 'utf8');
-  
-  if (content.includes('MarkdownRenderer')) return;
-  
-  // Add import
-  content = content.replace(
-    'import Markdown from "react-markdown";',
-    'import { MarkdownRenderer } from "../components/MarkdownRenderer";'
-  ).replace(
-    "import Markdown from 'react-markdown';",
-    'import { MarkdownRenderer } from "../components/MarkdownRenderer";'
-  );
-  
-  // Replace <Markdown ...>...</Markdown> with <MarkdownRenderer content={...} />
-  // We need to use regex to find the markdown wrapper and replace it.
-  
-  const regex = /<div [^>]*className="markdown-body[^>]*>[\s\S]*?<Markdown[\s\S]*?>([\s\S]*?)<\/Markdown>[\s\S]*?<\/div>/g;
-  
-  // Let's use string replace for specific files, regex can be tricky with nested divs.
-  // We'll write a custom replacer for Worksheets.tsx
-  
-  fs.writeFileSync(filePath, content);
-}
+let content = fs.readFileSync('src/components/MarkdownRenderer.tsx', 'utf8');
 
-replaceMarkdown('src/pages/Worksheets.tsx');
-replaceMarkdown('src/pages/LessonPlan.tsx');
-replaceMarkdown('src/pages/ExerciseSolver.tsx');
+const newCodeComponent = `          code({node, inline, className, children, ...props}: any) {
+            const match = /language-(\\w+)/.exec(className || '');
+            const contentStr = String(children).replace(/\\n$/, '');
+            const isTikz = (!inline && match && match[1] === 'tikz') || (!inline && contentStr.trim().startsWith('\\\\begin{tikzpicture}'));
+            if (isTikz) {
+              return (
+                <div className="flex justify-center my-6 overflow-x-auto bg-white p-4 rounded-xl border border-slate-200">
+                  <TikzJax content={contentStr} />
+                </div>
+              );
+            }
+            return <code className={className} {...props}>{children}</code>;
+          }`;
+          
+content = content.replace(/code\(\{node, inline, className, children, \.\.\.props\}: any\) \{[\s\S]*?return <code className=\{className\} \{\.\.\.props\}>\{children\}<\/code>;\s*\}/, newCodeComponent);
 
+fs.writeFileSync('src/components/MarkdownRenderer.tsx', content);
+console.log("Updated MarkdownRenderer");

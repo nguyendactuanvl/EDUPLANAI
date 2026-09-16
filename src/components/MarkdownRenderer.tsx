@@ -13,12 +13,14 @@ export const MarkdownRenderer = ({ content }: { content: string }) => {
         remarkPlugins={[remarkMath, remarkGfm]} 
         rehypePlugins={[rehypeRaw, rehypeKatex]}
         components={{
-          code({node, inline, className, children, ...props}: any) {
+                    code({node, inline, className, children, ...props}: any) {
             const match = /language-(\w+)/.exec(className || '');
-            if (!inline && match && match[1] === 'tikz') {
+            const contentStr = String(children).replace(/\n$/, '');
+            const isTikz = (!inline && match && match[1] === 'tikz') || (!inline && contentStr.trim().startsWith('\\begin{tikzpicture}'));
+            if (isTikz) {
               return (
                 <div className="flex justify-center my-6 overflow-x-auto bg-white p-4 rounded-xl border border-slate-200">
-                  <TikzJax content={String(children).replace(/\n$/, '')} />
+                  <TikzJax content={contentStr} />
                 </div>
               );
             }

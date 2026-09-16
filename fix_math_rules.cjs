@@ -2,7 +2,11 @@ const fs = require('fs');
 
 let content = fs.readFileSync('api/index.ts', 'utf8');
 
-content = content.replace("TUYỆT ĐỐI KHÔNG dùng pgfplots (không dùng \\begin{axis}). Không dùng \\usepackage.`;", "TUYỆT ĐỐI KHÔNG dùng pgfplots (không dùng \\\\begin{axis}). Không dùng \\\\usepackage.`;");
-content = content.replace(" Chỉ dùng các lệnh vẽ cơ bản (\\draw, \\node, \\fill).", " Chỉ dùng các lệnh vẽ cơ bản (\\\\draw, \\\\node, \\\\fill).");
+const str = "- KHÔNG dùng thẻ \\\\text{} bên trong array nếu không cần thiết.";
+const replaceStr = "- KHÔNG dùng thẻ \\\\text{} bên trong array nếu không cần thiết.\n   - BẮT BUỘC sử dụng \\\\hline để kẻ đường ngang giữa các hàng (hàng x, y', y phải được phân cách bằng \\\\hline).";
 
-fs.writeFileSync('api/index.ts', content);
+if (content.includes(str)) {
+    content = content.replace(str, replaceStr);
+    fs.writeFileSync('api/index.ts', content);
+    console.log("Updated rules");
+}
