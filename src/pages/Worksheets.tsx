@@ -4,6 +4,7 @@ import { exportHtmlToWord } from "../lib/exportUtils";
 import { useState, useRef, useEffect } from "react";
 import { Sparkles, Save, BookOpen, Download, AlertCircle, Edit3, Eye, Printer, Share2, Copy } from "lucide-react";
 import { MarkdownRenderer } from "../components/MarkdownRenderer";
+import { ErrorBoundary } from "../components/ErrorBoundary";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -545,7 +546,7 @@ export function Worksheets() {
                 ) : (
                   <div className="bg-white p-8 md:p-12 shadow-sm border border-slate-200 rounded-xl min-h-[500px]">
                     <div ref={exportRef}>
-                      <MarkdownRenderer content={suggestion} />
+                      <ErrorBoundary><MarkdownRenderer content={suggestion} /></ErrorBoundary>
                     </div>
                   </div>
                 )

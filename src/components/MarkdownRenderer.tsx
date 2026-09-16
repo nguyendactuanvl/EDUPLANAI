@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import rehypeRaw from 'rehype-raw';
-import TikzJax from 'react-tikzjax';
+import { TikzRenderer } from './TikzRenderer';
 
 export const MarkdownRenderer = ({ content }: { content: string }) => {
   let processedContent = content || '';
@@ -26,7 +26,7 @@ export const MarkdownRenderer = ({ content }: { content: string }) => {
     <div className="markdown-body prose prose-slate max-w-none prose-headings:text-slate-800 prose-h2:text-2xl prose-h2:border-b prose-h2:pb-2 prose-h3:text-xl prose-a:text-emerald-600 prose-table:border-collapse prose-th:border prose-th:bg-slate-50 prose-td:border prose-td:p-2">
       <Markdown 
         remarkPlugins={[remarkMath, remarkGfm]} 
-        rehypePlugins={[rehypeRaw, rehypeKatex]}
+        rehypePlugins={[rehypeRaw, [rehypeKatex, { strict: false, throwOnError: false }]]}
         components={{
           'tikz-diagram': ({node}: any) => {
             try {
@@ -35,7 +35,7 @@ export const MarkdownRenderer = ({ content }: { content: string }) => {
               const decoded = decodeURIComponent(typeof atob !== 'undefined' ? atob(base64) : Buffer.from(base64, 'base64').toString('utf8'));
               return (
                 <div className="flex justify-center my-6 overflow-x-auto bg-white p-4 rounded-xl border border-slate-200">
-                  <TikzJax content={decoded} />
+                  <TikzRenderer content={decoded} />
                 </div>
               );
             } catch(e) {

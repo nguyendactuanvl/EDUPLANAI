@@ -1,12 +1,10 @@
 const fs = require('fs');
+let code = fs.readFileSync('api/index.ts', 'utf8');
 
-let content = fs.readFileSync('api/index.ts', 'utf8');
+code = code.replace(
+  '- Với **Bảng biến thiên**, HÃY dùng môi trường LaTeX dạng ma trận \\begin{array} kẹp trong khối $$...$$.',
+  '- Với **Bảng biến thiên**, HÃY dùng môi trường LaTeX dạng ma trận \\begin{array} kẹp trong khối $$...$$.\n   - [QUAN TRỌNG] BẮT BUỘC PHẢI DÙNG lệnh \\hline giữa tất cả các dòng của Bảng biến thiên để tạo đường kẻ ngang. (nhiều AI hay quên cái này, bạn phải nhớ ghi \\hline).'
+);
 
-const str = "- KHÔNG dùng thẻ \\\\text{} bên trong array nếu không cần thiết.";
-const replaceStr = "- KHÔNG dùng thẻ \\\\text{} bên trong array nếu không cần thiết.\n   - BẮT BUỘC sử dụng \\\\hline để kẻ đường ngang giữa các hàng (hàng x, y', y phải được phân cách bằng \\\\hline).";
-
-if (content.includes(str)) {
-    content = content.replace(str, replaceStr);
-    fs.writeFileSync('api/index.ts', content);
-    console.log("Updated rules");
-}
+fs.writeFileSync('api/index.ts', code);
+console.log("Updated api/index.ts");

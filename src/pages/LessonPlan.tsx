@@ -6,6 +6,7 @@ import { Sparkles, Save, BookOpen, Download, AlertCircle, Upload, Edit3, Eye, Pr
 import pptxgen from "pptxgenjs";
 import { fullPlan } from "../data/mockData";
 import { MarkdownRenderer } from "../components/MarkdownRenderer";
+import { ErrorBoundary } from "../components/ErrorBoundary";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -537,12 +538,7 @@ export function LessonPlan() {
               />
             ) : (
               <div ref={exportRef} className="markdown-body prose prose-slate max-w-none pb-12 pt-4 prose-headings:text-slate-800 prose-h2:text-2xl prose-h2:border-b prose-h2:pb-2 prose-h3:text-xl prose-a:text-emerald-600 prose-table:border-collapse prose-th:border prose-th:bg-slate-50 prose-td:border prose-td:p-2">
-                <Markdown 
-                  remarkPlugins={[remarkMath, remarkGfm]} 
-                  rehypePlugins={[rehypeRaw, rehypeKatex]}
-                >
-                  {suggestion}
-                </Markdown>
+                <ErrorBoundary><MarkdownRenderer content={suggestion} /></ErrorBoundary>
               </div>
             )
           ) : (

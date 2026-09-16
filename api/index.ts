@@ -17,7 +17,8 @@ QUY TẮC ĐỊNH DẠNG TOÁN HỌC VÀ VĂN BẢN (BẮT BUỘC TUÂN THỦ NG
 4. Ký hiệu bắt buộc: Phân số dùng \dfrac{a}{b}, hệ phương trình dùng \begin{cases} ... \end{cases}.
 5. Bố cục văn bản dùng định dạng Markdown rõ ràng.
 6. [CỰC KỲ QUAN TRỌNG] VỀ BẢNG BIẾN THIÊN VÀ ĐỒ THỊ: 
-   - Với **Bảng biến thiên**, HÃY dùng môi trường LaTeX dạng ma trận \begin{array} kẹp trong khối $$...$$. 
+   - Với **Bảng biến thiên**, HÃY dùng môi trường LaTeX dạng ma trận \begin{array} kẹp trong khối $...$.
+   - [QUAN TRỌNG] BẮT BUỘC PHẢI DÙNG lệnh \hline giữa tất cả các dòng của Bảng biến thiên để tạo đường kẻ ngang. (nhiều AI hay quên cái này, bạn phải nhớ ghi \hline). 
    - TUYỆT ĐỐI KHÔNG DÙNG cú pháp nhân bản cột (như *{3}{c|}). Thư viện hiển thị sẽ bị lỗi (báo đỏ). Bạn PHẢI viết rõ từng cột (ví dụ: {|c|c|c|c|c|}).
    - KHÔNG dùng thẻ \text{} bên trong array nếu không cần thiết.
      Ví dụ Bảng biến thiên hợp lệ (KHÔNG DÙNG *):

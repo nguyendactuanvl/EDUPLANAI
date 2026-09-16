@@ -4,6 +4,7 @@ import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { Copy, Save, Upload, X, Sparkles, Loader2, Download, Presentation, ChevronLeft, ChevronRight, Maximize2, FileText, BookmarkPlus, Camera, Image as ImageIcon, Send, ArrowLeft } from 'lucide-react';
 
 import { MarkdownRenderer } from "../components/MarkdownRenderer";
+import { ErrorBoundary } from "../components/ErrorBoundary";
 import TikzJax from 'react-tikzjax';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -475,7 +476,7 @@ const handleSolve = async () => {
 
             <div className="bg-slate-50 rounded-xl p-8 border border-slate-200">
               <div ref={exportRef} className="markdown-body prose prose-slate max-w-none prose-headings:text-slate-800 prose-h2:text-2xl prose-h2:text-blue-700 prose-h2:border-b prose-h2:pb-2 prose-h3:text-xl prose-a:text-emerald-600">
-                <MarkdownRenderer content={solution} />
+                <ErrorBoundary><MarkdownRenderer content={solution} /></ErrorBoundary>
               </div>
             </div>
           </div>
@@ -504,7 +505,7 @@ const handleSolve = async () => {
                 .custom-presentation .katex { font-size: 1.8rem !important; }
                 .custom-presentation .katex-display { margin: 2rem 0 !important; }
               `}</style>
-              <MarkdownRenderer content={presentationSlides[currentSlide]} />
+              <ErrorBoundary><MarkdownRenderer content={presentationSlides[currentSlide]} /></ErrorBoundary>
             </div>
           </div>
           
