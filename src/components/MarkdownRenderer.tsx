@@ -9,6 +9,9 @@ import { TikzRenderer } from './TikzRenderer';
 export const MarkdownRenderer = ({ content }: { content: string }) => {
   let processedContent = content || '';
   
+  // 0. Unwrap any existing code blocks around SVG
+  processedContent = processedContent.replace(/```[a-z]*\s*(<svg[\s\S]*?<\/svg>)\s*```/g, '$1');
+  
   // 1. Unwrap any existing code blocks around TikZ to normalize
   processedContent = processedContent.replace(/```[a-z]*\s*(\\begin\{tikzpicture\}[\s\S]*?\\end\{tikzpicture\})\s*```/g, '$1');
   

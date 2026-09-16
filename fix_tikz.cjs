@@ -1,4 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+const fs = require('fs');
+
+const file = 'src/components/TikzRenderer.tsx';
+let code = fs.readFileSync(file, 'utf8');
+
+// I will create an in-memory cache directly in this file
+const newCode = `import React, { useEffect, useRef, useState } from 'react';
 
 // Global cache for TikZ SVGs
 const tikzCache = new Map<string, string>();
@@ -158,3 +164,7 @@ export const TikzRenderer = ({ content }: { content: string }) => {
     </div>
   );
 };
+`;
+
+fs.writeFileSync(file, newCode);
+console.log("Updated TikzRenderer");
