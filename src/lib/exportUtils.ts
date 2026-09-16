@@ -1,4 +1,4 @@
-export function exportHtmlToWord(element: HTMLElement, filename: string, keepLatex: boolean = false) {
+export function exportHtmlToWord(element: HTMLElement, filename: string, keepLatex: boolean = true) {
     const clone = element.cloneNode(true) as HTMLElement;
     
     // Transform grid into tables for MS Word

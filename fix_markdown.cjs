@@ -2,21 +2,24 @@ const fs = require('fs');
 
 let content = fs.readFileSync('src/components/MarkdownRenderer.tsx', 'utf8');
 
-const newCodeComponent = `          code({node, inline, className, children, ...props}: any) {
-            const match = /language-(\\w+)/.exec(className || '');
-            const contentStr = String(children).replace(/\\n$/, '');
-            const isTikz = (!inline && match && match[1] === 'tikz') || (!inline && contentStr.trim().startsWith('\\\\begin{tikzpicture}'));
-            if (isTikz) {
-              return (
-                <div className="flex justify-center my-6 overflow-x-auto bg-white p-4 rounded-xl border border-slate-200">
-                  <TikzJax content={contentStr} />
-                </div>
-              );
-            }
-            return <code className={className} {...props}>{children}</code>;
-          }`;
-          
-content = content.replace(/code\(\{node, inline, className, children, \.\.\.props\}: any\) \{[\s\S]*?return <code className=\{className\} \{\.\.\.props\}>\{children\}<\/code>;\s*\}/, newCodeComponent);
+// Replace the export line
+const oldExportLine = `export const MarkdownRenderer = ({ content }: { content: string }) => {`;
+const newExportLine = `export const MarkdownRenderer = ({ content }: { content: string }) => {
+  // Pre-process content to ensure all TikZ blocks are wrapped in code blocks
+  let processedContent = content || '';
+  
+  // 1. Unwrap any existing code blocks around TikZ to normalize
+  processedContent = processedContent.replace(/\`\`\`[a-z]*\\s*(\\\\begin\\{tikzpicture\\}[\\s\\S]*?\\\\end\\{tikzpicture\\})\\s*\`\`\`/g, '$1');
+  
+  // 2. Wrap all TikZ blocks in standard \`\`\`tikz ... \`\`\` code blocks
+  processedContent = processedContent.replace(/(\\\\begin\\{tikzpicture\\}[\\s\\S]*?\\\\end\\{tikzpicture\\})/g, '\\n\\n\`\`\`tikz\\n$1\\n\`\`\`\\n\\n');
+`;
+
+content = content.replace(oldExportLine, newExportLine);
+content = content.replace(
+  '{content}', 
+  '{processedContent}'
+);
 
 fs.writeFileSync('src/components/MarkdownRenderer.tsx', content);
 console.log("Updated MarkdownRenderer");

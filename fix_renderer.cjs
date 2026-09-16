@@ -1,4 +1,7 @@
-import React from 'react';
+const fs = require('fs');
+let code = fs.readFileSync('src/components/MarkdownRenderer.tsx', 'utf8');
+
+const newCode = `import React from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -10,13 +13,13 @@ export const MarkdownRenderer = ({ content }: { content: string }) => {
   let processedContent = content || '';
   
   // 1. Unwrap any existing code blocks around TikZ to normalize
-  processedContent = processedContent.replace(/```[a-z]*\s*(\\begin\{tikzpicture\}[\s\S]*?\\end\{tikzpicture\})\s*```/g, '$1');
+  processedContent = processedContent.replace(/\`\`\`[a-z]*\\s*(\\\\begin\\{tikzpicture\\}[\\s\\S]*?\\\\end\\{tikzpicture\\})\\s*\`\`\`/g, '$1');
   
   // 2. Base64 encode TikZ blocks to prevent Markdown/KaTeX interference
-  processedContent = processedContent.replace(/(\\begin\{tikzpicture\}[\s\S]*?\\end\{tikzpicture\})/g, (match) => {
+  processedContent = processedContent.replace(/(\\\\begin\\{tikzpicture\\}[\\s\\S]*?\\\\end\\{tikzpicture\\})/g, (match) => {
     try {
       const base64 = typeof btoa !== 'undefined' ? btoa(encodeURIComponent(match)) : Buffer.from(encodeURIComponent(match)).toString('base64');
-      return `\n\n<tikz-diagram data-tikz="${base64}"></tikz-diagram>\n\n`;
+      return \`\\n\\n<tikz-diagram data-tikz="\${base64}"></tikz-diagram>\\n\\n\`;
     } catch (e) {
       return match;
     }
@@ -52,3 +55,6 @@ export const MarkdownRenderer = ({ content }: { content: string }) => {
     </div>
   );
 };
+`;
+fs.writeFileSync('src/components/MarkdownRenderer.tsx', newCode);
+console.log("Updated MarkdownRenderer.tsx");
