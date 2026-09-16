@@ -1,4 +1,6 @@
-export async function exportHtmlToWord(element: HTMLElement, filename: string, mathFormat: 'omml' | 'mathml' | 'latex' | boolean = 'omml') {
+const fs = require('fs');
+
+const code = `export async function exportHtmlToWord(element: HTMLElement, filename: string, mathFormat: 'omml' | 'mathml' | 'latex' | boolean = 'omml') {
     if (mathFormat === true) mathFormat = 'latex';
     if (mathFormat === false) mathFormat = 'omml';
 
@@ -37,7 +39,7 @@ export async function exportHtmlToWord(element: HTMLElement, filename: string, m
                 table.appendChild(tr);
             }
             const td = document.createElement('td');
-            td.setAttribute('style', `width: ${100/cols}%; border: none; padding: 4pt; vertical-align: top;`);
+            td.setAttribute('style', \\\`width: \\\${100/cols}%; border: none; padding: 4pt; vertical-align: top;\\\`);
             td.innerHTML = child.innerHTML;
             if (tr) tr.appendChild(td);
         });
@@ -96,7 +98,7 @@ export async function exportHtmlToWord(element: HTMLElement, filename: string, m
       if (mathFormat === 'latex') {
           if (el.parentNode) {
               const delimiter = isBlock ? "$$" : "$$"; 
-              const textNode = document.createTextNode(isBlock ? `$$\n${texString}\n$$` : `$${texString}$`);
+              const textNode = document.createTextNode(isBlock ? \\\`$$\\\n\\\${texString}\\\n$$\\\` : \\\`$\\\${texString}$\\\`);
               el.parentNode.replaceChild(textNode, el);
           }
           continue;
@@ -183,16 +185,16 @@ export async function exportHtmlToWord(element: HTMLElement, filename: string, m
     
     // Global Document Sanitization Layer for DOCX Character Encoding & Spacing
     // 1. Strip problematic zero-width characters that break Word text flow
-    contentHtml = contentHtml.replace(/[\u200B-\u200D\uFEFF]/g, "");
+    contentHtml = contentHtml.replace(/[\\u200B-\\u200D\\uFEFF]/g, "");
     // 2. Prevent text collisions between consecutive formatted elements
-    contentHtml = contentHtml.replace(/<\/strong>\s*<strong>/g, "</strong> <strong>");
-    contentHtml = contentHtml.replace(/<\/em>\s*<em>/g, "</em> <em>");
+    contentHtml = contentHtml.replace(/<\\/strong>\\s*<strong>/g, "</strong> <strong>");
+    contentHtml = contentHtml.replace(/<\\/em>\\s*<em>/g, "</em> <em>");
     
-    const header = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns:m='http://schemas.microsoft.com/office/2004/12/omml' xmlns:mml='http://www.w3.org/1998/Math/MathML' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Document</title><style>@page Section1 { size: 8.27in 11.69in; margin: 0.8in 0.8in 0.8in 0.8in; mso-header-margin: .5in; mso-footer-margin: .5in; mso-paper-source: 0; }div.Section1 { page: Section1; }body { font-family: 'Times New Roman', Times, serif; font-size: 13pt; line-height: 1.5; }table { border-collapse: collapse; width: 100%; margin: 10pt 0; }th, td { border: 1px solid black; padding: 6pt; }table[style*="border: none"] th, table[style*="border: none"] td { border: none !important; }img { max-width: 100%; height: auto; display: block; margin: 15pt auto; text-align: center; }h1 { font-size: 18pt; text-align: center; margin-bottom: 20px; font-weight: bold; }h2 { font-size: 16pt; margin-top: 15pt; margin-bottom: 5pt; font-weight: bold; }h3 { font-size: 14pt; margin-top: 15px; font-weight: bold; }p { margin: 0 0 6pt 0; }.katex-html { display: none; }.katex-mathml { display: inline; }math { }</style></head><body><div class="Section1">`;
+    const header = \\\`<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns:m='http://schemas.microsoft.com/office/2004/12/omml' xmlns:mml='http://www.w3.org/1998/Math/MathML' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Document</title><style>@page Section1 { size: 8.27in 11.69in; margin: 0.8in 0.8in 0.8in 0.8in; mso-header-margin: .5in; mso-footer-margin: .5in; mso-paper-source: 0; }div.Section1 { page: Section1; }body { font-family: 'Times New Roman', Times, serif; font-size: 13pt; line-height: 1.5; }table { border-collapse: collapse; width: 100%; margin: 10pt 0; }th, td { border: 1px solid black; padding: 6pt; }table[style*="border: none"] th, table[style*="border: none"] td { border: none !important; }img { max-width: 100%; height: auto; display: block; margin: 15pt auto; text-align: center; }h1 { font-size: 18pt; text-align: center; margin-bottom: 20px; font-weight: bold; }h2 { font-size: 16pt; margin-top: 15pt; margin-bottom: 5pt; font-weight: bold; }h3 { font-size: 14pt; margin-top: 15px; font-weight: bold; }p { margin: 0 0 6pt 0; }.katex-html { display: none; }.katex-mathml { display: inline; }math { }</style></head><body><div class="Section1">\\\`;
     const footer = "</div></body></html>";
     const sourceHTML = header + contentHtml + footer;
     
-    const blob = new Blob(['\ufeff', sourceHTML], { type: 'application/msword' });
+    const blob = new Blob(['\\ufeff', sourceHTML], { type: 'application/msword' });
     const source = URL.createObjectURL(blob);
     const fileDownload = document.createElement("a");
     document.body.appendChild(fileDownload);
@@ -202,3 +204,5 @@ export async function exportHtmlToWord(element: HTMLElement, filename: string, m
     fileDownload.click();
     document.body.removeChild(fileDownload);
 }
+`;
+fs.writeFileSync('src/lib/exportUtils.ts', code);
