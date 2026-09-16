@@ -213,7 +213,7 @@ const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
 async function generateWithFallback(req: any, payloadOptions: any) {
   const client = getAiClient(req);
-  const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-pro", "gemini-flash"];
+  const models = ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-flash"];
   let primaryError: any = null;
   
   const maxRetries = 3;
@@ -234,7 +234,7 @@ async function generateWithFallback(req: any, payloadOptions: any) {
         }
         
         const is429 = lowerMsg.includes("429") || status === 429 || lowerMsg.includes("resource_exhausted") || lowerMsg.includes("quota") || lowerMsg.includes("503") || status === 503 || lowerMsg.includes("unavailable") || lowerMsg.includes("overloaded");
-        const is404 = lowerMsg.includes("not found") || status === 404 || lowerMsg.includes("is not found") || lowerMsg.includes("not exist") || status === 400;
+        const is404 = lowerMsg.includes("not found") || status === 404 || lowerMsg.includes("is not found") || lowerMsg.includes("not exist") || lowerMsg.includes("no longer available") || status === 400;
         
         if (is429) {
           // Always overwrite primary error with 429, as it's the most actionable rate-limit error.
