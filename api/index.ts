@@ -245,6 +245,8 @@ Khi bài toán yêu cầu có hình vẽ minh họa (đặc biệt là hình h�
 - Nét khuất / nét đứt BẮT BUỘC dùng thuộc tính: stroke-dasharray="4 3" hoặc "5 5".
 - Nét liền BẮT BUỘC dùng nét rõ: stroke="black" stroke-width="1.5".
 - Các đỉnh (S, A, B, C, D...) gắn nhãn bằng thẻ <text font-family="Times New Roman" font-size="14">...</text> đặt đúng tọa độ điểm tương ứng.
+- Khi tính toán tọa độ vẽ hình SVG, BẮT BUỘC TÍNH CHÍNH XÁC tọa độ hình học thực tế. Ví dụ: Đường trung tuyến từ B đến AC thì điểm M phải nằm chính giữa đoạn AC (tọa độ M = trung bình cộng tọa độ A và C).
+- Gắn nhãn các điểm (text) phải lệch ra ngoài hình một chút (khoảng 10-15px) so với tọa độ đỉnh để không bị đường thẳng đè lên.
 - Kích thước khung vẽ gọn gàng (width="300" height="250" viewBox="...").`
           } 
         };
