@@ -12,7 +12,6 @@ import rehypeRaw from "rehype-raw";
 import { saveToHistory, getHistory } from '../lib/history';
 import { HistoryItem } from '../types';
 import { cn } from "../lib/utils";
-import pptxgen from "pptxgenjs";
 import { Presentation } from "lucide-react";
 import { printElement } from '../lib/print';
 
@@ -183,88 +182,7 @@ export function Worksheets() {
   };
 
   
-  const handleExportPPTX = async () => {
-    if (!suggestion) return;
-    
-    setIsLoading(true);
-    try {
-      const pres = new pptxgen();
-      
-      // Basic markdown parsing for PPT
-      const sections = suggestion.split(/\n(?=##? )/g);
-      
-      // Cover slide
-      const coverSlide = pres.addSlide();
-      coverSlide.addText(customLessonName, { x: 1, y: 2, w: 8, h: 1, fontSize: 36, bold: true, align: 'center', color: '059669' });
-      coverSlide.addText("Môn: " + subject + " - Lớp " + selectedGrade, { x: 1, y: 3, w: 8, h: 1, fontSize: 24, align: 'center', color: '475569' });
-      
-      // Content slides
-      for (const section of sections) {
-        if (!section.trim()) continue;
-        
-        const lines = section.split('\n');
-        let title = "";
-        let bullets = [];
-        let currentText = "";
-        
-        for (const line of lines) {
-          if (line.startsWith('#')) {
-            if (currentText) bullets.push(currentText);
-            currentText = "";
-            title = line.replace(/^#+\s*/, '').replace(/\*\*/g, '');
-          } else if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
-            if (currentText) bullets.push(currentText);
-            currentText = line.replace(/^[\-\*]\s*/, '').replace(/\*\*/g, '');
-          } else if (line.trim()) {
-            // Remove markdown table syntax and asterisks for simple text
-            let cleanLine = line.replace(/\*\*/g, '').replace(/\|/g, '').trim();
-            if (cleanLine && !cleanLine.startsWith(':---')) {
-               currentText += (currentText ? "\n" : "") + cleanLine;
-            }
-          }
-        }
-        if (currentText) bullets.push(currentText);
-        
-        // Chunk bullets if too many
-        const chunkSize = 5;
-        for (let i = 0; i < bullets.length; i += chunkSize) {
-            const slideBullets = bullets.slice(i, i + chunkSize);
-            const slide = pres.addSlide();
-            
-            // Clean math syntax for PPTX since it doesn't render latex natively easily this way
-            const cleanTitle = title.replace(/\$/g, '');
-            slide.addText(cleanTitle || "Nội dung", { x: 0.5, y: 0.5, w: 9, h: 0.8, fontSize: 28, bold: true, color: '0f172a' });
-            
-            const bulletItems = slideBullets.map(b => ({
-              text: b.replace(/\$[^\$]+\$/g, '(Công thức)').substring(0, 300) + (b.length > 300 ? '...' : ''), 
-              options: { bullet: true, fontSize: 18, color: '334155' }
-            }));
-            
-            if (bulletItems.length > 0) {
-              slide.addText(bulletItems, { x: 0.5, y: 1.5, w: 9, h: 3.5, valign: 'top' });
-            }
-        }
-      }
-      
-      const safeFileName = `BaiGiang_${(customLessonName || "PHT").replace(/[^a-zA-Z0-9_\u00C0-\u1EF9]/g, '_')}.pptx`;
-      const rawBlob = await pres.write({ outputType: "blob" });
-      const blob = new Blob([rawBlob as Blob], { type: "application/vnd.openxmlformats-officedocument.presentationml.presentation" });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.target = "_blank";
-      a.download = safeFileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-    } catch (error: any) {
-      console.error("Export PPTX error", error);
-      alert("Có lỗi xảy ra khi xuất file PowerPoint: " + (error.message || "Lỗi không xác định"));
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  
 
   
   const handleExportPDF = () => {
@@ -519,16 +437,7 @@ export function Worksheets() {
                 >
                   <Download className="w-4 h-4" /> Xuất Word (LaTeX)
                 </button>
-                <button
-                  onClick={handleExportPPTX}
-                  className={cn(
-                    "px-4 py-2 text-white font-medium rounded-lg flex items-center gap-2 shadow-sm transition-colors",
-                    isEditing ? "bg-slate-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"
-                  )}
-                  title={isEditing ? "Chuyển sang chế độ xem trước để tải xuống" : ""}
-                >
-                  <Presentation className="w-4 h-4" /> Xuất PPTX
-                </button>
+                
 
               </>
             )}

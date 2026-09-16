@@ -3,7 +3,6 @@ import { GDPT_2018_SUBJECTS } from '../lib/subjects';
 import { exportHtmlToWord } from '../lib/exportUtils';
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Sparkles, Save, BookOpen, Download, AlertCircle, Upload, Edit3, Eye, Presentation } from "lucide-react";
-import pptxgen from "pptxgenjs";
 import { fullPlan } from "../data/mockData";
 import { MarkdownRenderer } from "../components/MarkdownRenderer";
 import { ErrorBoundary } from "../components/ErrorBoundary";
@@ -196,79 +195,7 @@ export function LessonPlan() {
   };
 
   
-  const handleExportPPTX = async () => {
-    if (!suggestion) return;
-    
-    setIsLoading(true);
-    try {
-      const pres = new pptxgen();
-      const sections = suggestion.split(/\n(?=##? )/g);
-      
-      const coverSlide = pres.addSlide();
-      coverSlide.addText(customLessonName || selectedLesson?.lesson || "Bài giảng", { x: 1, y: 2, w: 8, h: 1, fontSize: 36, bold: true, align: 'center', color: '059669' });
-      coverSlide.addText("Môn: " + subject, { x: 1, y: 3, w: 8, h: 1, fontSize: 24, align: 'center', color: '475569' });
-      
-      for (const section of sections) {
-        if (!section.trim()) continue;
-        const lines = section.split('\n');
-        let title = "";
-        let bullets = [];
-        let currentText = "";
-        
-        for (const line of lines) {
-          if (line.startsWith('#')) {
-            if (currentText) bullets.push(currentText);
-            currentText = "";
-            title = line.replace(/^#+\s*/, '').replace(/\*\*/g, '');
-          } else if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
-            if (currentText) bullets.push(currentText);
-            currentText = line.replace(/^[\-\*]\s*/, '').replace(/\*\*/g, '');
-          } else if (line.trim()) {
-            let cleanLine = line.replace(/\*\*/g, '').replace(/\|/g, '').trim();
-            if (cleanLine && !cleanLine.startsWith(':---')) {
-               currentText += (currentText ? "\n" : "") + cleanLine;
-            }
-          }
-        }
-        if (currentText) bullets.push(currentText);
-        
-        const chunkSize = 5;
-        for (let i = 0; i < bullets.length; i += chunkSize) {
-            const slideBullets = bullets.slice(i, i + chunkSize);
-            const slide = pres.addSlide();
-            const cleanTitle = title.replace(/\$/g, '');
-            slide.addText(cleanTitle || "Nội dung", { x: 0.5, y: 0.5, w: 9, h: 0.8, fontSize: 28, bold: true, color: '0f172a' });
-            
-            const bulletItems = slideBullets.map(b => ({
-              text: b.replace(/\$[^\$]+\$/g, '(Công thức)').substring(0, 300) + (b.length > 300 ? '...' : ''), 
-              options: { bullet: true, fontSize: 18, color: '334155' }
-            }));
-            
-            if (bulletItems.length > 0) {
-              slide.addText(bulletItems, { x: 0.5, y: 1.5, w: 9, h: 3.5, valign: 'top' });
-            }
-        }
-      }
-      
-      const fileName = customLessonName || selectedLesson?.lesson || "BaiGiang";
-      const rawBlob = await pres.write({ outputType: "blob" });
-      const blob = new Blob([rawBlob as Blob], { type: "application/vnd.openxmlformats-officedocument.presentationml.presentation" });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.target = "_blank";
-      a.download = `BaiGiang_${fileName.replace(/\s+/g, '_')}.pptx`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error("Export PPTX error", error);
-      alert("Có lỗi xảy ra khi xuất file PowerPoint");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  
 
   
   const handleExportPDF = () => {
@@ -528,14 +455,7 @@ export function LessonPlan() {
           >
             <span className="text-sm font-bold border-2 border-current px-1 rounded">PDF</span>
           </button>
-          <button
-            title="Xuất bài giảng PowerPoint"
-            className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors disabled:opacity-50 flex items-center gap-2"
-            onClick={handleExportPPTX}
-            disabled={!suggestion}
-          >
-            <Presentation className="h-5 w-5" /> <span className="text-sm font-medium pr-1">PPTX</span>
-          </button>
+          
 
         </div>
         

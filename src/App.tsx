@@ -4,22 +4,22 @@
  */
 
 import { Menu, Sparkles, Key, AlertCircle } from "lucide-react";
-import { useState, useEffect } from "react";
+import React, { useState, Suspense, useEffect } from "react";
 import { Sidebar } from "./components/Sidebar";
-import { EducationalPlan } from "./pages/EducationalPlan";
-import { LessonPlan } from "./pages/LessonPlan";
-import { Circulars } from "./pages/Circulars";
-import { HistoryPage } from "./pages/HistoryPage";
-import { Worksheets } from "./pages/Worksheets";
+const EducationalPlan = React.lazy(() => import("./pages/EducationalPlan").then(module => ({ default: module.EducationalPlan })));
+const LessonPlan = React.lazy(() => import("./pages/LessonPlan").then(module => ({ default: module.LessonPlan })));
+const Circulars = React.lazy(() => import("./pages/Circulars").then(module => ({ default: module.Circulars })));
+const HistoryPage = React.lazy(() => import("./pages/HistoryPage").then(module => ({ default: module.HistoryPage })));
+const Worksheets = React.lazy(() => import("./pages/Worksheets").then(module => ({ default: module.Worksheets })));
 import { SettingsModal } from "./components/SettingsModal";
-import { ExerciseSolver } from './pages/ExerciseSolver';
-import { PdfToWord } from './pages/PdfToWord';
-import { ExamGenerator } from './pages/ExamGenerator';
-import { StudentExamView } from './pages/StudentExamView';
-import { ClassMap } from './pages/ClassMap';
-import { HomeroomManagement } from './pages/HomeroomManagement';
-import { WeeklyTimetable } from './pages/WeeklyTimetable';
-import { Gamification } from './pages/Gamification';
+const ExerciseSolver = React.lazy(() => import('./pages/ExerciseSolver').then(module => ({ default: module.ExerciseSolver })));
+const PdfToWord = React.lazy(() => import('./pages/PdfToWord').then(module => ({ default: module.PdfToWord })));
+const ExamGenerator = React.lazy(() => import('./pages/ExamGenerator').then(module => ({ default: module.ExamGenerator })));
+const StudentExamView = React.lazy(() => import('./pages/StudentExamView').then(module => ({ default: module.StudentExamView })));
+const ClassMap = React.lazy(() => import('./pages/ClassMap').then(module => ({ default: module.ClassMap })));
+const HomeroomManagement = React.lazy(() => import('./pages/HomeroomManagement').then(module => ({ default: module.HomeroomManagement })));
+const WeeklyTimetable = React.lazy(() => import('./pages/WeeklyTimetable').then(module => ({ default: module.WeeklyTimetable })));
+const Gamification = React.lazy(() => import('./pages/Gamification').then(module => ({ default: module.Gamification })));
 
 
 
@@ -56,10 +56,10 @@ export default function App() {
   const studentExamId = urlParams.get('examId');
   const studentExamData = urlParams.get('examData');
   if (studentExamId) {
-    return <StudentExamView examId={studentExamId} />;
+    return <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-100">Đang tải đề thi...</div>}><StudentExamView examId={studentExamId} /></Suspense>;
   }
   if (studentExamData) {
-    return <StudentExamView examRawData={studentExamData} />;
+    return <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-100">Đang tải đề thi...</div>}><StudentExamView examRawData={studentExamData} /></Suspense>;
   }
   
   return (
@@ -116,6 +116,7 @@ export default function App() {
         </header>
 
         <div className="flex-1 overflow-y-auto relative w-full h-full">
+          <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-500">Đang tải...</div>}>
           {activeTab === "khgd" && <EducationalPlan />}
           {activeTab === "khdh" && <LessonPlan />}
           {activeTab === "worksheets" && <Worksheets />}
@@ -128,6 +129,7 @@ export default function App() {
           {activeTab === "pdf2word" && <PdfToWord />}
           {activeTab === "circulars" && <Circulars />}
           {activeTab === "history" && <HistoryPage />}
+                  </Suspense>
         </div>
       </main>
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />

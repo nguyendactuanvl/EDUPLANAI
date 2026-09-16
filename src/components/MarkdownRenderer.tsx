@@ -41,6 +41,7 @@ export const MarkdownRenderer = ({ content }: { content: string }) => {
         remarkPlugins={[remarkMath, remarkGfm]} 
         rehypePlugins={[rehypeRaw, [rehypeKatex, { strict: false, throwOnError: false }]]}
         components={{
+          // @ts-ignore
           'svg-wrapper': ({node}: any) => {
             try {
               const base64 = node.properties?.dataSvg || node.properties?.['data-svg'];

@@ -12,7 +12,6 @@ import rehypeKatex from 'rehype-katex';
 import rehypeRaw from 'rehype-raw';
 
 import mammoth from 'mammoth';
-import pptxgen from "pptxgenjs";
 import { printElement } from '../lib/print';
 import { saveToHistory, getHistory } from '../lib/history';
 import { HistoryItem } from '../types';
@@ -262,42 +261,7 @@ const handleSolve = async () => {
     exportHtmlToWord(exportRef.current, `LoiGiai_${new Date().getTime()}${keepLatex ? '_LaTeX' : ''}.doc`, keepLatex);
   };
 
-  const handleExportPPTX = async () => {
-    if (!solution) return;
-    const pres = new pptxgen();
-    const slides = String(solution).split(/\n## /g);
-    
-    for (let i = 0; i < slides.length; i++) {
-        let text = slides[i].trim();
-        if (i > 0) text = "## " + text;
-        const slide = pres.addSlide();
-        
-        let title = text.split('\n')[0].replace(/^#+ /, '').trim();
-        let content = text.substring(text.indexOf('\n')).trim();
-        if (!content && title) { content = title; title = "Giải bài tập"; }
-        
-        slide.addText(title || "Giải bài tập", { x: 0.5, y: 0.5, w: '90%', h: 1, fontSize: 28, bold: true, color: '059669' });
-        // Simplified text addition for PPTX (real markdown parsing is complex)
-        slide.addText(content.substring(0, 1500) + (content.length > 1500 ? '...' : ''), { x: 0.5, y: 1.5, w: '90%', h: '70%', fontSize: 16, color: '333333', valign: 'top' });
-    }
-    
-    try {
-      const rawBlob = await pres.write({ outputType: "blob" });
-      const blob = new Blob([rawBlob as Blob], { type: "application/vnd.openxmlformats-officedocument.presentationml.presentation" });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.target = "_blank";
-      a.download = `LoiGiai_${new Date().getTime()}.pptx`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-    } catch (error: any) {
-      console.error("Export PPTX error", error);
-      alert("Có lỗi xảy ra khi xuất file PowerPoint: " + (error.message || "Lỗi không xác định"));
-    }
-  };
+  
 
   // Presentation slides logic
   const presentationSlides = useMemo(() => {
@@ -469,12 +433,7 @@ const handleSolve = async () => {
                 >
                   <span className="text-xs font-bold border-2 border-current px-1 rounded">PDF</span> Xuất PDF
                 </button>
-                <button 
-                  onClick={handleExportPPTX}
-                  className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors shadow-sm"
-                >
-                  <Presentation className="w-4 h-4" /> Xuất PPTX
-                </button>
+                
                 <button 
                   onClick={() => { setIsPresentationMode(true); setCurrentSlide(0); }}
                   className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors shadow-sm font-medium"

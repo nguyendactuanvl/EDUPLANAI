@@ -1,5 +1,7 @@
 import temml from 'temml';
-export function exportHtmlToWord(element: HTMLElement, filename: string, mathFormat: 'omml' | 'mathml' | 'latex' = 'omml') {
+export function exportHtmlToWord(element: HTMLElement, filename: string, mathFormat: 'omml' | 'mathml' | 'latex' | boolean = 'omml') {
+    if (mathFormat === true) mathFormat = 'latex';
+    if (mathFormat === false) mathFormat = 'omml';
     const clone = element.cloneNode(true) as HTMLElement;
     
     // Transform grid into tables for MS Word
