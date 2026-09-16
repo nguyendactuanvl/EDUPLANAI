@@ -232,6 +232,7 @@ math { }
     const fileDownload = document.createElement("a");
     document.body.appendChild(fileDownload);
     fileDownload.href = source;
+    fileDownload.target = "_blank";
     fileDownload.download = filename.endsWith('.doc') ? filename : filename + '.doc';
     fileDownload.click();
     document.body.removeChild(fileDownload);

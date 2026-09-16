@@ -258,7 +258,7 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
           return (
             <div key={idx} className={`bg-white p-6 rounded-xl shadow-sm border ${isSubmitted && showRedBorder ? 'border-red-200' : isSubmitted ? 'border-emerald-200' : 'border-slate-200'}`}>
               <h3 className="font-medium text-slate-800 mb-4 leading-relaxed">
-                <span className="font-bold">Câu {idx + 1}:</span> <div className="markdown-body inline-block"><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]} >{q.content}</Markdown></div>
+                <span className="font-bold">Câu {idx + 1}:</span> <div className="markdown-body inline-block"><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]} >{q.content || ''}</Markdown></div>
               </h3>
               
               <div className="space-y-3">
@@ -286,7 +286,7 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
                       <div className={`w-6 h-6 rounded-full border flex items-center justify-center shrink-0 ${isSelected && !isSubmitted ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-slate-300'}`}>
                         {String.fromCharCode(65 + oIdx)}
                       </div>
-                      <span className="flex-1"><div className="markdown-body inline-block"><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]} >{opt.replace(/^[A-D][\.\:\)]\s*/i, '')}</Markdown></div></span>
+                      <span className="flex-1"><div className="markdown-body inline-block"><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]} >{(opt || '').replace(/^[A-D][\.\:\)]\s*/i, '')}</Markdown></div></span>
                       {isSubmitted && isCorrect && <CheckCircle2 className="w-5 h-5 text-emerald-600" />}
                       {isSubmitted && isSelected && !isCorrect && <XCircle className="w-5 h-5 text-red-600" />}
                     </button>
@@ -303,7 +303,7 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
                       
                       return (
                         <div key={sIdx} className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-xl border border-slate-200 bg-slate-50">
-                          <div className="flex-1"><div className="markdown-body inline-block"><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]} >{stmt.statement}</Markdown></div></div>
+                          <div className="flex-1"><div className="markdown-body inline-block"><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]} >{stmt.statement || ''}</Markdown></div></div>
                           <div className="flex items-center gap-2 shrink-0">
                             <button 
                               disabled={isSubmitted}
@@ -381,7 +381,7 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
                     {isSubmitted && (
                       <div className="mt-4 p-4 bg-slate-100 rounded-lg border border-slate-200">
                         <span className="text-slate-500 font-semibold block mb-2">Gợi ý chấm / Đáp án chuẩn:</span>
-                        <div className="markdown-body text-sm"><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]} >{q.correctAnswer || q.explanation || q.correct || ''}</Markdown></div>
+                        <div className="markdown-body text-sm"><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]} >{q.correctAnswer || q.explanation || q.correct || ''}</Markdown></div>
                       </div>
                     )}
                   </div>
@@ -391,7 +391,7 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
                 {isSubmitted && q.explanation && q.type !== 'essay' && (
                    <div className="mt-4 p-4 bg-slate-100 rounded-lg border border-slate-200">
                      <span className="text-slate-500 font-semibold block mb-2">Giải thích:</span>
-                     <div className="markdown-body text-sm"><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]} >{q.explanation}</Markdown></div>
+                     <div className="markdown-body text-sm"><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]} >{q.explanation || ''}</Markdown></div>
                    </div>
                 )}
               </div>

@@ -247,7 +247,17 @@ export function Worksheets() {
       }
       
       const safeFileName = `BaiGiang_${(customLessonName || "PHT").replace(/[^a-zA-Z0-9_\u00C0-\u1EF9]/g, '_')}.pptx`;
-      await pres.writeFile({ fileName: safeFileName });
+      const rawBlob = await pres.write({ outputType: "blob" });
+      const blob = new Blob([rawBlob as Blob], { type: "application/vnd.openxmlformats-officedocument.presentationml.presentation" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.target = "_blank";
+      a.download = safeFileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
     } catch (error: any) {
       console.error("Export PPTX error", error);
       alert("Có lỗi xảy ra khi xuất file PowerPoint: " + (error.message || "Lỗi không xác định"));

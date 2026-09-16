@@ -282,7 +282,17 @@ const handleSolve = async () => {
     }
     
     try {
-      await pres.writeFile({ fileName: `LoiGiai_${new Date().getTime()}.pptx` });
+      const rawBlob = await pres.write({ outputType: "blob" });
+      const blob = new Blob([rawBlob as Blob], { type: "application/vnd.openxmlformats-officedocument.presentationml.presentation" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.target = "_blank";
+      a.download = `LoiGiai_${new Date().getTime()}.pptx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
     } catch (error: any) {
       console.error("Export PPTX error", error);
       alert("Có lỗi xảy ra khi xuất file PowerPoint: " + (error.message || "Lỗi không xác định"));

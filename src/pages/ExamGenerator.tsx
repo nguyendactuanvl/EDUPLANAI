@@ -1200,7 +1200,7 @@ ${customPrompt}
                       <div key={idx} className="pb-4 border-b border-slate-100 last:border-0">
                         <div className="font-medium text-slate-800 mb-3 flex items-start gap-2">
                           <span className="font-bold whitespace-nowrap mt-1">Câu {idx + 1}:</span> 
-                          <div className="markdown-body flex-1"><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]} >{q.content}</Markdown></div> 
+                          <div className="markdown-body flex-1"><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]} >{q.content || ''}</Markdown></div> 
                           <span className="text-xs text-emerald-600 font-normal mt-1 shrink-0">[{q.level}]</span>
                           <button onClick={() => saveToBank(q)} className="text-xs px-2 py-1 bg-blue-50 text-blue-600 rounded border border-blue-200 hover:bg-blue-100 shrink-0 no-print" title="Lưu vào Ngân hàng CH">+ Lưu NH</button>
                           <button onClick={() => {
@@ -1216,7 +1216,7 @@ ${customPrompt}
                             {q.tfStatements.map((stmt, sIdx) => (
                               <div key={sIdx} className="flex items-start gap-1 p-2 rounded-md border border-transparent">
                                 <span className="shrink-0 font-medium">{['a)', 'b)', 'c)', 'd)'][sIdx] || String.fromCharCode(97 + sIdx) + ')'}</span>
-                                <div className="markdown-body inline-markdown flex-1"><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]} >{stmt.statement}</Markdown></div>
+                                <div className="markdown-body inline-markdown flex-1"><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]} >{stmt.statement || ''}</Markdown></div>
                                 <span className={`shrink-0 font-bold px-2 rounded ${stmt.correct ? 'text-emerald-700 bg-emerald-100' : 'text-red-700 bg-red-100'}`}>
                                   {stmt.correct ? 'Đ' : 'S'}
                                 </span>
@@ -1229,7 +1229,7 @@ ${customPrompt}
                             {q.options.map((opt, oIdx) => (
                               <div key={oIdx} className={`flex items-start gap-1 p-2 rounded-md border ${oIdx === q.correctOptionIndex ? 'bg-emerald-50 border-emerald-200 font-medium' : 'border-transparent'}`}>
                                 <span className="shrink-0 font-medium">{String.fromCharCode(65 + oIdx)}.</span>
-                                <div className="markdown-body inline-markdown flex-1"><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]} >{opt.replace(/^[A-D][\.\:\)]\s*/i, '')}</Markdown></div>
+                                <div className="markdown-body inline-markdown flex-1"><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]} >{(opt || '').replace(/^[A-D][\.\:\)]\s*/i, '')}</Markdown></div>
                               </div>
                             ))}
                           </div>
@@ -1237,7 +1237,7 @@ ${customPrompt}
                         
                         {q.type !== 'mc' && q.correctAnswer && (
                           <div className="mt-2 pl-4 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
-                            <span className="font-semibold text-emerald-800">Đáp án:</span> <div className="markdown-body"><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]} >{q.correctAnswer}</Markdown></div>
+                            <span className="font-semibold text-emerald-800">Đáp án:</span> <div className="markdown-body"><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]} >{q.correctAnswer || ''}</Markdown></div>
                           </div>
                         )}
                       </div>
@@ -1309,13 +1309,13 @@ ${customPrompt}
                             <h3 style={{textAlign:'center', fontSize: '16px', marginBottom: '20px'}}>Mã đề: {exam.code}</h3>
                             {exam.questions.map((q, idx) => (
                               <div key={idx} className="question" style={{marginBottom: '15px'}}>
-                                <div><strong>Câu {idx + 1}:</strong> <div className="markdown-body"><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]} >{q.content}</Markdown></div></div>
+                                <div><strong>Câu {idx + 1}:</strong> <div className="markdown-body"><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]} >{q.content || ''}</Markdown></div></div>
                                 {q.type === 'mc' && q.options && (
                                   <div className="options" style={{display: 'grid', gridTemplateColumns: '1fr 1fr', marginTop: '5px'}}>
                                     {q.options.map((opt, oIdx) => (
                                       <div key={oIdx} className="option" style={{paddingLeft: '10px', display: 'flex', gap: '4px', alignItems: 'flex-start'}}>
                                         <span style={{fontWeight: 'bold', flexShrink: 0}}>{String.fromCharCode(65 + oIdx)}.</span>
-                                        <div className="markdown-body inline-markdown" style={{flex: 1}}><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]} >{opt.replace(/^[A-D][\.\:\)]\s*/i, '')}</Markdown></div>
+                                        <div className="markdown-body inline-markdown" style={{flex: 1}}><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]} >{(opt || '').replace(/^[A-D][\.\:\)]\s*/i, '')}</Markdown></div>
                                       </div>
                                     ))}
                                   </div>
@@ -1325,7 +1325,7 @@ ${customPrompt}
                                     {q.tfStatements.map((stmt, sIdx) => (
                                       <div key={sIdx} className="option" style={{paddingLeft: '10px', display: 'flex', gap: '4px', alignItems: 'flex-start'}}>
                                         <span style={{fontWeight: 'bold', flexShrink: 0}}>{['a)', 'b)', 'c)', 'd)'][sIdx] || String.fromCharCode(97 + sIdx) + ')'}</span>
-                                        <div className="markdown-body inline-markdown" style={{flex: 1}}><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]} >{stmt.statement}</Markdown></div>
+                                        <div className="markdown-body inline-markdown" style={{flex: 1}}><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]} >{stmt.statement || ''}</Markdown></div>
                                       </div>
                                     ))}
                                   </div>
@@ -1355,7 +1355,7 @@ ${customPrompt}
                                       return (
                                         <td key={colIndex} className="border border-black p-1">
                                           <strong>{ansIndex + 1}.</strong> {q.type !== 'mc' && q.type !== 'tf' ? (
-                                            <div className="markdown-body inline-markdown" style={{display: 'inline'}}><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]} >{q.correctAnswer || ''}</Markdown></div>
+                                            <div className="markdown-body inline-markdown" style={{display: 'inline'}}><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]} >{q.correctAnswer || ''}</Markdown></div>
                                           ) : ans}
                                         </td>
                                       )

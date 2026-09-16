@@ -251,7 +251,17 @@ export function LessonPlan() {
       }
       
       const fileName = customLessonName || selectedLesson?.lesson || "BaiGiang";
-      await pres.writeFile({ fileName: `BaiGiang_${fileName.replace(/\s+/g, '_')}.pptx` });
+      const rawBlob = await pres.write({ outputType: "blob" });
+      const blob = new Blob([rawBlob as Blob], { type: "application/vnd.openxmlformats-officedocument.presentationml.presentation" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.target = "_blank";
+      a.download = `BaiGiang_${fileName.replace(/\s+/g, '_')}.pptx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error("Export PPTX error", error);
       alert("Có lỗi xảy ra khi xuất file PowerPoint");

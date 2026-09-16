@@ -246,7 +246,7 @@ export function PdfToWord() {
             <div ref={exportRef} className="markdown-body prose prose-slate max-w-none prose-headings:text-slate-800 prose-h2:text-2xl prose-h2:text-blue-700 prose-h2:border-b prose-h2:pb-2 prose-h3:text-xl prose-a:text-emerald-600">
               <Markdown 
                 remarkPlugins={[remarkMath, remarkGfm]} 
-                rehypePlugins={[rehypeRaw, rehypeKatex]}
+                rehypePlugins={[rehypeRaw, [rehypeKatex, { strict: false, throwOnError: false }]]}
               >
                 {resultText}
               </Markdown>
