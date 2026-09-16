@@ -493,21 +493,22 @@ export function LessonPlan() {
             <Save className="h-5 w-5" />
           </button>
           <button 
-            className="p-2 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-md transition-colors"
-            title="Tải xuống Word"
-            onClick={handleExportWord}
+            className="p-2 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-md transition-colors flex items-center gap-1"
+            title="Tải Word (Chuẩn OMML - Word máy tính)"
+            onClick={() => { if(exportRef.current) exportHtmlToWord(exportRef.current, `GiaoAn_${(activeTab === 'system' && selectedLesson ? selectedLesson.lesson : customLessonName).replace(/\s+/g, '_')}_OMML.doc`, 'omml'); }}
             disabled={!suggestion}
           >
             <Download className="h-5 w-5" />
+            <span className="text-xs font-medium">OMML</span>
           </button>
           <button 
             className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors flex items-center gap-1"
-            title="Tải xuống Word (Giữ nguyên LaTeX cho MathType)"
-            onClick={handleExportWordLatex}
+            title="Tải Word (Chuẩn MathML - Word Online/Linh hoạt)"
+            onClick={() => { if(exportRef.current) exportHtmlToWord(exportRef.current, `GiaoAn_${(activeTab === 'system' && selectedLesson ? selectedLesson.lesson : customLessonName).replace(/\s+/g, '_')}_MathML.doc`, 'mathml'); }}
             disabled={!suggestion}
           >
             <Download className="h-5 w-5" />
-            <span className="text-xs font-medium">LaTeX</span>
+            <span className="text-xs font-medium">MathML</span>
           </button>
           <button 
             className="p-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors"

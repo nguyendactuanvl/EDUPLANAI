@@ -225,7 +225,18 @@ async function generateWithFallback(req: any, payloadOptions: any) {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     for (const model of models) {
       try {
-        return await client.models.generateContent({ ...payloadOptions, model });
+        
+        const config = payloadOptions.config || {};
+        const updatedPayload = { 
+          ...payloadOptions, 
+          model,
+          config: {
+            ...config,
+            systemInstruction: config.systemInstruction || "Tất cả biến số, ký hiệu toán và công thức BẮT BUỘC đặt trong cặp dấu $...$ (nội dòng) hoặc $...$ (khối dòng) theo cú pháp LaTeX chuẩn, tuyệt đối không xuất text thuần, giữ nguyên tiếng Việt UTF-8."
+          } 
+        };
+        return await client.models.generateContent(updatedPayload);
+  
       } catch (e: any) {
         const errorMsg = e?.message || "";
         const status = e?.status;

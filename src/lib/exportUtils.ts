@@ -1,4 +1,5 @@
-export function exportHtmlToWord(element: HTMLElement, filename: string, keepLatex: boolean = true) {
+import temml from 'temml';
+export function exportHtmlToWord(element: HTMLElement, filename: string, mathFormat: 'omml' | 'mathml' | 'latex' = 'omml') {
     const clone = element.cloneNode(true) as HTMLElement;
     
     // Transform grid into tables for MS Word
@@ -56,22 +57,42 @@ export function exportHtmlToWord(element: HTMLElement, filename: string, keepLat
     });
 
 // Extract MathML from KaTeX for native Word Equation support
+    
     const katexElements = clone.querySelectorAll(".katex");
     katexElements.forEach(el => {
-      if (keepLatex) {
-          const annotationNode = el.querySelector("annotation[encoding='application/x-tex']");
-          if (annotationNode && el.parentNode) {
-              const texString = annotationNode.textContent || "";
+      const annotationNode = el.querySelector("annotation[encoding='application/x-tex']");
+      const texString = annotationNode ? annotationNode.textContent || "" : "";
+      
+      if (mathFormat === 'latex') {
+          if (texString && el.parentNode) {
               const isBlock = el.parentElement?.classList.contains("katex-display") || el.classList.contains("katex-display");
-              const delimiter = isBlock ? "$$" : "$";
+              const delimiter = isBlock ? "$" : "$";
               const textNode = document.createTextNode(`${delimiter}${texString}${delimiter}`);
               el.parentNode.replaceChild(textNode, el);
               return;
           }
       }
       
+      if (mathFormat === 'omml' && texString) {
+          try {
+              const isBlock = el.parentElement?.classList.contains("katex-display") || el.classList.contains("katex-display");
+              const mathmlHtml = temml.renderToString(texString, { displayMode: isBlock });
+              const tempDiv = document.createElement('div');
+              tempDiv.innerHTML = mathmlHtml;
+              const newMathNode = tempDiv.querySelector('math');
+              if (newMathNode) {
+                  newMathNode.setAttribute("xmlns", "http://www.w3.org/1998/Math/MathML");
+                  if (el.parentNode) el.parentNode.replaceChild(newMathNode, el);
+                  return;
+              }
+          } catch(e) {
+              console.warn("Temml conversion error", e);
+          }
+      }
+
       const mathNode = el.querySelector(".katex-mathml math");
       if (mathNode) {
+
         const mathClone = mathNode.cloneNode(true) as Element;
         // IMPORTANT: Add MathML namespace for MS Word
         mathClone.setAttribute("xmlns", "http://www.w3.org/1998/Math/MathML");
