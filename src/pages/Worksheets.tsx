@@ -1,8 +1,9 @@
 import { apiFetch } from '../lib/apiFetch';
+import { GDPT_2018_SUBJECTS } from '../lib/subjects';
 import { exportHtmlToWord } from "../lib/exportUtils";
 import { useState, useRef, useEffect } from "react";
 import { Sparkles, Save, BookOpen, Download, AlertCircle, Edit3, Eye, Printer, Share2, Copy } from "lucide-react";
-import Markdown from "react-markdown";
+import { MarkdownRenderer } from "../components/MarkdownRenderer";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -35,7 +36,7 @@ export function Worksheets() {
   
   const exportRef = useRef<HTMLDivElement>(null);
 
-  const subjects = ["Toán", "Vật lý", "Hóa học", "Sinh học", "Ngữ văn", "Tiếng Anh", "Lịch sử", "Địa lý", "Giáo dục Kinh tế và Pháp luật", "Tin học", "Công nghệ"];
+  const subjects = GDPT_2018_SUBJECTS;
   const worksheetTypes = [
     "Đề 3 phần (12 câu TN nhiều lựa chọn; 4 câu Đ/S; 6 câu TL ngắn)",
     "Đề 4 phần (12 câu TN; 2 câu Đ/S; 4 câu TL ngắn; 3 câu Tự luận)",
@@ -543,13 +544,8 @@ export function Worksheets() {
                   />
                 ) : (
                   <div className="bg-white p-8 md:p-12 shadow-sm border border-slate-200 rounded-xl min-h-[500px]">
-                    <div ref={exportRef} className="markdown-body prose prose-slate max-w-none prose-headings:text-slate-800 prose-h2:text-2xl prose-h2:border-b prose-h2:pb-2 prose-h3:text-xl prose-a:text-emerald-600 prose-table:border-collapse prose-th:border prose-th:bg-slate-50 prose-td:border prose-td:p-2">
-                      <Markdown 
-                        remarkPlugins={[remarkMath, remarkGfm]} 
-                        rehypePlugins={[rehypeRaw, rehypeKatex]}
-                      >
-                        {suggestion}
-                      </Markdown>
+                    <div ref={exportRef}>
+                      <MarkdownRenderer content={suggestion} />
                     </div>
                   </div>
                 )

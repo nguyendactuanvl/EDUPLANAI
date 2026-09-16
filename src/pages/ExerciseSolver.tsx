@@ -3,7 +3,7 @@ import { exportHtmlToWord } from '../lib/exportUtils';
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { Copy, Save, Upload, X, Sparkles, Loader2, Download, Presentation, ChevronLeft, ChevronRight, Maximize2, FileText, BookmarkPlus, Camera, Image as ImageIcon, Send, ArrowLeft } from 'lucide-react';
 
-import Markdown from 'react-markdown';
+import { MarkdownRenderer } from "../components/MarkdownRenderer";
 import TikzJax from 'react-tikzjax';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -475,25 +475,7 @@ const handleSolve = async () => {
 
             <div className="bg-slate-50 rounded-xl p-8 border border-slate-200">
               <div ref={exportRef} className="markdown-body prose prose-slate max-w-none prose-headings:text-slate-800 prose-h2:text-2xl prose-h2:text-blue-700 prose-h2:border-b prose-h2:pb-2 prose-h3:text-xl prose-a:text-emerald-600">
-                <Markdown 
-                  remarkPlugins={[remarkMath, remarkGfm]} 
-                  rehypePlugins={[rehypeRaw, rehypeKatex]}
-                  components={{
-                    code({node, inline, className, children, ...props}: any) {
-                      const match = /language-(w+)/.exec(className || '')
-                      if (!inline && match && match[1] === 'tikz') {
-                        return (
-                          <div className="flex justify-center my-6 overflow-x-auto">
-                            <TikzJax content={String(children).replace(/\n$/, '')} />
-                          </div>
-                        )
-                      }
-                      return <code className={className} {...props}>{children}</code>
-                    }
-                  }}
-                >
-                  {solution}
-                </Markdown>
+                <MarkdownRenderer content={solution} />
               </div>
             </div>
           </div>
@@ -504,12 +486,10 @@ const handleSolve = async () => {
       {isPresentationMode && presentationSlides.length > 0 && (
         <div className="fixed inset-0 z-50 bg-slate-900 text-white flex flex-col">
           <div className="flex items-center justify-between p-4 bg-slate-800 border-b border-slate-700">
-            <div className="text-slate-300 font-medium">
-              Slide {currentSlide + 1} / {presentationSlides.length}
-            </div>
+            <h3 className="font-semibold text-lg flex items-center gap-2"><Presentation className="w-5 h-5 text-blue-400" /> Trình chiếu Bài giải</h3>
             <button 
               onClick={() => setIsPresentationMode(false)}
-              className="p-2 hover:bg-slate-700 rounded-full transition-colors text-slate-300"
+              className="p-2 hover:bg-slate-700 rounded-lg text-slate-300 transition-colors"
             >
               <X className="w-6 h-6" />
             </button>
@@ -524,25 +504,7 @@ const handleSolve = async () => {
                 .custom-presentation .katex { font-size: 1.8rem !important; }
                 .custom-presentation .katex-display { margin: 2rem 0 !important; }
               `}</style>
-              <Markdown 
-                remarkPlugins={[remarkMath, remarkGfm]} 
-                rehypePlugins={[rehypeRaw, rehypeKatex]}
-                components={{
-                    code({node, inline, className, children, ...props}: any) {
-                      const match = /language-(w+)/.exec(className || '')
-                      if (!inline && match && match[1] === 'tikz') {
-                        return (
-                          <div className="flex justify-center my-6 overflow-x-auto bg-white p-4 rounded-xl">
-                            <TikzJax content={String(children).replace(/\n$/, '')} />
-                          </div>
-                        )
-                      }
-                      return <code className={className} {...props}>{children}</code>
-                    }
-                  }}
-              >
-                {presentationSlides[currentSlide]}
-              </Markdown>
+              <MarkdownRenderer content={presentationSlides[currentSlide]} />
             </div>
           </div>
           

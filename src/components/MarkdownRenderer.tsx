@@ -1,0 +1,33 @@
+import React, { useEffect, useRef } from 'react';
+import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import rehypeRaw from 'rehype-raw';
+import TikzJax from 'react-tikzjax';
+
+export const MarkdownRenderer = ({ content }: { content: string }) => {
+  return (
+    <div className="markdown-body prose prose-slate max-w-none prose-headings:text-slate-800 prose-h2:text-2xl prose-h2:border-b prose-h2:pb-2 prose-h3:text-xl prose-a:text-emerald-600 prose-table:border-collapse prose-th:border prose-th:bg-slate-50 prose-td:border prose-td:p-2">
+      <Markdown 
+        remarkPlugins={[remarkMath, remarkGfm]} 
+        rehypePlugins={[rehypeRaw, rehypeKatex]}
+        components={{
+          code({node, inline, className, children, ...props}: any) {
+            const match = /language-(\w+)/.exec(className || '');
+            if (!inline && match && match[1] === 'tikz') {
+              return (
+                <div className="flex justify-center my-6 overflow-x-auto bg-white p-4 rounded-xl border border-slate-200">
+                  <TikzJax content={String(children).replace(/\n$/, '')} />
+                </div>
+              );
+            }
+            return <code className={className} {...props}>{children}</code>;
+          }
+        }}
+      >
+        {content}
+      </Markdown>
+    </div>
+  );
+};

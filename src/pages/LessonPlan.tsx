@@ -1,10 +1,11 @@
 import { apiFetch } from '../lib/apiFetch';
+import { GDPT_2018_SUBJECTS } from '../lib/subjects';
 import { exportHtmlToWord } from '../lib/exportUtils';
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Sparkles, Save, BookOpen, Download, AlertCircle, Upload, Edit3, Eye, Presentation } from "lucide-react";
 import pptxgen from "pptxgenjs";
 import { fullPlan } from "../data/mockData";
-import Markdown from "react-markdown";
+import { MarkdownRenderer } from "../components/MarkdownRenderer";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -300,23 +301,7 @@ export function LessonPlan() {
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
           >
-            <option value="Ngữ văn">Ngữ văn</option>
-            <option value="Toán">Toán</option>
-            <option value="Tiếng Anh">Tiếng Anh</option>
-            <option value="Giáo dục thể chất">Giáo dục thể chất</option>
-            <option value="Lịch sử">Lịch sử</option>
-            <option value="Địa lí">Địa lí</option>
-            <option value="Giáo dục kinh tế và pháp luật">Giáo dục kinh tế và pháp luật</option>
-            <option value="Vật lí">Vật lí</option>
-            <option value="Hoá học">Hoá học</option>
-            <option value="Sinh học">Sinh học</option>
-            <option value="Công nghệ">Công nghệ</option>
-            <option value="Tin học">Tin học</option>
-            <option value="Âm nhạc">Âm nhạc</option>
-            <option value="Mĩ thuật">Mĩ thuật</option>
-            <option value="Hoạt động trải nghiệm, hướng nghiệp">Hoạt động trải nghiệm, hướng nghiệp</option>
-            <option value="Giáo dục quốc phòng và an ninh">Giáo dục quốc phòng và an ninh</option>
-            <option value="Chuyên đề học tập">Chuyên đề học tập</option>
+            {GDPT_2018_SUBJECTS.map(sub => (<option key={sub} value={sub}>{sub}</option>))}
           </select>
         </div>
         
@@ -420,7 +405,7 @@ export function LessonPlan() {
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
               >
-                <option value="Ngữ văn">Ngữ văn</option>\n                <option value="Toán">Toán</option>\n                <option value="Tiếng Anh">Tiếng Anh</option>\n                <option value="Giáo dục thể chất">Giáo dục thể chất</option>\n                <option value="Lịch sử">Lịch sử</option>\n                <option value="Địa lí">Địa lí</option>\n                <option value="Giáo dục kinh tế và pháp luật">Giáo dục kinh tế và pháp luật</option>\n                <option value="Vật lí">Vật lí</option>\n                <option value="Hoá học">Hoá học</option>\n                <option value="Sinh học">Sinh học</option>\n                <option value="Công nghệ">Công nghệ</option>\n                <option value="Tin học">Tin học</option>\n                <option value="Âm nhạc">Âm nhạc</option>\n                <option value="Mĩ thuật">Mĩ thuật</option>\n                <option value="Hoạt động trải nghiệm, hướng nghiệp">Hoạt động trải nghiệm, hướng nghiệp</option>\n                <option value="Giáo dục quốc phòng và an ninh">Giáo dục quốc phòng và an ninh</option>\n                <option value="Chuyên đề học tập">Chuyên đề học tập</option>
+                {GDPT_2018_SUBJECTS.map(sub => (<option key={sub} value={sub}>{sub}</option>))}
               </select>
             </div>
             <div>

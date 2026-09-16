@@ -1,4 +1,5 @@
 import { apiFetch } from '../lib/apiFetch';
+import { GDPT_2018_SUBJECTS } from '../lib/subjects';
 import { exportHtmlToWord } from '../lib/exportUtils';
 import React, { useState, useRef } from "react";
 import { KHGDRow } from "../types";
@@ -167,7 +168,7 @@ export function EducationalPlan() {
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">Môn học</label>
                 <select value={subject} onChange={(e) => setSubject(e.target.value)} className="w-48 px-3 py-1.5 border border-slate-300 rounded-md text-sm bg-white">
-                <option value="Ngữ văn">Ngữ văn</option>\n                <option value="Toán">Toán</option>\n                <option value="Tiếng Anh">Tiếng Anh</option>\n                <option value="Giáo dục thể chất">Giáo dục thể chất</option>\n                <option value="Lịch sử">Lịch sử</option>\n                <option value="Địa lí">Địa lí</option>\n                <option value="Giáo dục kinh tế và pháp luật">Giáo dục kinh tế và pháp luật</option>\n                <option value="Vật lí">Vật lí</option>\n                <option value="Hoá học">Hoá học</option>\n                <option value="Sinh học">Sinh học</option>\n                <option value="Công nghệ">Công nghệ</option>\n                <option value="Tin học">Tin học</option>\n                <option value="Âm nhạc">Âm nhạc</option>\n                <option value="Mĩ thuật">Mĩ thuật</option>\n                <option value="Hoạt động trải nghiệm, hướng nghiệp">Hoạt động trải nghiệm, hướng nghiệp</option>\n                <option value="Giáo dục quốc phòng và an ninh">Giáo dục quốc phòng và an ninh</option>\n                <option value="Chuyên đề học tập">Chuyên đề học tập</option>
+                {GDPT_2018_SUBJECTS.map(sub => (<option key={sub} value={sub}>{sub}</option>))}
                 </select>
               </div>
               <div>

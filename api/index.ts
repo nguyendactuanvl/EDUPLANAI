@@ -11,28 +11,31 @@ export const maxDuration = 60; // 1 minute max duration on Vercel Hobby
 
 const MATH_FORMATTING_RULES = `
 QUY TẮC ĐỊNH DẠNG TOÁN HỌC VÀ VĂN BẢN (BẮT BUỘC TUÂN THỦ NGHIÊM NGẶT):
-1. Mọi công thức Toán bắt buộc viết bằng cú pháp chuẩn LaTeX (tuyệt đối không dùng ký tự Unicode như √, ∫, ², ³, ≤, ≥ dạng chữ thông thường).
-2. Công thức nằm cùng dòng văn bản: Luôn kẹp trong cặp dấu $...$ (ví dụ: $y = \\dfrac{ax+b}{cx+d}$, $x \\in [1; 5]$). LUÔN CÓ KHOẢNG TRẮNG trước và sau dấu $ để không bị dính chữ.
-3. Công thức nằm riêng một dòng độc lập: Luôn kẹp trong cặp dấu $$...$$ (ví dụ: $$\\int_a^b f(x)\\,dx = F(b) - F(a)$$).
-4. Ký hiệu bắt buộc: Phân số dùng \\dfrac{a}{b}, căn thức dùng \\sqrt{x}, hệ phương trình hoặc điều kiện dùng \\begin{cases} ... \\end{cases}.
-5. Bố cục văn bản dùng định dạng Markdown rõ ràng: tiêu đề dùng ##, ###; danh sách ý dùng dấu gạch đầu dòng (-); từ khóa quan trọng in đậm (**từ khóa**).
-6. LƯU Ý TỐI QUAN TRỌNG VỀ BẢNG BIẾN THIÊN VÀ ĐỒ THỊ: 
-   - Với **Bảng biến thiên**, KHÔNG DÙNG Markdown Table thông thường vì dễ vỡ. HÃY dùng môi trường LaTeX dạng ma trận \`array\` kẹp trong khối $$...$$. 
-     Ví dụ Bảng xét dấu hoặc Bảng biến thiên: 
+1. Mọi công thức Toán bắt buộc viết bằng cú pháp chuẩn LaTeX (tuyệt đối không dùng ký tự Unicode như √, ∫).
+2. Công thức nằm cùng dòng văn bản: Luôn kẹp trong cặp dấu $...$ (ví dụ: $y = \dfrac{ax+b}{cx+d}$, $x \in [1; 5]$). LUÔN CÓ KHOẢNG TRẮNG trước và sau dấu $ để không bị dính chữ.
+3. Công thức nằm riêng một dòng độc lập: Luôn kẹp trong cặp dấu $...$.
+4. Ký hiệu bắt buộc: Phân số dùng \dfrac{a}{b}, hệ phương trình dùng \begin{cases} ... \end{cases}.
+5. Bố cục văn bản dùng định dạng Markdown rõ ràng.
+6. [CỰC KỲ QUAN TRỌNG] VỀ BẢNG BIẾN THIÊN VÀ ĐỒ THỊ: 
+   - Với **Bảng biến thiên**, HÃY dùng môi trường LaTeX dạng ma trận \begin{array} kẹp trong khối $$...$$. 
+   - TUYỆT ĐỐI KHÔNG DÙNG cú pháp nhân bản cột (như *{3}{c|}). Thư viện hiển thị sẽ bị lỗi (báo đỏ). Bạn PHẢI viết rõ từng cột (ví dụ: {|c|c|c|c|c|}).
+   - KHÔNG dùng thẻ \text{} bên trong array nếu không cần thiết.
+     Ví dụ Bảng biến thiên hợp lệ (KHÔNG DÙNG *):
      $$
-     \\begin{array}{|c|lcccr|}
-     \\hline
-     x & -\\infty & & 0 & & +\\infty \\\\
-     \\hline
-     f'(x) & & - & 0 & + & \\\\
-     \\hline
-     f(x) & +\\infty & \\searrow & 1 & \\nearrow & +\\infty \\\\
-     \\hline
-     \\end{array}
+     \begin{array}{|c|lccccr|}
+     \hline
+     x & -\infty & & 1 & & 3 & & +\infty \\
+     \hline
+     y' & & + & 0 & - & 0 & + & \\
+     \hline
+     y & & \nearrow & 5 & & & & \\
+     & -\infty & & & & \searrow & -2 & \nearrow +\infty \\
+     \hline
+     \end{array}
      $$
-   - Với **Đồ thị**: Hãy miêu tả chi tiết bằng văn bản đặc điểm của đồ thị (ví dụ: "Đồ thị hàm số là đường cong đi qua điểm (0; 1), có tiệm cận đứng x=0...").
-7. LƯU Ý KHÁC VỀ BẢNG: Bảng trong Markdown sẽ BỊ LỖI NẶNG nếu có dấu xuống dòng. TUYỆT ĐỐI KHÔNG ĐƯỢC XUỐNG DÒNG bên trong các ô của bảng Markdown. Nếu viết hệ phương trình trong bảng, BẮT BUỘC phải viết liền trên 1 dòng (ví dụ: $\\begin{cases} x=1 \\\\\\\\ y=2 \\end{cases}$).
-`;
+7. HÌNH VẼ VÀ ĐỒ THỊ BẰNG TIKZ:
+   - BẮT BUỘC sử dụng TikZ nếu bài toán cần hình vẽ. Mã TikZ phải được bọc trong khối markdown \`\`\`tikz ... \`\`\`.
+   - LƯU Ý: Chỉ dùng các lệnh vẽ cơ bản (\\draw, \\node, \\fill). TUYỆT ĐỐI KHÔNG dùng pgfplots (không dùng \\begin{axis}). Không dùng \\usepackage.`;
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
