@@ -6,14 +6,15 @@ import rehypeKatex from 'rehype-katex';
 import rehypeRaw from 'rehype-raw';
 import { TikzRenderer } from './TikzRenderer';
 
-export const MarkdownRenderer = ({ content }: { content: string }) => {
+export const MarkdownRenderer = ({ content, className }: { content: string, className?: string }) => {
   let processedContent = content || '';
+
   
   // 0. Unwrap any existing code blocks around SVG
-  processedContent = processedContent.replace(/```[a-z]*\s*(<svg[\s\S]*?<\/svg>)\s*```/g, '$1');
+  processedContent = processedContent.replace(/```[a-z]*\s*(<svg[\s\S]*?<\/svg>)\s*```/gi, '$1');
   
   // Wrap SVGs in a container to prevent Markdown from messing them up and to style them
-  processedContent = processedContent.replace(/(<svg[\s\S]*?<\/svg>)/g, (match) => {
+  processedContent = processedContent.replace(/(<svg[\s\S]*?<\/svg>)/gi, (match) => {
     try {
       const base64 = typeof btoa !== 'undefined' ? btoa(encodeURIComponent(match)) : Buffer.from(encodeURIComponent(match)).toString('base64');
       return `\n\n<svg-wrapper data-svg="${base64}"></svg-wrapper>\n\n`;
@@ -23,10 +24,10 @@ export const MarkdownRenderer = ({ content }: { content: string }) => {
   });
   
   // 1. Unwrap any existing code blocks around TikZ to normalize
-  processedContent = processedContent.replace(/```[a-z]*\s*(\\begin\{tikzpicture\}[\s\S]*?\\end\{tikzpicture\})\s*```/g, '$1');
+  processedContent = processedContent.replace(/```[a-z]*\s*(\\begin\s*\{tikzpicture\}[\s\S]*?\\end\s*\{tikzpicture\})\s*```/gi, '$1');
   
   // 2. Base64 encode TikZ blocks to prevent Markdown/KaTeX interference
-  processedContent = processedContent.replace(/(\\begin\{tikzpicture\}[\s\S]*?\\end\{tikzpicture\})/g, (match) => {
+  processedContent = processedContent.replace(/(\\begin\s*\{tikzpicture\}[\s\S]*?\\end\s*\{tikzpicture\})/gi, (match) => {
     try {
       const base64 = typeof btoa !== 'undefined' ? btoa(encodeURIComponent(match)) : Buffer.from(encodeURIComponent(match)).toString('base64');
       return `\n\n<tikz-diagram data-tikz="${base64}"></tikz-diagram>\n\n`;
@@ -36,8 +37,9 @@ export const MarkdownRenderer = ({ content }: { content: string }) => {
   });
 
   return (
-    <div className="markdown-body prose prose-slate max-w-none prose-headings:text-slate-800 prose-h2:text-2xl prose-h2:border-b prose-h2:pb-2 prose-h3:text-xl prose-a:text-emerald-600 prose-table:border-collapse prose-th:border prose-th:bg-slate-50 prose-td:border prose-td:p-2">
+    <div className={className || "markdown-body prose prose-slate max-w-none prose-headings:text-slate-800 prose-h2:text-2xl prose-h2:border-b prose-h2:pb-2 prose-h3:text-xl prose-a:text-emerald-600 prose-table:border-collapse prose-th:border prose-th:bg-slate-50 prose-td:border prose-td:p-2"}>
       <Markdown 
+
         remarkPlugins={[remarkMath, remarkGfm]} 
         rehypePlugins={[rehypeRaw, [rehypeKatex, { strict: false, throwOnError: false }]]}
         components={{

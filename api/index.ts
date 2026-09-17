@@ -1216,6 +1216,27 @@ app.get("/api/exams/:id", (req, res) => {
   else res.status(404).json({ error: "Exam not found" });
 });
 
+// URL Shortener using TinyURL
+app.post("/api/shorten", async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  try {
+    const { url } = req.body;
+    if (!url) return res.status(400).json({ error: "Missing url" });
+    
+    // We use TinyURL API which is free and doesn't require auth
+    const response = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(url)}`);
+    if (!response.ok) {
+      throw new Error("Failed to shorten URL");
+    }
+    const shortUrl = await response.text();
+    res.json({ shortUrl });
+  } catch (error: any) {
+    console.error("Shorten error:", error);
+    res.status(500).json({ error: "Lỗi rút gọn link" });
+  }
+});
+
 // Adding back chat route
 app.post("/api/chat", async (req, res) => {
   try {

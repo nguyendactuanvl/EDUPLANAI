@@ -1,3 +1,4 @@
+import { MarkdownRenderer } from "../components/MarkdownRenderer";
 import { apiFetch } from '../lib/apiFetch';
 
 import { fullPlan } from "../data/mockData";
@@ -531,8 +532,27 @@ ${customPrompt}
       };
       const compressed = LZString.compressToEncodedURIComponent(JSON.stringify(dataToShare));
       const url = `${window.location.origin}/?examData=${compressed}`;
-      setShareLink(url);
+      
+      setShareLink("Đang tạo link rút gọn...");
       setActiveTab("shuffle");
+      
+      try {
+        const res = await fetch('/api/shorten', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url })
+        });
+        if (res.ok) {
+            const data = await res.json();
+            setShareLink(data.shortUrl);
+        } else {
+            setShareLink(url);
+            alert("Không thể tạo link rút gọn. Sẽ sử dụng link gốc (có thể rất dài).");
+        }
+      } catch (e) {
+          setShareLink(url);
+          alert("Lỗi khi tạo link rút gọn. Sẽ sử dụng link gốc (có thể rất dài).");
+      }
     } catch (err: any) {
       alert("Lỗi tạo link: " + err.message);
     }
@@ -1221,7 +1241,7 @@ ${customPrompt}
                       <div key={idx} className="pb-4 border-b border-slate-100 last:border-0">
                         <div className="font-medium text-slate-800 mb-3 flex items-start gap-2">
                           <span className="font-bold whitespace-nowrap mt-1">Câu {idx + 1}:</span> 
-                          <div className="markdown-body flex-1"><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]} >{fixMath(q.content || '')}</Markdown></div> 
+                          <MarkdownRenderer className="markdown-body inline-block" content={fixMath(q.content || (q as any).question || (q as any).text || '')} /> 
                           <span className="text-xs text-emerald-600 font-normal mt-1 shrink-0">[{q.level}]</span>
                           <button onClick={() => saveToBank(q)} className="text-xs px-2 py-1 bg-blue-50 text-blue-600 rounded border border-blue-200 hover:bg-blue-100 shrink-0 no-print" title="Lưu vào Ngân hàng CH">+ Lưu NH</button>
                           <button onClick={() => {
@@ -1237,7 +1257,7 @@ ${customPrompt}
                             {q.tfStatements.map((stmt, sIdx) => (
                               <div key={sIdx} className="flex items-start gap-1 p-2 rounded-md border border-transparent">
                                 <span className="shrink-0 font-medium">{['a)', 'b)', 'c)', 'd)'][sIdx] || String.fromCharCode(97 + sIdx) + ')'}</span>
-                                <div className="markdown-body inline-markdown flex-1"><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]} >{fixMath(stmt.statement || '')}</Markdown></div>
+                                <MarkdownRenderer className="markdown-body inline-block" content={fixMath(stmt.statement || '')} />
                                 <span className={`shrink-0 font-bold px-2 rounded ${stmt.correct ? 'text-emerald-700 bg-emerald-100' : 'text-red-700 bg-red-100'}`}>
                                   {stmt.correct ? 'Đ' : 'S'}
                                 </span>
@@ -1250,7 +1270,7 @@ ${customPrompt}
                             {q.options.map((opt, oIdx) => (
                               <div key={oIdx} className={`flex items-start gap-1 p-2 rounded-md border ${oIdx === q.correctOptionIndex ? 'bg-emerald-50 border-emerald-200 font-medium' : 'border-transparent'}`}>
                                 <span className="shrink-0 font-medium">{String.fromCharCode(65 + oIdx)}.</span>
-                                <div className="markdown-body inline-markdown flex-1"><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]} >{fixMath((opt || '').replace(/^[A-D][\.\:\)]\s*/i, ''))}</Markdown></div>
+                                <MarkdownRenderer className="markdown-body inline-block" content={fixMath((opt || '').replace(/^[A-D][\.\:\)]\s*/i, ''))} />
                               </div>
                             ))}
                           </div>
@@ -1258,7 +1278,7 @@ ${customPrompt}
                         
                         {q.type !== 'mc' && q.correctAnswer && (
                           <div className="mt-2 pl-4 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
-                            <span className="font-semibold text-emerald-800">Đáp án:</span> <div className="markdown-body"><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]} >{fixMath(q.correctAnswer || '')}</Markdown></div>
+                            <span className="font-semibold text-emerald-800">Đáp án:</span> <MarkdownRenderer className="markdown-body inline-block" content={fixMath(q.correctAnswer || '')} />
                           </div>
                         )}
                       </div>
@@ -1311,8 +1331,58 @@ ${customPrompt}
                       <div key={index} className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white">
                         <div className="bg-slate-100 px-6 py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200">
                           <h4 className="font-bold text-lg text-slate-800">Mã đề: {exam.code}</h4>
-                          <div className="flex gap-2">
+                          <div className="flex flex-wrap gap-2">
+                            <button onClick={async () => {
+                                const singleData = {
+                                    examData: { examName, duration },
+                                    codes: [
+                                        {
+                                            code: exam.code,
+                                            questions: exam.questions.map((q: any) => ({
+                                                type: q.type,
+                                                content: q.content,
+                                                options: q.options,
+                                                correctOptionIndex: q.correctOptionIndex,
+                                                correct: q.correct,
+                                                correctAnswer: q.correctAnswer,
+                                                tfStatements: q.tfStatements?.map((tf: any) => ({ statement: tf.statement, correct: tf.correct }))
+                                            }))
+                                        }
+                                    ]
+                                };
+                                const compressed = LZString.compressToEncodedURIComponent(JSON.stringify(singleData));
+                                const url = `${window.location.origin}/?examData=${compressed}`;
+                                
+                                try {
+                                    // Báo hiệu đang tạo link
+                                    const btn = document.getElementById(`share-btn-${exam.code}`);
+                                    if (btn) btn.innerHTML = '<span class="animate-spin mr-1">⌛</span> Đang tạo link...';
+                                    
+                                    const res = await fetch('/api/shorten', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ url })
+                                    });
+                                    if (res.ok) {
+                                        const data = await res.json();
+                                        await navigator.clipboard.writeText(data.shortUrl);
+                                        alert(`Đã copy link rút gọn (${data.shortUrl}) cho Mã đề ${exam.code}!\nHọc sinh có thể mở link này dễ dàng trên mọi nền tảng.`);
+                                    } else {
+                                        await navigator.clipboard.writeText(url);
+                                        alert(url.length > 2000 ? `Đã copy link thi cho Mã đề ${exam.code}!\n\nLưu ý: Không thể rút gọn link. Link gốc khá dài, có thể bị lỗi khi gửi qua Zalo/Messenger.` : `Đã copy link thi online cho Mã đề ${exam.code}!`);
+                                    }
+                                    if (btn) btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-share-2 w-4 h-4"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg> Copy Link Thi';
+                                } catch (e) {
+                                    navigator.clipboard.writeText(url);
+                                    alert(`Đã copy link thi gốc cho Mã đề ${exam.code}. Không thể rút gọn link.`);
+                                    const btn = document.getElementById(`share-btn-${exam.code}`);
+                                    if (btn) btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-share-2 w-4 h-4"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg> Copy Link Thi';
+                                }
+                            }} id={`share-btn-${exam.code}`} className="px-3 py-1.5 bg-blue-50 border border-blue-200 text-blue-700 text-sm font-medium rounded hover:bg-blue-100 flex items-center gap-2">
+                              <Share2 className="w-4 h-4" /> Copy Link Thi
+                            </button>
                             <button onClick={() => handlePrint(`print-exam-${exam.code}`)} className="px-3 py-1.5 bg-white border border-slate-300 text-slate-700 text-sm font-medium rounded hover:bg-slate-50 flex items-center gap-2">
+
                               <Printer className="w-4 h-4" /> In / PDF
                             </button>
                             <button onClick={() => handleExportWord(`print-exam-${exam.code}`, exam.code)} className="px-3 py-1.5 bg-white border border-slate-300 text-slate-700 text-sm font-medium rounded hover:bg-slate-50 flex items-center gap-2">
@@ -1330,13 +1400,13 @@ ${customPrompt}
                             <h3 style={{textAlign:'center', fontSize: '16px', marginBottom: '20px'}}>Mã đề: {exam.code}</h3>
                             {exam.questions.map((q, idx) => (
                               <div key={idx} className="question" style={{marginBottom: '15px'}}>
-                                <div><strong>Câu {idx + 1}:</strong> <div className="markdown-body"><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]} >{fixMath(q.content || '')}</Markdown></div></div>
+                                <div><strong>Câu {idx + 1}:</strong> <MarkdownRenderer className="markdown-body inline-block" content={fixMath(q.content || (q as any).question || (q as any).text || '')} /></div>
                                 {q.type === 'mc' && q.options && (
                                   <div className="options" style={{display: 'grid', gridTemplateColumns: '1fr 1fr', marginTop: '5px'}}>
                                     {q.options.map((opt, oIdx) => (
                                       <div key={oIdx} className="option" style={{paddingLeft: '10px', display: 'flex', gap: '4px', alignItems: 'flex-start'}}>
                                         <span style={{fontWeight: 'bold', flexShrink: 0}}>{String.fromCharCode(65 + oIdx)}.</span>
-                                        <div className="markdown-body inline-markdown" style={{flex: 1}}><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]} >{fixMath((opt || '').replace(/^[A-D][\.\:\)]\s*/i, ''))}</Markdown></div>
+                                        <MarkdownRenderer className="markdown-body inline-block" content={fixMath((opt || '').replace(/^[A-D][\.\:\)]\s*/i, ''))} />
                                       </div>
                                     ))}
                                   </div>
@@ -1346,7 +1416,7 @@ ${customPrompt}
                                     {q.tfStatements.map((stmt, sIdx) => (
                                       <div key={sIdx} className="option" style={{paddingLeft: '10px', display: 'flex', gap: '4px', alignItems: 'flex-start'}}>
                                         <span style={{fontWeight: 'bold', flexShrink: 0}}>{['a)', 'b)', 'c)', 'd)'][sIdx] || String.fromCharCode(97 + sIdx) + ')'}</span>
-                                        <div className="markdown-body inline-markdown" style={{flex: 1}}><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]} >{fixMath(stmt.statement || '')}</Markdown></div>
+                                        <MarkdownRenderer className="markdown-body inline-block" content={fixMath(stmt.statement || '')} />
                                       </div>
                                     ))}
                                   </div>
@@ -1376,7 +1446,7 @@ ${customPrompt}
                                       return (
                                         <td key={colIndex} className="border border-black p-1">
                                           <strong>{ansIndex + 1}.</strong> {q.type !== 'mc' && q.type !== 'tf' ? (
-                                            <div className="markdown-body inline-markdown" style={{display: 'inline'}}><Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]} >{fixMath(q.correctAnswer || '')}</Markdown></div>
+                                            <MarkdownRenderer className="markdown-body inline-block" content={fixMath(q.correctAnswer || '')} />
                                           ) : ans}
                                         </td>
                                       )
