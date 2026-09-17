@@ -27,19 +27,19 @@ export async function exportHtmlToWord(element: HTMLElement, filename: string, m
             
             const base64Data = await new Promise<string>((resolve, reject) => {
                 const svgBlob = new Blob([svgData], {type: "image/svg+xml;charset=utf-8"});
-                const DOMURL = window.URL || window.webkitURL;
-                const url = DOMURL.createObjectURL(svgBlob);
+                const DOMURL = window.URL || (window as any).webkitURL || window;
+                const url = (DOMURL as any).createObjectURL(svgBlob);
                 img.onload = () => {
                     canvas.width = img.width || parseInt(w.toString(), 10);
                     canvas.height = img.height || parseInt(h.toString(), 10);
                     ctx.fillStyle = "#ffffff";
                     ctx.fillRect(0, 0, canvas.width, canvas.height);
                     ctx.drawImage(img, 0, 0);
-                    DOMURL.revokeObjectURL(url);
+                    (DOMURL as any).revokeObjectURL(url);
                     resolve(canvas.toDataURL("image/png"));
                 };
                 img.onerror = () => {
-                    DOMURL.revokeObjectURL(url);
+                    (DOMURL as any).revokeObjectURL(url);
                     reject(new Error("Failed to load SVG"));
                 };
                 img.src = url;
@@ -67,6 +67,38 @@ export async function exportHtmlToWord(element: HTMLElement, filename: string, m
     
     // Transform grid into tables for MS Word
     const grids = clone.querySelectorAll('.grid, [style*="display: grid"], .options, .answers-grid');
+    
+    // Process regular images to Base64
+    const standardImgs = Array.from(clone.querySelectorAll('img'));
+    for (let i = 0; i < standardImgs.length; i++) {
+        const img = standardImgs[i];
+        if (img.src.startsWith('data:')) continue;
+        
+        try {
+            const canvas = document.createElement("canvas");
+            const ctx = canvas.getContext("2d");
+            if (!ctx) continue;
+            
+            const originalImg = new Image();
+            originalImg.crossOrigin = "Anonymous";
+            
+            const base64Data = await new Promise<string>((resolve, reject) => {
+                originalImg.onload = () => {
+                    canvas.width = originalImg.naturalWidth || originalImg.width || 300;
+                    canvas.height = originalImg.naturalHeight || originalImg.height || 150;
+                    ctx.drawImage(originalImg, 0, 0);
+                    resolve(canvas.toDataURL("image/png"));
+                };
+                originalImg.onerror = () => reject(new Error("Failed to load image"));
+                originalImg.src = img.src;
+            });
+            
+            img.src = base64Data;
+        } catch (e) {
+            console.error("Image export error:", e);
+        }
+    }
+    
     grids.forEach(grid => {
         if (grid.children.length === 0 || grid.tagName === 'TABLE') return;
         
@@ -154,7 +186,7 @@ export async function exportHtmlToWord(element: HTMLElement, filename: string, m
       
       const isBlock = el.parentElement?.classList.contains("katex-display") || el.classList.contains("katex-display");
       
-      if (mathFormat === 'latex') {
+      if ((mathFormat as any) === 'latex') {
           if (el.parentNode) {
               const delimiter = isBlock ? "$$" : "$$"; 
               const textNode = document.createTextNode(isBlock ? `$$\n${texString}\n$$` : `$${texString}$`);
@@ -165,78 +197,48 @@ export async function exportHtmlToWord(element: HTMLElement, filename: string, m
       
       const mathNode = el.querySelector(".katex-mathml math");
       if (mathNode && el.parentNode) {
-        const mathClone = mathNode.cloneNode(true) as Element;
-        // IMPORTANT: Add MathML namespace for MS Word
-        mathClone.setAttribute("xmlns", "http://www.w3.org/1998/Math/MathML");
         
-        // Remove annotation tags completely
-        const annotations = mathClone.querySelectorAll("annotation");
+        // Helper to clone and prefix MathML nodes with mml:
+        function prefixNode(node: Node): Node {
+            if (node.nodeType === 1) { // Element
+                const element = node as Element;
+                const tagName = element.tagName.toLowerCase();
+                const newName = 'mml:' + tagName;
+                const newNode = document.createElement(newName);
+                
+                // Copy attributes
+                Array.from(element.attributes).forEach(attr => {
+                    if (attr.name !== 'xmlns') {
+                        newNode.setAttribute(attr.name, attr.value);
+                    }
+                });
+                
+                // Recursively process children
+                Array.from(element.childNodes).forEach(child => {
+                    newNode.appendChild(prefixNode(child));
+                });
+                return newNode;
+            }
+            return node.cloneNode(true); // Text nodes etc.
+        }
+        
+        // Clean up semantics/annotation before prefixing
+        const cleanMathNode = mathNode.cloneNode(true) as Element;
+        const annotations = cleanMathNode.querySelectorAll("annotation");
         annotations.forEach(a => a.remove());
-        
-        // Remove semantics tag but keep its children to avoid Word confusion
-        const semantics = mathClone.querySelector("semantics");
+        const semantics = cleanMathNode.querySelector("semantics");
         if (semantics) {
            while (semantics.firstChild) {
-               mathClone.insertBefore(semantics.firstChild, semantics);
+               cleanMathNode.insertBefore(semantics.firstChild, semantics);
            }
            semantics.remove();
         }
         
-        // Convert MathML exponents and subscripts to standard HTML for MS Word
-        // MS Word ignores MathML in .doc HTML format, but respects standard HTML tags
-        const msups = mathClone.querySelectorAll("msup");
-        msups.forEach(msup => {
-            if (msup.children.length >= 2) {
-                const base = msup.children[0];
-                const exp = msup.children[1];
-                const htmlSup = document.createElement("sup");
-                htmlSup.innerHTML = exp.innerHTML;
-                
-                const fragment = document.createDocumentFragment();
-                fragment.appendChild(base.cloneNode(true));
-                fragment.appendChild(htmlSup);
-                
-                if (msup.parentNode) msup.parentNode.replaceChild(fragment, msup);
-            }
-        });
+        // Generate the mml: prefixed node
+        const mmlNode = prefixNode(cleanMathNode) as Element;
+        mmlNode.setAttribute("xmlns:mml", "http://www.w3.org/1998/Math/MathML");
         
-        const msubs = mathClone.querySelectorAll("msub");
-        msubs.forEach(msub => {
-            if (msub.children.length >= 2) {
-                const base = msub.children[0];
-                const sub = msub.children[1];
-                const htmlSub = document.createElement("sub");
-                htmlSub.innerHTML = sub.innerHTML;
-                
-                const fragment = document.createDocumentFragment();
-                fragment.appendChild(base.cloneNode(true));
-                fragment.appendChild(htmlSub);
-                
-                if (msub.parentNode) msub.parentNode.replaceChild(fragment, msub);
-            }
-        });
-        
-        const msubsups = mathClone.querySelectorAll("msubsup");
-        msubsups.forEach(msubsup => {
-            if (msubsup.children.length >= 3) {
-                const base = msubsup.children[0];
-                const sub = msubsup.children[1];
-                const exp = msubsup.children[2];
-                const htmlSub = document.createElement("sub");
-                htmlSub.innerHTML = sub.innerHTML;
-                const htmlSup = document.createElement("sup");
-                htmlSup.innerHTML = exp.innerHTML;
-                
-                const fragment = document.createDocumentFragment();
-                fragment.appendChild(base.cloneNode(true));
-                fragment.appendChild(htmlSub);
-                fragment.appendChild(htmlSup);
-                
-                if (msubsup.parentNode) msubsup.parentNode.replaceChild(fragment, msubsup);
-            }
-        });
-
-        el.parentNode.replaceChild(mathClone, el);
+        el.parentNode.replaceChild(mmlNode, el);
       }
     }
 
