@@ -93,7 +93,7 @@ export async function exportHtmlToWord(element: HTMLElement, filename: string, m
       
       const isBlock = el.parentElement?.classList.contains("katex-display") || el.classList.contains("katex-display");
       
-      if (mathFormat === 'latex') {
+      if (mathFormat === 'latex' || mathFormat === true) {
           if (el.parentNode) {
               const delimiter = isBlock ? "$$" : "$$"; 
               const textNode = document.createTextNode(isBlock ? `$$\n${texString}\n$$` : `$${texString}$`);
