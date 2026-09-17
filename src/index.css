@@ -62,3 +62,11 @@
 .katex .array {
   border-collapse: collapse;
 }
+
+/* Fix for KaTeX fractions overlapping in Tailwind typography */
+.katex {
+  line-height: normal !important;
+}
+.katex * {
+  line-height: normal !important;
+}
