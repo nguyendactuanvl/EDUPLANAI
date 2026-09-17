@@ -181,7 +181,21 @@ const handleExportCSV = () => {
       windowPrint.close();
     }, 250);
   };
-  const [activeTab, setActiveTab] = useState<"matrix" | "exam" | "shuffle" | "banks">("matrix");
+  const [activeTab, setActiveTab] = useState<"matrix" | "exam" | "shuffle" | "banks" | "results">("matrix");
+  const [examResults, setExamResults] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (activeTab === 'results') {
+      try {
+        const results = JSON.parse(localStorage.getItem('eduplan_exam_results') || '[]');
+        // sort by newest first
+        results.sort((a: any, b: any) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+        setExamResults(results);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  }, [activeTab]);
   const [subject, setSubject] = useState("Toán");
   const [grade, setGrade] = useState("9");
   const [totalQuestions, setTotalQuestions] = useState(20);
@@ -560,6 +574,12 @@ ${customPrompt}
               className={`px-6 py-3 font-medium text-sm whitespace-nowrap ${activeTab === 'banks' ? 'text-emerald-600 border-b-2 border-emerald-600' : 'text-slate-500 hover:text-slate-700'}`}
             >
               Ngân hàng câu hỏi
+            </button>
+            <button 
+              onClick={() => setActiveTab("results")}
+              className={`px-6 py-3 font-medium text-sm whitespace-nowrap ${activeTab === 'results' ? 'text-emerald-600 border-b-2 border-emerald-600' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              Kết Quả Thi
             </button>
             <button 
               onClick={() => setShowBubbleSheetModal(true)}
@@ -1380,6 +1400,82 @@ ${customPrompt}
           )}
 
         </div>
+        
+        {activeTab === "results" && (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+              <h3 className="font-bold text-lg text-slate-800">Thống Kê Kết Quả Làm Bài (Online)</h3>
+              <button 
+                onClick={() => {
+                  if (confirm("Bạn có chắc muốn xóa toàn bộ lịch sử kết quả thi trên thiết bị này?")) {
+                    localStorage.removeItem('eduplan_exam_results');
+                    setExamResults([]);
+                  }
+                }}
+                className="px-4 py-2 bg-red-50 text-red-600 rounded hover:bg-red-100 flex items-center gap-2 text-sm font-medium"
+              >
+                <Trash2 className="w-4 h-4" /> Xóa lịch sử
+              </button>
+            </div>
+            
+            {examResults.length === 0 ? (
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-12 text-center">
+                <p className="text-slate-500">Chưa có kết quả làm bài nào được ghi nhận trên thiết bị này.</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-sm">
+                        <th className="p-4 font-semibold text-slate-700">Thời gian nộp</th>
+                        <th className="p-4 font-semibold text-slate-700">Đề thi</th>
+                        <th className="p-4 font-semibold text-slate-700">Học sinh</th>
+                        <th className="p-4 font-semibold text-slate-700">Lớp</th>
+                        <th className="p-4 font-semibold text-slate-700">Điểm số</th>
+                        <th className="p-4 font-semibold text-slate-700 text-center">Chi tiết</th>
+                        <th className="p-4 font-semibold text-slate-700">Thời gian làm</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {examResults.map((result: any, idx: number) => (
+                        <tr key={idx} className="hover:bg-slate-50">
+                          <td className="p-4 text-sm text-slate-600">
+                            {new Date(result.submittedAt).toLocaleString('vi-VN')}
+                          </td>
+                          <td className="p-4 text-sm font-medium text-slate-800">
+                            {result.examName}
+                          </td>
+                          <td className="p-4 text-sm font-medium text-blue-700">
+                            {result.studentName}
+                          </td>
+                          <td className="p-4 text-sm text-slate-600">
+                            {result.studentClass || '-'}
+                          </td>
+                          <td className="p-4 font-bold text-emerald-600">
+                            {result.score} / 10
+                          </td>
+                          <td className="p-4 text-sm">
+                            <div className="flex gap-2 justify-center text-xs font-medium">
+                              <span className="text-emerald-600 bg-emerald-50 px-2 py-1 rounded" title="Đúng">✓ {result.correct || 0}</span>
+                              <span className="text-red-600 bg-red-50 px-2 py-1 rounded" title="Sai">✗ {result.incorrect || 0}</span>
+                              {(result.unanswered > 0) && (
+                                <span className="text-slate-500 bg-slate-100 px-2 py-1 rounded" title="Bỏ qua">- {result.unanswered}</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="p-4 text-sm text-slate-500 whitespace-nowrap">
+                            {Math.floor((result.timeSpent || 0) / 60)} phút {(result.timeSpent || 0) % 60} giây
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       
       {showBubbleSheetModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">

@@ -1,5 +1,6 @@
 import { apiFetch } from '../lib/apiFetch';
 import { GDPT_2018_SUBJECTS } from '../lib/subjects';
+import LZString from 'lz-string';
 import { exportHtmlToWord } from "../lib/exportUtils";
 import { useState, useRef, useEffect } from "react";
 import { Sparkles, Save, BookOpen, Download, AlertCircle, Edit3, Eye, Printer, Share2, Copy } from "lucide-react";
@@ -91,19 +92,10 @@ export function Worksheets() {
         ]
       };
       
-      // 3. Share it
-      const shareRes = await apiFetch('/api/exams/share', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      
-      if (!shareRes.ok) throw new Error("Lỗi khi tạo link chia sẻ.");
-      const shareData = await shareRes.json();
-      
-      const url = new URL(window.location.href);
-      url.search = `?examId=${shareData.examId}`;
-      setShareLink(url.toString());
+      // 3. Share it via URL encoded data
+      const compressed = LZString.compressToEncodedURIComponent(JSON.stringify(payload));
+      const url = `${window.location.origin}/?examData=${compressed}`;
+      setShareLink(url);
       
     } catch (err: any) {
       console.error(err);

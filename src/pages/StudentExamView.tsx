@@ -48,19 +48,43 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
     }
     
     if (examId) {
+      const cached = localStorage.getItem(`examCache_${examId}`);
+      
       apiFetch(`/api/exams/${examId}`)
       .then(res => {
-        if (!res.ok) throw new Error("Không tìm thấy đề thi. Có thể link đã hết hạn.");
+        if (!res.ok) {
+           if (cached) {
+               return JSON.parse(cached);
+           }
+           throw new Error("Không tìm thấy đề thi. Có thể link đã hết hạn.");
+        }
         return res.json();
       })
       .then(data => {
+        if (data.codes) {
+           // Valid data from server, save to cache
+           localStorage.setItem(`examCache_${examId}`, JSON.stringify(data));
+        }
         setExamData(data);
         if (data.codes && data.codes.length > 0) {
           const randomCode = data.codes[Math.floor(Math.random() * data.codes.length)].code;
           setSelectedCode(randomCode);
         }
       })
-      .catch(err => setError(err.message))
+      .catch(err => {
+         if (cached) {
+            try {
+               const data = JSON.parse(cached);
+               setExamData(data);
+               if (data.codes && data.codes.length > 0) {
+                  const randomCode = data.codes[Math.floor(Math.random() * data.codes.length)].code;
+                  setSelectedCode(randomCode);
+               }
+               return;
+            } catch(e) {}
+         }
+         setError(err.message);
+      })
       .finally(() => setLoading(false));
     }
   }, [examId, examRawData]);
@@ -107,38 +131,75 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
     }
     
     let totalScore = 0;
+    let fullCorrectCount = 0;
+    let wrongCount = 0;
     
     currentExam.questions.forEach((q: any, idx: number) => {
       const ans = answers[idx];
+      let isCorrect = false;
+      let isWrong = false;
+      
       if (q.type === 'mc' || (!q.type && q.options)) {
-        if (ans === q.correctOptionIndex) totalScore += 1;
+        if (ans === q.correctOptionIndex) { totalScore += 1; isCorrect = true; }
+        else if (ans !== undefined) { isWrong = true; }
       } else if (q.type === 'tf') {
         if (q.tfStatements && q.tfStatements.length > 0) {
            let correctCount = 0;
+           let answered = false;
            q.tfStatements.forEach((stmt: any, sIdx: number) => {
              const studentAns = ans ? ans[sIdx] : undefined;
+             if (studentAns !== undefined) answered = true;
              const isTrue = stmt.correct === true || String(stmt.correct).toLowerCase() === 'true';
              if (studentAns === isTrue) correctCount++;
            });
            if (correctCount === 1) totalScore += 0.1;
            else if (correctCount === 2) totalScore += 0.25;
            else if (correctCount === 3) totalScore += 0.5;
-           else if (correctCount === 4) totalScore += 1.0;
+           else if (correctCount === 4) { totalScore += 1.0; isCorrect = true; }
+           
+           if (answered && correctCount < 4) isWrong = true;
         } else {
            const isTrue = q.correct === true || String(q.correct).toLowerCase() === 'true' || String(q.correctAnswer).toLowerCase().includes('đúng');
-           if (ans === isTrue) totalScore += 1;
+           if (ans === isTrue) { totalScore += 1; isCorrect = true; }
+           else if (ans !== undefined) { isWrong = true; }
         }
       } else if (q.type === 'sa') {
          const correctAns = String(q.correctAnswer || q.correct || '').trim().toLowerCase();
          const studentAns = String(ans || '').trim().toLowerCase();
-         if (correctAns && studentAns === correctAns) totalScore += 1;
+         if (correctAns && studentAns === correctAns) { totalScore += 1; isCorrect = true; }
+         else if (ans !== undefined && studentAns !== '') { isWrong = true; }
       }
-      // essay logic requires manual grading, so 0 point auto
+      
+      if (isCorrect) fullCorrectCount++;
+      if (isWrong) wrongCount++;
     });
     
     const finalScore = currentExam.questions.length > 0 ? (totalScore / currentExam.questions.length) * 10 : 0;
     setScore(finalScore);
     setIsSubmitted(true);
+    
+    // Save result to localStorage
+    const resultToSave = {
+      id: Date.now().toString(),
+      examId: examId || 'online_exam',
+      examName: examData.examName || 'Phiếu bài tập',
+      studentName: studentInfo.name || 'Học sinh ẩn danh',
+      studentClass: studentInfo.class || '',
+      score: finalScore.toFixed(2),
+      correct: fullCorrectCount,
+      incorrect: wrongCount,
+      unanswered: currentExam.questions.length - fullCorrectCount - wrongCount,
+      timeSpent: timeSpent, // in seconds
+      submittedAt: new Date().toISOString()
+    };
+    
+    try {
+      const existingResults = JSON.parse(localStorage.getItem('eduplan_exam_results') || '[]');
+      existingResults.push(resultToSave);
+      localStorage.setItem('eduplan_exam_results', JSON.stringify(existingResults));
+    } catch(e) {
+      console.error("Lỗi lưu kết quả:", e);
+    }
   };
 
   if (!isStarted) {
