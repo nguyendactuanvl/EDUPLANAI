@@ -104,9 +104,9 @@ export function HistoryPage() {
   );
 
   return (
-    <div className="flex flex-col lg:flex-row h-full bg-slate-50 overflow-hidden">
+    <div className="flex flex-col lg:flex-row min-h-full bg-slate-50 lg:overflow-hidden">
       {/* Sidebar / List */}
-      <div className="w-full lg:w-1/3 lg:border-r border-b lg:border-b-0 border-slate-200 bg-white flex flex-col h-[50vh] lg:h-full overflow-hidden shrink-0">
+      <div className="w-full lg:w-1/3 lg:border-r border-b lg:border-b-0 border-slate-200 bg-white flex flex-col h-auto lg:h-full shrink-0">
         <div className="p-4 border-b border-slate-200">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
@@ -196,9 +196,9 @@ export function HistoryPage() {
       </div>
 
       {/* Content Viewer */}
-      <div className="w-2/3 bg-slate-50 p-6 overflow-hidden flex flex-col">
+      <div className="w-full lg:w-2/3 bg-slate-50 p-6 flex flex-col min-h-screen lg:min-h-0 lg:overflow-hidden">
         {viewingItem ? (
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col h-full overflow-hidden">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col h-full lg:overflow-hidden">
             <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50/50">
               <div>
                 <h3 className="font-bold text-lg text-slate-800">{viewingItem.lessonName}</h3>

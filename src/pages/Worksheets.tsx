@@ -220,9 +220,9 @@ export function Worksheets() {
   };
 
   return (
-    <div className="flex flex-col lg:flex-row h-full bg-slate-50 overflow-hidden">
+    <div className="flex flex-col lg:flex-row min-h-full bg-slate-50 lg:overflow-hidden">
       {/* Left Sidebar - Settings */}
-      <div className="w-full lg:w-[400px] lg:border-r border-b lg:border-b-0 border-slate-200 bg-white flex flex-col h-[50vh] lg:h-full overflow-hidden shrink-0">
+      <div className="w-full lg:w-[400px] lg:border-r border-b lg:border-b-0 border-slate-200 bg-white flex flex-col h-auto lg:h-full shrink-0">
         <div className="p-4 border-b border-slate-200 bg-slate-50/50">
           <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
             <BookOpen className="w-5 h-5 text-emerald-600" />
@@ -389,7 +389,7 @@ export function Worksheets() {
       </div>
 
       {/* Right Content - Preview */}
-      <div className="flex-1 overflow-hidden flex flex-col">
+      <div className="flex-1 flex flex-col min-h-screen lg:min-h-0 lg:overflow-hidden">
         <div className="p-4 border-b border-slate-200 bg-white flex justify-between items-center shrink-0 h-[73px]">
           <h2 className="text-lg font-bold text-slate-800">
             Kết quả hiển thị

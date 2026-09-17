@@ -26,6 +26,14 @@ export const MarkdownRenderer = ({ content, className }: { content: string, clas
   // 1. Unwrap any existing code blocks around TikZ to normalize
   processedContent = processedContent.replace(/```[a-z]*\s*(\\begin\s*\{tikzpicture\}[\s\S]*?\\end\s*\{tikzpicture\})\s*```/gi, '$1');
   
+  // 1.5 Wrap loose tikz code blocks that don't have begin/end environment
+  processedContent = processedContent.replace(/```tikz\s*([\s\S]*?)```/gi, (match, inner) => {
+    if (!inner.includes('\\begin{tikzpicture}')) {
+       return `\\begin{tikzpicture}\n${inner}\n\\end{tikzpicture}`;
+    }
+    return inner;
+  });
+  
   // 2. Base64 encode TikZ blocks to prevent Markdown/KaTeX interference
   processedContent = processedContent.replace(/(\\begin\s*\{tikzpicture\}[\s\S]*?\\end\s*\{tikzpicture\})/gi, (match) => {
     try {
