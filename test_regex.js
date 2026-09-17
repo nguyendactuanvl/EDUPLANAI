@@ -1,28 +1,17 @@
-let text = `
-Here is a graph:
-\\begin{tikzpicture}
-\\draw (0,0) -- (1,1);
-\\end{tikzpicture}
+const t1 = `\\begin{array}{|c|c|}\nx & 1 \\\\\nf'(x) & 2 \\\\\nf(x) & 3\n\\end{array}`;
+const t2 = `\\begin{array}{|c|c|}\nx & 1 \\\\ \\hline\nf'(x) & 2 \\\\ \\hline\nf(x) & 3\n\\end{array}`;
 
-Here is another one wrapped properly:
-\`\`\`tikz
-\\begin{tikzpicture}
-\\draw (2,2) -- (3,3);
-\\end{tikzpicture}
-\`\`\`
+function fixBBT(t) {
+    if (t.includes('\\begin{array}') && (t.includes("f'(x)") || t.includes("y'"))) {
+        t = t.replace(/\\\\(\s*)(f'\\s*\\(\\s*x\\s*\\)|y')/g, (match, p1, p2) => {
+            return `\\\\ \\hline\n${p2}`;
+        });
+        t = t.replace(/\\\\(\s*)(f\\s*\\(\\s*x\\s*\\)|y)(\\s*&)/g, (match, p1, p2, p3) => {
+            return `\\\\ \\hline\n${p2}${p3}`;
+        });
+    }
+    return t;
+}
 
-And another with just \`\`\`:
-\`\`\`
-\\begin{tikzpicture}
-\\draw (2,2) -- (3,3);
-\\end{tikzpicture}
-\`\`\`
-`;
-
-// 1. Unwrap
-text = text.replace(/```[a-z]*\s*(\\begin\{tikzpicture\}[\s\S]*?\\end\{tikzpicture\})\s*```/g, '$1');
-
-// 2. Wrap
-text = text.replace(/(\\begin\{tikzpicture\}[\s\S]*?\\end\{tikzpicture\})/g, '\n```tikz\n$1\n```\n');
-
-console.log(text);
+console.log("t1:", fixBBT(t1));
+console.log("t2:", fixBBT(t2));
