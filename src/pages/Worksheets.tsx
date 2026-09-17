@@ -153,7 +153,15 @@ export function Worksheets() {
 
       const text = await response.text();
       let data;
-      try { data = JSON.parse(text); } catch(e) { throw new Error(`Lỗi phản hồi từ máy chủ (không phải JSON). Chi tiết: ${text ? text.substring(0, 150) : ""}`); }
+      try { 
+        data = JSON.parse(text); 
+      } catch(e) { 
+        if (text.includes("SERVER_ERROR:")) {
+            const match = text.match(/SERVER_ERROR: (.*)"/);
+            throw new Error(match ? match[1] : "Lỗi từ máy chủ AI.");
+        }
+        throw new Error(`Lỗi phản hồi từ máy chủ (không phải JSON). Chi tiết: ${text ? text.substring(0, 150) : ""}`); 
+      }
       setSuggestion(data.result);
       
       // Save to history

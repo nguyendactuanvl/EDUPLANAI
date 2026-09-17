@@ -213,7 +213,42 @@ function handleAiError(error: any, req: any, res: any) {
   res.status(500).json({ error: errorMsg || "Đã xảy ra lỗi không xác định từ máy chủ AI. Vui lòng thử lại sau." });
 }
 
+
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+
+async function keepAliveExecute(req: any, res: any, fn: () => Promise<any>) {
+  let headersSent = false;
+  const keepAlive = setInterval(() => {
+    if (!headersSent) {
+      res.setHeader('Content-Type', 'application/json');
+      res.status(200);
+      headersSent = true;
+    }
+    res.write(' ');
+  }, 15000);
+
+  try {
+    const result = await fn();
+    clearInterval(keepAlive);
+    if (!headersSent) {
+      res.json(result);
+    } else {
+      res.write(JSON.stringify(result));
+      res.end();
+    }
+  } catch (error: any) {
+    clearInterval(keepAlive);
+    if (!headersSent) {
+      return handleAiError(error, req, res);
+    } else {
+      res.write(`
+
+"SERVER_ERROR: ${error.message}"`);
+      res.end();
+    }
+  }
+}
+
 
 async function generateWithFallback(req: any, payloadOptions: any) {
   const client = getAiClient(req);
@@ -440,158 +475,8 @@ app.all("/api/generate-exam", async (req, res) => {
 
   
 
-  try {
-    const body = req.body || {};
-    const subject = body.subject || 'Toán';
-    const grade = body.grade || '9';
-    const duration = body.duration || '45';
-    const matrix = body.matrix || body.rawMatrix || 'Chương trình chuẩn GDPT 2018';
-    const customPrompt = body.customPrompt || '';
-    
-    // Parse counts
-    const qCounts = body.qCounts || { mc: 20, tf: 0, sa: 0, essay: 0 };
-    const mc = qCounts.mc || 0;
-    const tf = qCounts.tf || 0;
-    const sa = qCounts.sa || 0;
-    const essay = qCounts.essay || 0;
+  return keepAliveExecute(req, res, async () => {
 
-    let mathPrompt = `Cấu trúc đề yêu cầu:
-- Trắc nghiệm nhiều lựa chọn (mc): ${mc} câu.
-- Trắc nghiệm Đúng/Sai (tf): ${tf} câu.
-- Trắc nghiệm trả lời ngắn (sa): ${sa} câu.
-- Tự luận (essay): ${essay} câu.
-${MATH_FORMATTING_RULES}
-- BẮT BUỘC soát lỗi chính tả tiếng Việt thật cẩn thận.`;
-
-    const promptText = `Bạn là chuyên gia ra đề thi môn ${subject} Lớp ${grade}.
-Thời gian làm bài: ${duration} phút.
-Ma trận / Nội dung: ${matrix}.
-${customPrompt ? "Yêu cầu thêm: " + customPrompt : ""}
-
-${mathPrompt}
-
-
-BẮT BUỘC TRẢ VỀ DUY NHẤT MỘT ĐỐI TƯỢNG JSON VỚI CẤU TRÚC:
-{
-  "title": "ĐỀ KIỂM TRA MÔN ${subject.toUpperCase()} LỚP ${grade}",
-  "duration": "${duration}",
-  "questions": [
-    {
-      "id": 1,
-      "number": 1,
-      "type": "mc", // "mc" (nhiều lựa chọn), "tf" (đúng sai), "sa" (trả lời ngắn), "essay" (tự luận)
-      "content": "Nội dung câu hỏi...",
-      "options": ["Đáp án 1", "Đáp án 2", "Đáp án 3", "Đáp án 4"], // CHỈ DÙNG CHO type="mc".
-      "correct": "A", // Đáp án đúng cho "mc" (A/B/C/D)
-      "tfStatements": [ // Dành RIÊNG cho type="tf". Gồm 4 ý a,b,c,d
-        { "statement": "Ý a...", "correct": true },
-        { "statement": "Ý b...", "correct": false },
-        { "statement": "Ý c...", "correct": true },
-        { "statement": "Ý d...", "correct": false }
-      ],
-      "correctAnswer": "Lời giải/Đáp án chi tiết hoặc đáp án đúng cho sa/essay",
-      "explanation": "Lời giải chi tiết..."
-    }
-  ]
-}`;
-
-    
-    
-    const parts: any[] = [{ text: promptText }];
-    if (body.matrixFile) {
-        const matches = body.matrixFile.match(/^data:(.*?);base64,(.*)$/);
-        if (matches && matches.length === 3) {
-            parts.push({
-                inlineData: {
-                    mimeType: matches[1],
-                    data: matches[2]
-                }
-            });
-        }
-    }
-
-    const response = await generateWithFallback(req, {
-      contents: [{ parts }],
-      config: {
-          responseMimeType: "application/json"
-      }
-    });
-
-    const rawOutput = response.text || '';
-  
-    let parsedData: any = {};
-    try {
-      parsedData = JSON.parse(rawOutput);
-    } catch {
-      parsedData = { questions: [] };
-    }
-
-    const rawQuestions = Array.isArray(parsedData.questions) ? parsedData.questions : (Array.isArray(parsedData) ? parsedData : []);
-
-    const formattedQuestions = rawQuestions.map((q, idx) => {
-      const questionText = q.content || q.question || q.text || q.title || `Câu hỏi số ${idx + 1}`;
-      let choices = q.options || q.choices || q.answers || [];
-      if (Array.isArray(choices)) {
-          choices = choices.map(c => typeof c === 'string' ? c.replace(/^[A-D][\.\:\)]\s*/i, '') : c);
-      }
-      const rightAns = q.correct || q.answer || '';
-      const correctAnsStr = q.correctAnswer || q.correct || q.answer || q.explanation || '';
-      const explain = q.explanation || q.explain || q.solution || '';
-      
-      const type = q.type || (choices.length > 0 ? 'mc' : 'essay');
-      
-      // Determine index of correct option if it's multiple choice
-      let correctOptionIndex = 0;
-      if (type === 'mc') {
-         if (rightAns === 'A' || rightAns.includes('A.')) correctOptionIndex = 0;
-         else if (rightAns === 'B' || rightAns.includes('B.')) correctOptionIndex = 1;
-         else if (rightAns === 'C' || rightAns.includes('C.')) correctOptionIndex = 2;
-         else if (rightAns === 'D' || rightAns.includes('D.')) correctOptionIndex = 3;
-      }
-
-      return {
-        id: q.id || idx + 1,
-        number: idx + 1,
-        type: type,
-        content: questionText,
-        options: choices,
-        correct: rightAns,
-        correctAnswer: correctAnsStr,
-        correctOptionIndex: correctOptionIndex,
-        tfStatements: q.tfStatements || [],
-        explanation: explain,
-        level: q.level || 'Nhận biết',
-        topic: q.topic || 'Chung',
-        subtopic: q.subtopic || 'Chung'
-      };
-    });
-
-    return res.status(200).json({
-      success: true,
-      data: { ...parsedData, questions: formattedQuestions },
-      questions: formattedQuestions,
-      examName: parsedData.title || `Đề kiểm tra \${subject}`,
-      exam: { ...parsedData, questions: formattedQuestions },
-      result: { ...parsedData, questions: formattedQuestions }
-    });
-  } catch (err: any) {
-    return handleAiError(err, req, res);
-  }
-});
-
-app.all("/api/generate-lesson-plan-file", async (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-gemini-api-key');
-
-  if (req.method === 'OPTIONS') return res.status(200).end();
-
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ message: 'Method not allowed' });
-  }
-  
-    try {
       const { lesson, subject, textbook } = req.body;
       const files = resolveFiles(req.body);
       const textbookName = textbook || "Kết nối tri thức với cuộc sống";
@@ -641,16 +526,8 @@ Văn phong cần chuyên nghiệp, sư phạm, thực tế. Nếu không tìm th
           temperature: 0.7,
         }
       });
-
-      res.json({ result: response.text });
-    } catch (error: any) {
-      const errorMsg = error?.message || "";
-      if (errorMsg.includes("Unsupported MIME type")) {
-        return res.status(400).json({ error: "Định dạng file không được AI hỗ trợ. Vui lòng tải lên PDF, Text hoặc Word (DOC/DOCX) và thử lại." });
-      }
-      return handleAiError(error, req, res);
-    }
-
+      return { result: response.text };
+    });
 });
 
 app.all("/api/upgrade-lesson-plan", async (req, res) => {
@@ -721,112 +598,8 @@ app.all("/api/generate-lesson-plan", async (req, res) => {
 
   
 
-  try {
-    const body = req.body || {};
-    
-    // Thu thập đầy đủ dữ liệu từ form giao diện gửi lên
-    
-    const topic = body.lesson || body.topic || body.lessonName || 'Mệnh đề';
-    const grade = body.grade ? (typeof body.grade === 'number' ? `Lớp ${body.grade}` : body.grade) : 'Lớp 10';
-    const periods = body.periods || body.numPeriods || 4;
-    const requirements = body.requirement || body.requirements || body.objectives || body.details || '';
-    const digitalCompetence = body.digitalComp || body.digitalCompetence || 'Không yêu cầu';
-    const aiCompetence = body.aiComp || body.aiCompetence || 'Không yêu cầu';
-    const stem = body.stem || 'Không yêu cầu';
-    const textbook = body.textbook || 'Kết nối tri thức với cuộc sống';
-    const subject = body.subject || 'Toán học';
+  return keepAliveExecute(req, res, async () => {
 
-    // Xây dựng System Prompt chi tiết theo đúng cấu trúc CV 5512 & GDPT 2018
-    const promptText = body.customPrompt || `Bạn là chuyên gia sư phạm hàng đầu tại Việt Nam, am hiểu sâu sắc Chương trình GDPT 2018 từ Lớp 1 đến Lớp 12 và hệ thống Kế hoạch giáo dục (KHGD / Phân phối chương trình).
-
-### QUY TẮC RÀNG BUỘC TUYỆT ĐỐI (STRICT CONSTRAINTS)
-1. ĐỒNG BỘ KHGD TUYỆT ĐỐI: 
-   - BẮT BUỘC chỉ soạn đúng Tên bài, Tiết theo PPCT, Môn học và Khối lớp được chọn sau:
-     + Môn học: ${subject}
-     + Khối lớp: ${grade}
-     + Tên bài học: ${topic}
-     + Thời lượng: ${periods} tiết
-   - Tuyệt đối KHÔNG tự ý lấy bài mặc định (như Bài 1 Lớp 10) hoặc nhảy sang bài của khối lớp khác. TUYỆT ĐỐI BÁM SÁT VÀ SOẠN CHÍNH XÁC BÀI HỌC CÓ TÊN LÀ: "${topic}".
-2. CHUẨN KHUNG KẾ HOẠCH BÀI DẠY THEO CẤP HỌC:
-   - Cấp Tiểu học (Lớp 1 - 5): Tuân thủ Công văn 2345/BGDĐT-GDTH.
-   - Cấp THCS & THPT (Lớp 6 - 12): Tuân thủ Công văn 5512/BGDĐT-GDTrH.
-3. KHÓA THÔNG TIN BÀI DẠY: Luôn in mục [THÔNG TIN TIẾT DẠY THEO KHGD] ở đầu phản hồi để xác nhận tính chính xác trước khi trình bày nội dung bài dạy.
-4. TÍCH HỢP HỢP LÝ CÁC NĂNG LỰC:
-   - Năng lực số (NLS): ${digitalCompetence}
-   - Năng lực AI (NL AI): ${aiCompetence}
-   - Tích hợp STEM/STEAM: ${stem}
-   - Yêu cầu cần đạt: ${requirements}
-   - Bộ sách: ${textbook}
-
----
-
-### CẤU TRÚC ĐẦU RA KẾ HOẠCH BÀI DẠY (Dùng định dạng Markdown, bảng biểu rõ ràng)
-
-**Tuyệt đối KHÔNG sử dụng thẻ HTML <br> hoặc <br/>**: Hãy sử dụng dấu xuống dòng chuẩn của Markdown (Enter 2 lần) để ngắt đoạn.
-**Tô màu Năng lực số (NLS) và Năng lực AI**: Khi nhắc đến phần mềm, công cụ thiết bị số, Năng lực số hoặc công cụ AI trong bài, BẮT BUỘC phải bọc trong thẻ HTML <mark style="background-color: #dbeafe; color: #1d4ed8; font-weight: bold; padding: 2px 4px; border-radius: 4px;">Tên phần mềm / NLS</mark> để tô màu xanh nổi bật.
-
-[THÔNG TIN TIẾT DẠY THEO KHGD]
-- Môn học: ${subject} | Khối lớp: ${grade} | Bộ sách: ${textbook}
-- Tên bài dạy: ${topic}
-- Thời lượng: ${periods} tiết
-
-I. MỤC TIÊU
-1. Về năng lực:
-   - Năng lực chung: Tự chủ và tự học; Giao tiếp và hợp tác; Giải quyết vấn đề và sáng tạo.
-   - Năng lực đặc thù: Chuẩn năng lực bộ môn theo GDPT 2018 của bài này.
-   - Năng lực bổ sung & Tích hợp:
-     + Năng lực số (NLS): Thiết bị, phần mềm, học liệu số sử dụng trong bài.
-     + Năng lực AI (NL AI): Hoạt động gợi ý/phản biện bằng công cụ AI (nếu phù hợp).
-     + Tích hợp STEM/STEAM: Tình huống thực tế, nhiệm vụ chế tạo/mô phỏng liên môn.
-2. Về phẩm chất: Yêu nước, nhân ái, chăm chỉ, trung thực, trách nhiệm.
-
-II. THIẾT BỊ DẠY HỌC VÀ HỌC LIỆU
-- Giáo viên: Giáo án, bài giảng điện tử, phiếu học tập, ứng dụng phần mềm/AI.
-- Học sinh: SGK, vở ghi, dụng cụ/thiết bị thực hành theo yêu cầu bài.
-
-III. TIẾN TRÌNH DẠY HỌC (4 HOẠT ĐỘNG CHUẨN)
-Trình bày chi tiết từng hoạt động (Hoạt động 1: Khởi động/Xác định vấn đề; Hoạt động 2: Hình thành kiến thức mới; Hoạt động 3: Luyện tập; Hoạt động 4: Vận dụng). Mỗi hoạt động cần trình bày rõ các mục riêng biệt (có thể dùng văn bản tự do hoặc danh sách, KHÔNG bắt buộc phải kẻ bảng) gồm:
-- Mục tiêu
-- Nội dung (Các câu hỏi, bài tập, tình huống cụ thể)
-- Sản phẩm (Câu trả lời, kết quả mong đợi thật chi tiết)
-- Tổ chức thực hiện (Bao gồm 4 bước rõ ràng: Bước 1: Chuyển giao nhiệm vụ -> Bước 2: Thực hiện nhiệm vụ -> Bước 3: Báo cáo, thảo luận -> Bước 4: Kết luận, nhận định). Trong đó nêu rõ hoạt động của GV và HS, có phân bổ thời gian dự kiến cụ thể (ví dụ: 10 phút, 15 phút...).
-
-${MATH_FORMATTING_RULES}
-`;
-
-    
-    const response = await generateWithFallback(req, {
-      contents: [{ parts: [{ text: promptText }] }]
-      
-    });
-    const outputText = response.text || '';
-    
-
-    return res.status(200).json({
-      success: true,
-      result: outputText,
-      text: outputText,
-      plan: outputText,
-      content: outputText
-    });
-  } catch (err: any) {
-    return handleAiError(err, req, res);
-  }
-});
-
-app.all("/api/generate-plan", async (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-gemini-api-key');
-
-  if (req.method === 'OPTIONS') return res.status(200).end();
-
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ message: 'Method not allowed' });
-  }
-  
-    try {
       const { subject, grade, topic } = req.body;
       const files = resolveFiles(req.body);
       
@@ -879,10 +652,9 @@ app.all("/api/generate-plan", async (req, res) => {
       });
 
       const data = JSON.parse(response.text || "[]");
-      res.json(data);
-    } catch (error: any) {
-      return handleAiError(error, req, res);
-    }
+      return data;
+    
+    });
 
 });
 
@@ -898,7 +670,8 @@ app.all("/api/generate-similar", async (req, res) => {
     return res.status(405).json({ message: 'Method not allowed' });
   }
   
-    try {
+    return keepAliveExecute(req, res, async () => {
+
       const files = resolveFiles(req.body);
       if (!files || files.length === 0) {
         return res.status(400).json({ error: "No files provided" });
@@ -937,10 +710,9 @@ BẮT BUỘC kiểm tra và SỬA LỖI CHÍNH TẢ tiếng Việt thật cẩn 
         }
       });
       
-      res.json({ result: response.text });
-    } catch (error: any) {
-    return handleAiError(error, req, res);
-  }
+      return { result: response.text };
+    
+    });
 });
 
 
@@ -1049,7 +821,8 @@ app.all("/api/generate-worksheet", async (req, res) => {
     return res.status(405).json({ message: 'Method not allowed' });
   }
   
-    try {
+    return keepAliveExecute(req, res, async () => {
+
       const { lesson, subject, grade, type } = req.body;
       
       const prompt = `Bạn là một giáo viên xuất sắc môn ${subject || "chung"}. Hãy tạo một Phiếu học tập (Worksheet) thật chuyên nghiệp, trực quan cho học sinh lớp ${grade}, bài học/chủ đề: "${lesson}".
@@ -1072,10 +845,9 @@ app.all("/api/generate-worksheet", async (req, res) => {
         }
       });
 
-      res.json({ result: response.text });
-    } catch (error: any) {
-      return handleAiError(error, req, res);
-    }
+      return { result: response.text };
+    
+    });
 
 });
 
@@ -1091,7 +863,8 @@ app.all("/api/pdf-to-word", async (req, res) => {
     return res.status(405).json({ message: 'Method not allowed' });
   }
   
-    try {
+    return keepAliveExecute(req, res, async () => {
+
       const files = resolveFiles(req.body);
       if (!files || files.length === 0) {
         return res.status(400).json({ error: "No files provided" });
@@ -1125,10 +898,9 @@ ${MATH_FORMATTING_RULES}
         }
       });
       
-      res.json({ result: response.text });
-    } catch (error: any) {
-    return handleAiError(error, req, res);
-  }
+      return { result: response.text };
+    
+    });
 });
 
 app.all("/api/solve-exercise", async (req, res) => {
@@ -1143,7 +915,8 @@ app.all("/api/solve-exercise", async (req, res) => {
     return res.status(405).json({ message: 'Method not allowed' });
   }
   
-    try {
+    return keepAliveExecute(req, res, async () => {
+
       const files = resolveFiles(req.body);
       if (!files || files.length === 0) {
         return res.status(400).json({ error: "No files provided" });
@@ -1186,12 +959,8 @@ ${MATH_FORMATTING_RULES}
           temperature: 0.2,
         }
       });
-      res.json({ result: response.text });
-    } catch (error: any) {
-      console.error("AI Solve Exercise error:", error);
-      res.status(500).json({ error: "Lỗi trong quá trình giải bài tập: " + (error?.message || "Lỗi không xác định") });
-    }
-
+      return { result: response.text };
+    });
 });
 
 app.all("/api/exams/share", (req, res) => {
