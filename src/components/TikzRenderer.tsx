@@ -35,7 +35,8 @@ export const TikzRenderer = ({ content }: { content: string }) => {
 
     const renderTikz = () => {
       if (!isMounted) return;
-      if (typeof (window as any).process_tikz !== "function") {
+      let processFn = (window as any).process_tikz || (window as any).onload;
+      if (typeof processFn !== "function") {
         const timeElapsed = Date.now() - startTime;
         if (timeElapsed > 10000) {
             setIsLoading(false);
@@ -88,7 +89,15 @@ export const TikzRenderer = ({ content }: { content: string }) => {
           });
           observer.observe(containerRef.current, { childList: true, subtree: true });
 
-          (window as any).process_tikz(script);
+          try {
+              if (typeof (window as any).process_tikz === "function") {
+                  (window as any).process_tikz(script);
+              } else if (typeof (window as any).onload === "function") {
+                  (window as any).onload();
+              }
+          } catch (e) {
+              console.error(e);
+          }
           
           // Fallback if mutation observer fails
           timeoutId = setTimeout(() => {
