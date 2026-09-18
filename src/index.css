@@ -14,6 +14,7 @@
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background-color: #94a3b8;
 }
+
 .inline-markdown p {
   display: inline;
   margin: 0;
@@ -25,26 +26,18 @@
   width: 100%;
   margin-bottom: 1rem;
 }
+
 .markdown-body table th,
 .markdown-body table td {
   border: 1px solid #e2e8f0;
   padding: 0.5rem 0.75rem;
   text-align: left;
 }
+
 .markdown-body table th {
   background-color: #f8fafc;
   font-weight: 600;
 }
-
-
-
-
-
-
-
-
-/* Wait, KaTeX arrays don't use td, they use spans! */
-/* Let's just make sure border-width is not reset to 0 if KaTeX sets it */
 
 /* Protect KaTeX borders from Tailwind's reset */
 .katex, .katex * {
@@ -69,4 +62,36 @@
 }
 .katex * {
   line-height: normal !important;
+}
+
+/* --- TIKZ & TKZ-TAB IMPROVEMENTS --- */
+
+/* Ensure tkz-tab elements render beautifully without getting clipped by their container bounds */
+.tikz-wrapper {
+  overflow: visible !important;
+  padding: 1.5rem 0.5rem; /* Extra vertical padding */
+}
+
+.tikzjax-instance {
+  overflow: visible !important;
+}
+
+/* Fix TikZ SVG clipping and rendering */
+.tikzjax-instance svg {
+  overflow: visible !important;
+  margin: 0 auto;
+}
+
+/* Ensure tkz-tab horizontal and vertical lines are sharp and not blurred/cut */
+.tikzjax-instance svg path,
+.tikzjax-instance svg line,
+.tikzjax-instance svg polygon {
+  shape-rendering: geometricPrecision;
+  stroke-linecap: square; /* Giúp các đường thẳng kết thúc vuông vức, tránh rãnh hở giữa các đoạn thẳng */
+}
+
+/* Fix parallel lines || in tkz-tab */
+.tikzjax-instance svg g {
+  /* Prevent vector lines from shifting to sub-pixels which causes blurring */
+  transform: translateZ(0); 
 }

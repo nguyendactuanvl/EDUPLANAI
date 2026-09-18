@@ -27,7 +27,17 @@ const MATH_FORMATTING_RULES = `QUY TẮC ĐỊNH DẠNG TOÁN HỌC VÀ VĂN B�
      + Phải dùng hàm giải tích chuẩn (ví dụ: \draw[domain=..., samples=100] plot (\\x, \{hàm_số\})).
      + Điểm cực trị phải có tiếp tuyến ngang chính xác. 
      + Đường tiệm cận đứng, ngang, xiên phải vẽ nét đứt (dashed).
-     + Phải gióng tọa độ đầy đủ nhãn tổng quát. Ký hiệu hệ trục Oxy (có mũi tên, nhãn x, y, O).`;
+     + Phải gióng tọa độ đầy đủ nhãn tổng quát. Ký hiệu hệ trục Oxy (có mũi tên, nhãn x, y, O).
+7. [CỰC KỲ QUAN TRỌNG] HÌNH VẼ HÌNH HỌC KHÔNG GIAN BẰNG TIKZ (Chuẩn GDPT 2018):
+   - BẮT BUỘC đặt code vào khối markdown \`\`\`tikz ... \`\`\` và bao bọc bởi \begin{tikzpicture} và \end{tikzpicture}.
+   - QUY ƯỚC NÉT VẼ:
+     + Nét liền (thick/solid): Tất cả các đường biên bao quanh hình và các cạnh nhìn thấy ở mặt trước. Tuyệt đối KHÔNG vẽ nét đứt cho cạnh biên ngoài cùng (ví dụ: đường cao SA dựng thẳng đứng từ mép ngoài luôn là nét liền).
+     + Nét đứt (dashed): CHỈ dành cho các cạnh nằm ở đáy phía sau, đường cao hoặc đường chéo bị các mặt phía trước che khuất.
+   - BỐ CỤC ĐIỂM VÀ TỌA ĐỘ CHUẨN:
+     + Khối chóp đáy tam giác (S.ABC) có SA vuông góc đáy: Đặt A ở góc phía sau (0,0); B lệch sang phải (4,0); C chúc về phía trước (1.5,-1.8). SA dựng thẳng đứng (0,h). Cạnh khuất DUY NHẤT là AB (nét đứt). Các cạnh SA, SB, SC, AC, BC là nét liền.
+     + Khối chóp đáy tứ giác (S.ABCD) có SA vuông góc đáy: Đáy vẽ hình bình hành phối cảnh: A(0,0), B(3.5,0), D(-1,-1.5), C(2.5,-1.5). Các cạnh khuất đáy: AB, AD (nét đứt). Chiều cao SA nét liền nếu ở biên ngoài.
+     + Khối lăng trụ / hình hộp: Đáy dưới vẽ phối cảnh, 3 cạnh phía sau đáy dưới và các đường chéo khuất vẽ nét đứt. Các cạnh bên và mặt trước vẽ nét liền.
+   - KÝ HIỆU TOÁN HỌC: Vẽ đầy đủ góc vuông ở chân đường cao, ký hiệu góc giữa đường và mặt, góc giữa hai mặt phẳng khi có yêu cầu. Các nhãn đỉnh (above, below, left, right) phải hợp lý, không bị đường kẻ cắt ngang chữ.`;
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
