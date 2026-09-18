@@ -16,6 +16,13 @@ export const MarkdownRenderer = ({ content, className }: { content: string, clas
   processedContent = processedContent.replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$');
   processedContent = processedContent.replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$');
 
+  // Normalize spaces inside inline $ ... $ so remark-math recognizes them (e.g. "$ 1 $" -> "$1$", "$ x = 2 $" -> "$x = 2$")
+  processedContent = processedContent.replace(/(?<!\$)\$(?!\$)\s*([^\$\n]+?)\s*(?<!\$)\$(?!\$)/g, (match, formula) => {
+    const trimmed = formula.trim();
+    if (!trimmed) return match;
+    return `$${trimmed}$`;
+  });
+
   // 0.1 Unwrap any existing code blocks around SVG
   processedContent = processedContent.replace(/```[a-z]*\s*(<svg[\s\S]*?<\/svg>)\s*```/gi, '$1');
   

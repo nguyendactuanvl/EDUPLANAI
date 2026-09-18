@@ -1137,9 +1137,12 @@ app.post('/api/export-docx', async (req, res) => {
       return res.status(400).json({ error: 'Missing HTML content' });
     }
     
+    // Remove any data:image/svg images to prevent HTMLtoDOCX crashing
+    const cleanHtml = html.replace(/<img[^>]*src=["']data:image\/svg[^"']*["'][^>]*>/gi, '');
+    
     // Convert inch to twips (1 inch = 1440 twips)
     // 2cm is ~0.787 inches = ~1134 twips
-    const fileBuffer = await HTMLtoDOCX(html, null, {
+    const fileBuffer = await HTMLtoDOCX(cleanHtml, null, {
       orientation: 'portrait',
       margins: { top: 1134, right: 1134, bottom: 1134, left: 1134, header: 720, footer: 720, gutter: 0 },
       font: 'Times New Roman',

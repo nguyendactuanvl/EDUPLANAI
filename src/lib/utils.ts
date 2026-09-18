@@ -37,6 +37,13 @@ export const fixMath = (text: any) => {
     t = t.replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$');
     t = t.replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$');
 
+    // 2.5. Normalize spaces inside inline $ ... $ so remark-math recognizes them (e.g. "$ 1 $" -> "$1$", "$ x = 2 $" -> "$x = 2$")
+    t = t.replace(/(?<!\$)\$(?!\$)\s*([^\$\n]+?)\s*(?<!\$)\$(?!\$)/g, (match, formula) => {
+        const trimmed = formula.trim();
+        if (!trimmed) return match;
+        return `$${trimmed}$`;
+    });
+
     // 3. Fix BBT missing hlines and vertical lines
     if (t.includes('\\begin{array}')) {
         // fix vertical lines: keep only one after first column (only if it's a BBT)

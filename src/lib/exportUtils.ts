@@ -1,6 +1,56 @@
 import { saveAs } from 'file-saver';
 import html2canvas from 'html2canvas';
 
+async function svgToPngDataUrl(svgNode: SVGSVGElement): Promise<string> {
+    try {
+        const svgClone = svgNode.cloneNode(true) as SVGSVGElement;
+        if (!svgClone.getAttribute('xmlns')) {
+            svgClone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+        }
+        const rect = svgNode.getBoundingClientRect();
+        const width = Math.max(Math.round(rect.width), parseInt(svgNode.getAttribute('width') || '400', 10) || 400);
+        const height = Math.max(Math.round(rect.height), parseInt(svgNode.getAttribute('height') || '300', 10) || 300);
+        
+        svgClone.setAttribute('width', String(width));
+        svgClone.setAttribute('height', String(height));
+        
+        const svgHtml = new XMLSerializer().serializeToString(svgClone);
+        const svgBlob = new Blob([svgHtml], { type: 'image/svg+xml;charset=utf-8' });
+        const blobUrl = URL.createObjectURL(svgBlob);
+        
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        
+        await new Promise<void>((resolve, reject) => {
+            img.onload = () => resolve();
+            img.onerror = (e) => reject(e);
+            img.src = blobUrl;
+        });
+        
+        const canvas = document.createElement('canvas');
+        const scale = 2;
+        canvas.width = width * scale;
+        canvas.height = height * scale;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('No canvas context');
+        
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(blobUrl);
+        return canvas.toDataURL('image/png');
+    } catch (err) {
+        console.warn('Direct SVG to PNG failed, falling back to html2canvas:', err);
+        const canvas = await html2canvas(svgNode.parentElement || (svgNode as any), {
+            scale: 2,
+            backgroundColor: '#ffffff',
+            logging: false,
+            useCORS: true
+        });
+        return canvas.toDataURL('image/png');
+    }
+}
+
 export async function exportHtmlToWord(element: HTMLElement, filename: string, mathFormat: 'omml' | 'mathml' | 'latex' | 'image' | boolean = 'omml') {
     if (mathFormat === true) mathFormat = 'latex';
     if (mathFormat === false) mathFormat = 'omml';
@@ -24,7 +74,7 @@ export async function exportHtmlToWord(element: HTMLElement, filename: string, m
             <div style="width: 50px; height: 50px; border: 4px solid #10b981; border-bottom-color: transparent; border-radius: 50%; display: inline-block; box-sizing: border-box; animation: rotation 1s linear infinite;"></div>
             <style>@keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
             <h2 style="margin-top: 20px; color: #0f172a; font-family: sans-serif;">Đang xử lý xuất file Word...</h2>
-            <p style="color: #64748b; font-family: sans-serif; margin-top: 8px;">Đang rasterize công thức và hình vẽ (có thể mất vài giây)</p>
+            <p style="color: #64748b; font-family: sans-serif; margin-top: 8px;">Đang chuẩn bị nội dung và hình vẽ...</p>
         `;
         document.body.appendChild(loadingOverlay);
     } else {
@@ -34,8 +84,7 @@ export async function exportHtmlToWord(element: HTMLElement, filename: string, m
     try {
         const clone = element.cloneNode(true) as HTMLElement;
         
-        const complexSelectors = mathFormat === 'latex' ? ['.tikz-wrapper'] : ['.tikz-wrapper', '.katex-display', '.katex'];
-        
+        // 1. If LaTeX mode requested, convert KaTeX elements directly to LaTeX string
         if (mathFormat === 'latex') {
             const katexElements = Array.from(clone.querySelectorAll(".katex"));
             for (const el of katexElements) {
@@ -51,69 +100,80 @@ export async function exportHtmlToWord(element: HTMLElement, filename: string, m
             }
         }
         
-        const originalElements = Array.from(element.querySelectorAll(complexSelectors.join(', ')));
-        const clonedElements = Array.from(clone.querySelectorAll(complexSelectors.join(', ')));
+        // 2. Handle TikZ SVG wrappers - ALWAYS convert to PNG (never raw base64 SVG because docx fails on svg)
+        const origTikzWrappers = Array.from(element.querySelectorAll(".tikz-wrapper")) as HTMLElement[];
+        const clonedTikzWrappers = Array.from(clone.querySelectorAll(".tikz-wrapper")) as HTMLElement[];
         
-        for (let i = 0; i < originalElements.length; i++) {
-            const orig = originalElements[i] as HTMLElement;
-            const cloned = clonedElements[i] as HTMLElement;
+        for (let i = 0; i < origTikzWrappers.length; i++) {
+            const orig = origTikzWrappers[i];
+            const cloned = clonedTikzWrappers[i];
+            if (!orig || !cloned) continue;
             
-            if (!orig || !cloned || orig.offsetParent === null) continue;
-            
-            if (orig.classList.contains('katex') && orig.parentElement?.closest('.katex-display')) {
-                continue;
+            const svgNode = orig.querySelector('svg');
+            if (svgNode) {
+                try {
+                    const pngDataUrl = await svgToPngDataUrl(svgNode);
+                    const img = document.createElement("img");
+                    img.src = pngDataUrl;
+                    img.style.maxWidth = "100%";
+                    img.style.height = "auto";
+                    img.style.display = "block";
+                    img.style.margin = "15px auto";
+                    cloned.parentNode?.replaceChild(img, cloned);
+                } catch (e) {
+                    console.error("TikZ conversion error:", e);
+                }
             }
+        }
+        
+        // 3. For standard mode (mathFormat !== 'latex'), rasterize ONLY root KaTeX formulas
+        // Avoid duplicate nested conversions which cause extreme slowness
+        if (mathFormat !== 'latex') {
+            const allOrigKatex = Array.from(element.querySelectorAll(".katex-display, .katex")) as HTMLElement[];
+            const allClonedKatex = Array.from(clone.querySelectorAll(".katex-display, .katex")) as HTMLElement[];
             
-            try {
-                // For TikZ wrappers, extracting the pure SVG natively is much sharper for MS Word
-                if (orig.classList.contains("tikz-wrapper")) {
-                    const svgNode = orig.querySelector('svg');
-                    if (svgNode) {
-                        const svgClone = svgNode.cloneNode(true) as SVGSVGElement;
-                        if (!svgClone.getAttribute('xmlns')) {
-                            svgClone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-                        }
-                        const svgHtml = svgClone.outerHTML;
-                        const base64Svg = "data:image/svg;base64," + window.btoa(unescape(encodeURIComponent(svgHtml)));
-                        
+            const rootPairs: { orig: HTMLElement; cloned: HTMLElement; isBlock: boolean }[] = [];
+            allOrigKatex.forEach((orig, idx) => {
+                const cloned = allClonedKatex[idx];
+                if (!orig || !cloned) return;
+                // Exclude nested katex children
+                const isNested = orig.parentElement?.closest('.katex') || (orig.classList.contains('katex') && orig.parentElement?.closest('.katex-display'));
+                if (!isNested) {
+                    const isBlock = orig.classList.contains("katex-display") || orig.parentElement?.classList.contains("katex-display") || false;
+                    rootPairs.push({ orig, cloned, isBlock });
+                }
+            });
+            
+            // Process in concurrent batches of 6 for speed
+            const batchSize = 6;
+            for (let i = 0; i < rootPairs.length; i += batchSize) {
+                const batch = rootPairs.slice(i, i + batchSize);
+                await Promise.all(batch.map(async ({ orig, cloned, isBlock }) => {
+                    try {
+                        const canvas = await html2canvas(orig, {
+                            scale: 1.8,
+                            logging: false,
+                            useCORS: true,
+                            backgroundColor: null
+                        });
+                        const dataUrl = canvas.toDataURL("image/png");
                         const img = document.createElement("img");
-                        img.src = base64Svg;
+                        img.src = dataUrl;
                         img.style.maxWidth = "100%";
                         img.style.height = "auto";
-                        img.style.display = "block";
-                        img.style.margin = "15px auto";
-                        
+                        if (isBlock) {
+                            img.style.display = "block";
+                            img.style.margin = "10px auto";
+                        } else {
+                            img.style.display = "inline-block";
+                            img.style.verticalAlign = "middle";
+                            img.style.margin = "0 2px";
+                        }
                         cloned.parentNode?.replaceChild(img, cloned);
-                        continue; // Skip html2canvas for this element
+                    } catch (e) {
+                        console.error("KaTeX rasterize error:", e);
                     }
-                }
-                
-                // Fallback to html2canvas for KaTeX or if SVG extraction fails
-                const canvas = await html2canvas(orig, {
-                    scale: 3, // Increased scale for sharper KaTeX equations
-                    logging: false,
-                    useCORS: true,
-                    backgroundColor: null
-                });
-                
-                const dataUrl = canvas.toDataURL("image/png");
-                const img = document.createElement("img");
-                img.src = dataUrl;
-                img.style.maxWidth = "100%";
-                img.style.height = "auto";
-                
-                if (orig.classList.contains("katex-display") || orig.classList.contains("tikz-wrapper")) {
-                    img.style.display = "block";
-                    img.style.margin = "10px auto";
-                } else {
-                    img.style.display = "inline-block";
-                    img.style.verticalAlign = "middle";
-                    img.style.margin = "0 2px";
-                }
-                
-                cloned.parentNode?.replaceChild(img, cloned);
-            } catch (e) {
-                console.error("html2canvas error on element:", orig, e);
+                }));
             }
         }
 
@@ -252,23 +312,39 @@ export async function exportHtmlToWord(element: HTMLElement, filename: string, m
         const footer = "</div></body></html>";
         const sourceHTML = header + contentHtml + footer;
         
-        // Use the backend to generate a real native .docx file
-        const response = await fetch('/api/export-docx', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ html: contentHtml })
-        });
-        
-        if (!response.ok) {
-            throw new Error('Failed to generate DOCX from server');
+        let exported = false;
+        try {
+            // Try server-side .docx generation with an 8-second timeout
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 8000);
+            
+            const response = await fetch('/api/export-docx', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ html: contentHtml }),
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            
+            if (response.ok) {
+                const docxBlob = await response.blob();
+                const finalFilename = filename.replace(/\.doc$/, '') + '.docx';
+                saveAs(docxBlob, finalFilename);
+                exported = true;
+            }
+        } catch (docxErr) {
+            console.warn("DOCX server generation unavailable, falling back to Word .doc format:", docxErr);
         }
         
-        const docxBlob = await response.blob();
-        const finalFilename = filename.replace(/\.doc$/, '') + '.docx';
-        saveAs(docxBlob, finalFilename);
+        if (!exported) {
+            // Robust client-side fallback: Save as standard Word .doc (HTML document)
+            const docBlob = new Blob(['\ufeff' + sourceHTML], { type: 'application/msword;charset=utf-8' });
+            const finalFilename = filename.endsWith('.doc') ? filename : filename.replace(/\.docx$/, '') + '.doc';
+            saveAs(docBlob, finalFilename);
+        }
     } catch (err) {
         console.error("Export failed:", err);
-        alert("Có lỗi xảy ra khi xuất file Word.");
+        alert("Có lỗi xảy ra khi xuất file Word. Vui lòng thử lại.");
     } finally {
         if (loadingOverlay) {
             loadingOverlay.style.display = 'none';
