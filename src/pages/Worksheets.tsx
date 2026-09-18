@@ -3,7 +3,7 @@ import { GDPT_2018_SUBJECTS } from '../lib/subjects';
 import LZString from 'lz-string';
 import { exportHtmlToWord } from "../lib/exportUtils";
 import { useState, useRef, useEffect } from "react";
-import { Sparkles, Save, BookOpen, Download, AlertCircle, Edit3, Eye, Printer, Share2, Copy } from "lucide-react";
+import { Sparkles, Save, BookOpen, Download, AlertCircle, Edit3, Eye, Printer, Share2, Copy, CheckCircle2, ExternalLink } from "lucide-react";
 import { MarkdownRenderer } from "../components/MarkdownRenderer";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import remarkGfm from "remark-gfm";
@@ -92,10 +92,55 @@ export function Worksheets() {
         ]
       };
       
-      // 3. Share it via URL encoded data
+      // 3. Save to server to obtain short examId
+      let examId = '';
+      try {
+        const shareRes = await apiFetch('/api/exams/share', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (shareRes.ok) {
+          const shareJson = await shareRes.json();
+          if (shareJson.examId) {
+            examId = shareJson.examId;
+          }
+        }
+      } catch (e) {
+        console.warn("Share to api failed:", e);
+      }
+
+      // Standalone backup full URL with compressed payload
       const compressed = LZString.compressToEncodedURIComponent(JSON.stringify(payload));
-      const url = `${window.location.origin}/?examData=${compressed}`;
-      setShareLink(url);
+      const fullUrl = `${window.location.origin}/?examData=${compressed}`;
+      
+      // The short base link (around 45 chars)
+      const baseShortUrl = examId ? `${window.location.origin}/?examId=${examId}` : fullUrl;
+
+      // 4. Try shortening with URL shorteners (/api/shorten)
+      let finalLink = '';
+      try {
+        const shortRes = await apiFetch('/api/shorten', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: baseShortUrl })
+        });
+        if (shortRes.ok) {
+          const shortJson = await shortRes.json();
+          if (shortJson.shortUrl && shortJson.shortUrl.startsWith('http')) {
+            finalLink = shortJson.shortUrl;
+          }
+        }
+      } catch (e) {
+        console.warn("Shorten service error:", e);
+      }
+
+      // If URL shortener returned a link, use it; otherwise use baseShortUrl (examId link)
+      if (!finalLink) {
+        finalLink = baseShortUrl;
+      }
+      
+      setShareLink(finalLink);
       
     } catch (err: any) {
       console.error(err);
@@ -365,17 +410,44 @@ export function Worksheets() {
           </div>
           
           {shareLink && (
-            <div className="mt-4 p-4 bg-emerald-50 rounded-lg border border-emerald-200">
-              <p className="text-sm font-medium text-emerald-800 mb-2">Đã tạo link làm bài online thành công!</p>
+            <div className="mt-4 p-4 bg-emerald-50 rounded-xl border border-emerald-200">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-bold text-emerald-900 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  Link online cho học sinh (đã rút gọn):
+                </span>
+                <span className="text-xs text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full font-medium">
+                  Gửi qua Zalo / Facebook
+                </span>
+              </div>
               <div className="flex gap-2">
-                <input type="text" readOnly value={shareLink} className="flex-1 bg-white border border-emerald-200 rounded-md px-3 py-2 text-sm text-emerald-700 font-medium" />
-                <button onClick={() => {navigator.clipboard.writeText(shareLink); alert('Đã copy!');}} className="px-3 py-2 bg-emerald-600 text-white text-sm rounded-md hover:bg-emerald-700 shrink-0">
-                  <Copy className="w-4 h-4" />
+                <input 
+                  type="text" 
+                  readOnly 
+                  value={shareLink} 
+                  className="flex-1 bg-white border border-emerald-300 rounded-lg px-3 py-2 text-sm text-emerald-800 font-semibold shadow-inner focus:outline-none select-all" 
+                />
+                <button 
+                  onClick={() => {
+                    navigator.clipboard.writeText(shareLink); 
+                    alert('Đã sao chép link!\nCô có thể dán trực tiếp vào nhóm Zalo/Facebook để học sinh làm bài ngay.');
+                  }} 
+                  className="px-3.5 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 shrink-0 flex items-center gap-1.5 transition-colors"
+                >
+                  <Copy className="w-4 h-4" /> Sao chép
                 </button>
-                <a href={shareLink} target="_blank" rel="noreferrer" className="px-3 py-2 bg-slate-800 text-white text-sm rounded-md hover:bg-slate-700 shrink-0 flex items-center">
-                  Mở
+                <a 
+                  href={shareLink} 
+                  target="_blank" 
+                  rel="noreferrer" 
+                  className="px-3.5 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 shrink-0 flex items-center gap-1.5 transition-colors"
+                >
+                  <ExternalLink className="w-4 h-4" /> Mở thử
                 </a>
               </div>
+              <p className="text-xs text-slate-500 mt-2">
+                💡 Link ngắn gọn, học sinh mở trực tiếp trên điện thoại/máy tính mà không bị lỗi đứt link.
+              </p>
             </div>
           )}
 

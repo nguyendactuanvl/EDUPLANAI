@@ -10,7 +10,7 @@ import { Link } from 'lucide-react';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import { exportHtmlToWord } from '../lib/exportUtils';
-import { fixMath } from '../lib/utils';
+import { fixMath, cleanQuestionStem } from '../lib/utils';
 import { useState, useRef, useEffect } from "react";
 import { FileCheck, Sparkles, Shuffle, Download, Share2, Plus, Trash2, Printer, UploadCloud, FileSpreadsheet, FileText, X, ExternalLink } from "lucide-react";
 
@@ -530,28 +530,41 @@ ${customPrompt}
         examData: { examName, duration },
         codes: shuffledExams 
       };
-      const compressed = LZString.compressToEncodedURIComponent(JSON.stringify(dataToShare));
-      const url = `${window.location.origin}/?examData=${compressed}`;
-      
+
       setShareLink("Đang tạo link rút gọn...");
       setActiveTab("shuffle");
+
+      let examId = '';
+      try {
+        const shareRes = await apiFetch('/api/exams/share', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(dataToShare)
+        });
+        if (shareRes.ok) {
+          const shareJson = await shareRes.json();
+          if (shareJson.examId) examId = shareJson.examId;
+        }
+      } catch (e) {}
+
+      const compressed = LZString.compressToEncodedURIComponent(JSON.stringify(dataToShare));
+      const fullUrl = `${window.location.origin}/?examData=${compressed}`;
+      const baseShortUrl = examId ? `${window.location.origin}/?examId=${examId}` : fullUrl;
       
       try {
-        const res = await fetch('/api/shorten', {
+        const res = await apiFetch('/api/shorten', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url })
+            body: JSON.stringify({ url: baseShortUrl })
         });
         if (res.ok) {
             const data = await res.json();
-            setShareLink(data.shortUrl);
+            setShareLink(data.shortUrl || baseShortUrl);
         } else {
-            setShareLink(url);
-            alert("Không thể tạo link rút gọn. Sẽ sử dụng link gốc (có thể rất dài).");
+            setShareLink(baseShortUrl);
         }
       } catch (e) {
-          setShareLink(url);
-          alert("Lỗi khi tạo link rút gọn. Sẽ sử dụng link gốc (có thể rất dài).");
+          setShareLink(baseShortUrl);
       }
     } catch (err: any) {
       alert("Lỗi tạo link: " + err.message);
@@ -1241,7 +1254,7 @@ ${customPrompt}
                       <div key={idx} className="pb-4 border-b border-slate-100 last:border-0">
                         <div className="font-medium text-slate-800 mb-3 flex items-start gap-2">
                           <span className="font-bold whitespace-nowrap mt-1">Câu {idx + 1}:</span> 
-                          <MarkdownRenderer className="markdown-body inline-block" content={fixMath(q.content || (q as any).question || (q as any).text || '')} /> 
+                          <MarkdownRenderer className="markdown-body inline-block" content={fixMath(cleanQuestionStem(q.content || (q as any).question || (q as any).text || '', q.options))} /> 
                           <span className="text-xs text-emerald-600 font-normal mt-1 shrink-0">[{q.level}]</span>
                           <button onClick={() => saveToBank(q)} className="text-xs px-2 py-1 bg-blue-50 text-blue-600 rounded border border-blue-200 hover:bg-blue-100 shrink-0 no-print" title="Lưu vào Ngân hàng CH">+ Lưu NH</button>
                           <button onClick={() => {
@@ -1358,19 +1371,36 @@ ${customPrompt}
                                     const btn = document.getElementById(`share-btn-${exam.code}`);
                                     if (btn) btn.innerHTML = '<span class="animate-spin mr-1">⌛</span> Đang tạo link...';
                                     
-                                    const res = await fetch('/api/shorten', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ url })
-                                    });
-                                    if (res.ok) {
-                                        const data = await res.json();
-                                        await navigator.clipboard.writeText(data.shortUrl);
-                                        alert(`Đã copy link rút gọn (${data.shortUrl}) cho Mã đề ${exam.code}!\nHọc sinh có thể mở link này dễ dàng trên mọi nền tảng.`);
-                                    } else {
-                                        await navigator.clipboard.writeText(url);
-                                        alert(url.length > 2000 ? `Đã copy link thi cho Mã đề ${exam.code}!\n\nLưu ý: Không thể rút gọn link. Link gốc khá dài, có thể bị lỗi khi gửi qua Zalo/Messenger.` : `Đã copy link thi online cho Mã đề ${exam.code}!`);
-                                    }
+                                    let examId = "";
+                                    try {
+                                        const shareRes = await apiFetch("/api/exams/share", {
+                                            method: "POST",
+                                            headers: { "Content-Type": "application/json" },
+                                            body: JSON.stringify(singleData)
+                                        });
+                                        if (shareRes.ok) {
+                                            const sData = await shareRes.json();
+                                            if (sData.examId) examId = sData.examId;
+                                        }
+                                    } catch (e) {}
+
+                                    const baseShortUrl = examId ? `${window.location.origin}/?examId=${examId}` : url;
+                                    let finalUrl = baseShortUrl;
+
+                                    try {
+                                        const res = await apiFetch("/api/shorten", {
+                                            method: "POST",
+                                            headers: { "Content-Type": "application/json" },
+                                            body: JSON.stringify({ url: baseShortUrl })
+                                        });
+                                        if (res.ok) {
+                                            const data = await res.json();
+                                            if (data.shortUrl) finalUrl = data.shortUrl;
+                                        }
+                                    } catch (e) {}
+
+                                    await navigator.clipboard.writeText(finalUrl);
+                                    alert(`Đã copy link thi rút gọn (${finalUrl}) cho Mã đề ${exam.code}!\nHọc sinh có thể mở link này dễ dàng trên mọi nền tảng.`);
                                     if (btn) btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-share-2 w-4 h-4"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg> Copy Link Thi';
                                 } catch (e) {
                                     navigator.clipboard.writeText(url);
@@ -1400,7 +1430,7 @@ ${customPrompt}
                             <h3 style={{textAlign:'center', fontSize: '16px', marginBottom: '20px'}}>Mã đề: {exam.code}</h3>
                             {exam.questions.map((q, idx) => (
                               <div key={idx} className="question" style={{marginBottom: '15px'}}>
-                                <div><strong>Câu {idx + 1}:</strong> <MarkdownRenderer className="markdown-body inline-block" content={fixMath(q.content || (q as any).question || (q as any).text || '')} /></div>
+                                <div><strong>Câu {idx + 1}:</strong> <MarkdownRenderer className="markdown-body inline-block" content={fixMath(cleanQuestionStem(q.content || (q as any).question || (q as any).text || '', q.options))} /></div>
                                 {q.type === 'mc' && q.options && (
                                   <div className="options" style={{display: 'grid', gridTemplateColumns: '1fr 1fr', marginTop: '5px'}}>
                                     {q.options.map((opt, oIdx) => (

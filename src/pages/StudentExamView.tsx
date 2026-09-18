@@ -8,7 +8,7 @@ import rehypeKatex from 'rehype-katex';
 import { apiFetch } from '../lib/apiFetch';
 import LZString from 'lz-string';
 import { Clock, Copy } from 'lucide-react';
-import { fixMath } from "../lib/utils";
+import { fixMath, cleanQuestionStem } from "../lib/utils";
 
 export function StudentExamView({ examId, examRawData }: { examId?: string, examRawData?: string }) {
   const [loading, setLoading] = useState(true);
@@ -321,7 +321,7 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
           return (
             <div key={idx} className={`bg-white p-6 rounded-xl shadow-sm border ${isSubmitted && showRedBorder ? 'border-red-200' : isSubmitted ? 'border-emerald-200' : 'border-slate-200'}`}>
               <h3 className="font-medium text-slate-800 mb-4 leading-relaxed">
-                <span className="font-bold">Câu {idx + 1}:</span> <MarkdownRenderer className="markdown-body inline-block" content={fixMath(q.content || q.question || q.text || '')} />
+                <span className="font-bold">Câu {idx + 1}:</span> <MarkdownRenderer className="markdown-body inline-block" content={fixMath(cleanQuestionStem(q.content || q.question || q.text || '', q.options))} />
               </h3>
               
               <div className="space-y-3">

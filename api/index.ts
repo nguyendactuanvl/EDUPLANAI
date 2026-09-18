@@ -1,5 +1,6 @@
 
 import express from "express";
+import fs from "fs";
 import HTMLtoDOCX from "html-to-docx";
 import path from "path";
 import { GoogleGenAI, Type } from "@google/genai";
@@ -191,7 +192,33 @@ function resolveSingleFile(reqBody: any) {
 }
 
 
-const sharedExamsStore = new Map();
+const EXAMS_CACHE_FILE = path.join(process.cwd(), 'shared_exams.json');
+const sharedExamsStore = new Map<string, any>();
+
+// Load initially from file if exists
+try {
+  if (fs.existsSync(EXAMS_CACHE_FILE)) {
+    const raw = fs.readFileSync(EXAMS_CACHE_FILE, 'utf8');
+    const obj = JSON.parse(raw);
+    for (const [k, v] of Object.entries(obj)) {
+      sharedExamsStore.set(k, v);
+    }
+  }
+} catch (e) {
+  console.warn("Failed to load exams cache from disk:", e);
+}
+
+function saveExamsToDisk() {
+  try {
+    const obj: Record<string, any> = {};
+    for (const [k, v] of sharedExamsStore.entries()) {
+      obj[k] = v;
+    }
+    fs.writeFileSync(EXAMS_CACHE_FILE, JSON.stringify(obj), 'utf8');
+  } catch (e) {
+    console.warn("Failed to save exams cache to disk:", e);
+  }
+}
 
 function getAiClient(req: any) {
   const authHeader = req.headers['authorization'] as string;
@@ -778,7 +805,7 @@ app.all("/api/generate-interactive-worksheet", async (req, res) => {
     YÊU CẦU:
     1. Đưa ra khoảng 5-10 câu hỏi phân hóa từ cơ bản đến vận dụng.
     2. Các câu hỏi có thể thuộc 4 loại hình:
-       - mc: Trắc nghiệm nhiều lựa chọn (4 đáp án). BẮT BUỘC trình bày 4 đáp án trong thẻ <div class="grid grid-cols-2 gap-4"> hoặc <div class="grid grid-cols-1 gap-4"> (nếu công thức dài).
+       - mc: Trắc nghiệm 4 lựa chọn (chỉ viết nội dung câu hỏi vào "content", 4 phương án vào mảng "options", TUYỆT ĐỐI KHÔNG lặp lại các phương án A, B, C, D trong "content").
        - tf: Trắc nghiệm Đúng/Sai (Mỗi câu gồm 4 ý a, b, c, d - học sinh phải chọn Đúng hoặc Sai cho TỪNG ý)
        - sa: Trả lời ngắn (kết quả là 1 số hoặc 1 từ/cụm từ ngắn gọn)
        - essay: Tự luận
@@ -1019,6 +1046,7 @@ app.all("/api/exams/share", (req, res) => {
   try {
     const examId = Math.random().toString(36).substring(2, 10);
     sharedExamsStore.set(examId, req.body);
+    saveExamsToDisk();
     res.json({ examId });
   } catch (error) {
     res.status(500).json({ error: "Lỗi chia sẻ đề thi" });
@@ -1031,7 +1059,7 @@ app.get("/api/exams/:id", (req, res) => {
   else res.status(404).json({ error: "Exam not found" });
 });
 
-// URL Shortener using TinyURL
+// URL Shortener using TinyURL with fallback to is.gd / direct link
 app.post("/api/shorten", async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -1039,16 +1067,48 @@ app.post("/api/shorten", async (req, res) => {
     const { url } = req.body;
     if (!url) return res.status(400).json({ error: "Missing url" });
     
-    // We use TinyURL API which is free and doesn't require auth
-    const response = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(url)}`);
-    if (!response.ok) {
-      throw new Error("Failed to shorten URL");
+    let shortUrl = '';
+    // Provider 1: TinyURL
+    try {
+      const response = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(url)}`, {
+        signal: AbortSignal.timeout(6000)
+      });
+      if (response.ok) {
+        const text = await response.text();
+        if (text.startsWith('http')) {
+          shortUrl = text.trim();
+        }
+      }
+    } catch (e) {
+      console.warn("TinyURL failed, checking fallback:", e);
     }
-    const shortUrl = await response.text();
+
+    // Provider 2: is.gd fallback if TinyURL failed
+    if (!shortUrl) {
+      try {
+        const response = await fetch(`https://is.gd/create.php?format=simple&url=${encodeURIComponent(url)}`, {
+          signal: AbortSignal.timeout(4000)
+        });
+        if (response.ok) {
+          const text = await response.text();
+          if (text.startsWith('http')) {
+            shortUrl = text.trim();
+          }
+        }
+      } catch (e) {
+        console.warn("is.gd failed too:", e);
+      }
+    }
+
+    // If both services fail, return the url itself (which for examId is already very short)
+    if (!shortUrl) {
+      shortUrl = url;
+    }
+
     res.json({ shortUrl });
   } catch (error: any) {
     console.error("Shorten error:", error);
-    res.status(500).json({ error: "Lỗi rút gọn link" });
+    res.status(500).json({ error: "Lỗi rút gọn link", shortUrl: req.body?.url });
   }
 });
 

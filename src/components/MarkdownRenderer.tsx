@@ -9,8 +9,14 @@ import { TikzRenderer } from './TikzRenderer';
 export const MarkdownRenderer = ({ content, className }: { content: string, className?: string }) => {
   let processedContent = content || '';
 
-  
-  // 0. Unwrap any existing code blocks around SVG
+  // 0. Unescape escaped dollar signs so KaTeX/remark-math parses them as math delimiters
+  processedContent = processedContent.replace(/\\(\$)/g, '$1');
+
+  // Convert standard LaTeX \( ... \) to $ ... $ and \[ ... \] to $$ ... $$
+  processedContent = processedContent.replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$');
+  processedContent = processedContent.replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$');
+
+  // 0.1 Unwrap any existing code blocks around SVG
   processedContent = processedContent.replace(/```[a-z]*\s*(<svg[\s\S]*?<\/svg>)\s*```/gi, '$1');
   
   // Wrap SVGs in a container to prevent Markdown from messing them up and to style them
