@@ -1,5 +1,6 @@
 
 import express from "express";
+import HTMLtoDOCX from "html-to-docx";
 import path from "path";
 import { GoogleGenAI, Type } from "@google/genai";
 import mammoth from 'mammoth';
@@ -13,11 +14,11 @@ const MATH_FORMATTING_RULES = `QUY TẮC ĐỊNH DẠNG TOÁN HỌC VÀ VĂN B�
 1. Mọi công thức Toán bắt buộc viết bằng cú pháp chuẩn LaTeX (tuyệt đối không dùng ký tự Unicode như √, ∫).
 2. Công thức nằm cùng dòng văn bản: Luôn kẹp trong cặp dấu $...$ (ví dụ: $y = \dfrac{ax+b}{cx+d}$, $x \in [1; 5]$). LUÔN CÓ KHOẢNG TRẮNG trước và sau dấu $ để không bị dính chữ.
 3. Công thức nằm riêng một dòng độc lập: Luôn kẹp trong cặp dấu $...$.
-4. Ký hiệu bắt buộc: Phân số dùng \dfrac{a}{b}, hệ phương trình dùng \begin{cases} ... \end{cases}.
+4. Ký hiệu bắt buộc: Phân số dùng \dfrac{a}{b}, hệ phương trình dùng \\begin{cases} ... \\end{cases}.
 5. Bố cục văn bản dùng định dạng Markdown rõ ràng.
 6. [CỰC KỲ QUAN TRỌNG] BẢNG BIẾN THIÊN VÀ ĐỒ THỊ BẰNG TIKZ:
    - BẮT BUỘC đặt toàn bộ code vẽ bảng biến thiên hoặc đồ thị vào trong khối markdown \`\`\`tikz ... \`\`\`. 
-   - BẮT BUỘC phải bao bọc mã bên trong \begin{tikzpicture} và \end{tikzpicture}. KHÔNG DÙNG pgfplots (axis).
+   - BẮT BUỘC phải bao bọc mã bên trong \\begin{tikzpicture} và \\end{tikzpicture}. KHÔNG DÙNG pgfplots (axis).
    - VỚI BẢNG BIẾN THIÊN: Dùng gói tkz-tab chuẩn mực. KHÔNG dùng môi trường ma trận array.
      + Cấu hình bắt buộc: \tkzTabInit[lgt=1.5, espcl=3]...
      + Điểm gián đoạn (không xác định) bắt buộc dùng 2 vạch song song: ký hiệu d, -d/, +d/ trong tkz-tab.
@@ -29,7 +30,7 @@ const MATH_FORMATTING_RULES = `QUY TẮC ĐỊNH DẠNG TOÁN HỌC VÀ VĂN B�
      + Đường tiệm cận đứng, ngang, xiên phải vẽ nét đứt (dashed).
      + Phải gióng tọa độ đầy đủ nhãn tổng quát. Ký hiệu hệ trục Oxy (có mũi tên, nhãn x, y, O).
 7. [CỰC KỲ QUAN TRỌNG] HÌNH VẼ HÌNH HỌC KHÔNG GIAN BẰNG TIKZ (Chuẩn GDPT 2018):
-   - BẮT BUỘC đặt code vào khối markdown \`\`\`tikz ... \`\`\` và bao bọc bởi \begin{tikzpicture} và \end{tikzpicture}.
+   - BẮT BUỘC đặt code vào khối markdown \`\`\`tikz ... \`\`\` và bao bọc bởi \\begin{tikzpicture} và \\end{tikzpicture}.
    - QUY ƯỚC NÉT VẼ:
      + Nét liền (thick/solid): Tất cả các đường biên bao quanh hình và các cạnh nhìn thấy ở mặt trước. Tuyệt đối KHÔNG vẽ nét đứt cho cạnh biên ngoài cùng (ví dụ: đường cao SA dựng thẳng đứng từ mép ngoài luôn là nét liền).
      + Nét đứt (dashed): CHỈ dành cho các cạnh nằm ở đáy phía sau, đường cao hoặc đường chéo bị các mặt phía trước che khuất.
@@ -37,7 +38,42 @@ const MATH_FORMATTING_RULES = `QUY TẮC ĐỊNH DẠNG TOÁN HỌC VÀ VĂN B�
      + Khối chóp đáy tam giác (S.ABC) có SA vuông góc đáy: Đặt A ở góc phía sau (0,0); B lệch sang phải (4,0); C chúc về phía trước (1.5,-1.8). SA dựng thẳng đứng (0,h). Cạnh khuất DUY NHẤT là AB (nét đứt). Các cạnh SA, SB, SC, AC, BC là nét liền.
      + Khối chóp đáy tứ giác (S.ABCD) có SA vuông góc đáy: Đáy vẽ hình bình hành phối cảnh: A(0,0), B(3.5,0), D(-1,-1.5), C(2.5,-1.5). Các cạnh khuất đáy: AB, AD (nét đứt). Chiều cao SA nét liền nếu ở biên ngoài.
      + Khối lăng trụ / hình hộp: Đáy dưới vẽ phối cảnh, 3 cạnh phía sau đáy dưới và các đường chéo khuất vẽ nét đứt. Các cạnh bên và mặt trước vẽ nét liền.
-   - KÝ HIỆU TOÁN HỌC: Vẽ đầy đủ góc vuông ở chân đường cao, ký hiệu góc giữa đường và mặt, góc giữa hai mặt phẳng khi có yêu cầu. Các nhãn đỉnh (above, below, left, right) phải hợp lý, không bị đường kẻ cắt ngang chữ.`;
+   - KÝ HIỆU TOÁN HỌC: Vẽ đầy đủ góc vuông ở chân đường cao, ký hiệu góc giữa đường và mặt, góc giữa hai mặt phẳng khi có yêu cầu. Các nhãn đỉnh (above, below, left, right) phải hợp lý, không bị đường kẻ cắt ngang chữ.
+8. [CỰC KỲ QUAN TRỌNG] VẼ MIỀN NGHIỆM BẤT PHƯƠNG TRÌNH (BPT) VÀ HỆ BPT BẬC NHẤT HAI ẨN (Chuẩn GDPT 2018):
+   - Đặt code vào khối markdown \`\`\`tikz ... \`\`\` và bao bọc bởi \\begin{tikzpicture} và \\end{tikzpicture}.
+   - Dùng thư viện \\usetikzlibrary{patterns, arrows.meta}.
+   - QUY ƯỚC ĐƯỜNG BIÊN:
+     + Dấu bằng (>= hoặc <=): Đường biên vẽ NÉT LIỀN (thick, solid).
+     + Dấu ngặt (> hoặc <): Đường biên vẽ NÉT ĐỨT (dashed, thick).
+     + Phải đặt nhãn tên đường thẳng ($d_1, d_2,...$) ở đầu mút.
+   - MIỀN NGHIỆM VÀ PHẦN GẠCH BỎ:
+     + Phần KHÔNG thuộc miền nghiệm: Dùng nét gạch sọc (pattern=north east lines hoặc north west lines, pattern color=gray!50). Bắt buộc lồng trong môi trường \\begin{scope} \\clip ... \\end{scope} giới hạn khung hình để nét gạch không bị lem ra ngoài.
+     + Phần THUỘC miền nghiệm: Giữ trắng hoặc tô nền sáng (ví dụ: fill=cyan!15).
+     + Đối với Hệ BPT: Vẽ viền đậm quanh đa giác miền nghiệm (tuân thủ nét liền/đứt tương ứng) và đánh dấu rõ các đỉnh kèm tọa độ chính xác.
+   - NGUYÊN TẮC GIẢI TÍCH (CẤM VẼ TỰ DO / CẤM ĐOÁN TỌA ĐỘ):
+     + Trước khi vẽ bất kỳ đường thẳng ax + by = c nào, BẮT BUỘC phải tính chính xác: Giao điểm với Ox (Cho y = 0 -> x = c/a) và Giao điểm với Oy (Cho x = 0 -> y = c/b).
+     + Tọa độ các đỉnh đa giác miền nghiệm phải là nghiệm giải tích thực sự của hệ 2 phương trình đường thẳng giao nhau (Ví dụ: x + y = 4 và y = 3 thì giao điểm BẮT BUỘC là (1; 3), không được vẽ giao điểm nằm ngoài đường thẳng).
+   - KỸ THUẬT VẼ TRÊN TIKZ:
+     + Miền nghiệm đa giác: Định nghĩa các đỉnh bằng \\coordinate chuẩn số liệu giải tích, tô màu bằng \\fill[màu] (A) -- (B) -- (C) -- cycle.
+     + Lệnh vẽ đường thẳng: Dùng đúng hàm plot (\\x, {(-a*\\x + c)/b}) với domain rộng hơn miền nghiệm một chút để thấy rõ giao cắt.
+     + Không để xảy ra lỗi sai trực quan (như đường x+y=4 mà lại cắt Oy tại 3, hoặc điểm thuộc đường thẳng mà lại vẽ lệch ra ngoài).
+
+9. [CỰC KỲ QUAN TRỌNG] TRÌNH BÀY ĐÁP ÁN TRẮC NGHIỆM:
+   - TUYỆT ĐỐI KHÔNG viết các đáp án A, B, C, D dính liền nhau trên cùng một dòng.
+   - BẮT BUỘC mỗi đáp án phải nằm trên một dòng riêng biệt.
+   - Khuyến khích sử dụng HTML Grid để trình bày đáp án thẳng hàng đẹp mắt (đặc biệt khi xuất Word sẽ rất chuẩn). BẮT BUỘC dùng cấu trúc:
+     <div class="grid grid-cols-2 gap-4">
+       <div><strong>A.</strong> $đáp_án_A$</div>
+       <div><strong>B.</strong> $đáp_án_B$</div>
+       <div><strong>C.</strong> $đáp_án_C$</div>
+       <div><strong>D.</strong> $đáp_án_D$</div>
+     </div>
+   - CHÚ Ý: Nếu đáp án là CÔNG THỨC TOÁN DÀI (ví dụ: Hệ bất phương trình, ma trận, tích phân lớn), BẮT BUỘC dùng grid-cols-1 để mỗi đáp án chiếm trọn 1 dòng rộng rãi:
+     <div class="grid grid-cols-1 gap-4">
+       <div><strong>A.</strong> $\begin{cases} ... \end{cases}$</div>
+       ...
+     </div>
+   - Trục tọa độ Oxy có mũi tên (>=stealth), đánh dấu đầy đủ gốc O và các giao điểm trên trục Ox, Oy. Dùng fill=white, inner sep=1pt cho nhãn text để không bị đường kẻ cắt ngang chữ.`;
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
@@ -273,7 +309,7 @@ async function generateWithFallback(req: any, payloadOptions: any) {
 - Số mũ / lũy thừa BẮT BUỘC dùng dấu mũ: $q^5$, $2^9$, $2^{10}$, $a^2 + b^2$.
 - Phân số BẮT BUỘC dùng \\frac{tử}{mẫu}: $\\frac{1 - (-2)^{10}}{1 - (-2)}$, $\\frac{108}{54}$.
 - Phép nhân dùng \\cdot, dấu suy ra/tương đương dùng \\Rightarrow, \\Leftrightarrow.
-- Hệ phương trình BẮT BUỘC dùng \\begin{cases} ... \\end{cases} kèm xuống dòng \\\\ rõ ràng.
+- Hệ phương trình BẮT BUỘC dùng \\\begin{cases} ... \\\end{cases} kèm xuống dòng \\\\ rõ ràng.
 Tuyệt đối KHÔNG viết công thức dưới dạng text thường như u1, q5, 2^9 viết thành 29.
 Khi bài toán yêu cầu có hình vẽ minh họa (đặc biệt là hình học không gian), TUYỆT ĐỐI KHÔNG xuất mã vẽ TikZ/PGF/Asymptote. BẮT BUỘC phải sinh mã vector <svg> thuần (inline SVG) nhúng trực tiếp vào nội dung:
 - TUYỆT ĐỐI KHÔNG bọc mã <svg> trong block code (\`\`\`xml hay \`\`\`svg). Phải viết mã <svg> trực tiếp vào văn bản.
@@ -742,7 +778,7 @@ app.all("/api/generate-interactive-worksheet", async (req, res) => {
     YÊU CẦU:
     1. Đưa ra khoảng 5-10 câu hỏi phân hóa từ cơ bản đến vận dụng.
     2. Các câu hỏi có thể thuộc 4 loại hình:
-       - mc: Trắc nghiệm nhiều lựa chọn (4 đáp án)
+       - mc: Trắc nghiệm nhiều lựa chọn (4 đáp án). BẮT BUỘC trình bày 4 đáp án trong thẻ <div class="grid grid-cols-2 gap-4"> hoặc <div class="grid grid-cols-1 gap-4"> (nếu công thức dài).
        - tf: Trắc nghiệm Đúng/Sai (Mỗi câu gồm 4 ý a, b, c, d - học sinh phải chọn Đúng hoặc Sai cho TỪNG ý)
        - sa: Trả lời ngắn (kết quả là 1 số hoặc 1 từ/cụm từ ngắn gọn)
        - essay: Tự luận
@@ -946,11 +982,11 @@ YÊU CẦU:
 
 ${MATH_FORMATTING_RULES}
 5. BẮT BUỘC kiểm tra và SỬA LỖI CHÍNH TẢ tiếng Việt thật cẩn thận trước khi trả kết quả.
-6. [QUAN TRỌNG] BẮT BUỘC vẽ bảng biến thiên (BBT), đồ thị hàm số, hoặc hình học (nếu có yêu cầu hoặc cần thiết cho bài toán) bằng code TikZ. Đặt toàn bộ code TikZ (bắt đầu bằng \\begin{tikzpicture} và kết thúc bằng \\end{tikzpicture}) vào trong một block markdown có định dạng:
+6. [QUAN TRỌNG] BẮT BUỘC vẽ bảng biến thiên (BBT), đồ thị hàm số, hoặc hình học (nếu có yêu cầu hoặc cần thiết cho bài toán) bằng code TikZ. Đặt toàn bộ code TikZ (bắt đầu bằng \\\begin{tikzpicture} và kết thúc bằng \\\end{tikzpicture}) vào trong một block markdown có định dạng:
 \`\`\`tikz
-\begin{tikzpicture}
+\\begin{tikzpicture}
 ...
-\end{tikzpicture}
+\\end{tikzpicture}
 \`\`\``;
 
       const response = await generateWithFallback(req, {
@@ -1030,6 +1066,36 @@ app.post("/api/chat", async (req, res) => {
     res.json({ text: response.text });
   } catch (error: any) {
     return handleAiError(error, req, res);
+  }
+});
+
+
+app.post('/api/export-docx', async (req, res) => {
+  try {
+    const { html } = req.body;
+    if (!html) {
+      return res.status(400).json({ error: 'Missing HTML content' });
+    }
+    
+    // Convert inch to twips (1 inch = 1440 twips)
+    // 2cm is ~0.787 inches = ~1134 twips
+    const fileBuffer = await HTMLtoDOCX(html, null, {
+      orientation: 'portrait',
+      margins: { top: 1134, right: 1134, bottom: 1134, left: 1134, header: 720, footer: 720, gutter: 0 },
+      font: 'Times New Roman',
+      fontSize: 26, // 13pt (half-points)
+      size: { width: 11906, height: 16838 }, // A4
+      table: { row: { cantSplit: true } },
+      footer: true,
+      pageNumber: true,
+    });
+    
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', 'attachment; filename="document.docx"');
+    res.send(fileBuffer);
+  } catch (error) {
+    console.error('DOCX Export error:', error);
+    res.status(500).json({ error: 'Failed to generate Word document' });
   }
 });
 

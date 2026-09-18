@@ -403,6 +403,19 @@ export function LessonPlan() {
         )}
 
         <button 
+          onClick={() => {
+            setSubject("Toán");
+            setSelectedGrade(10);
+            setCustomLessonName("Hệ bất phương trình bậc nhất hai ẩn");
+            setActiveTab("upload");
+            setTimeout(generateLessonPlan, 100);
+          }}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-700 transition-colors mt-2 shadow-sm"
+        >
+          <Sparkles className="h-5 w-5" />
+          Demo Soạn Giáo án BPT/HPT
+        </button>
+        <button 
           onClick={generateLessonPlan}
           disabled={isLoading || (activeTab === "system" ? !selectedLesson : false)}
           className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-70 disabled:cursor-not-allowed mt-2 shadow-sm"

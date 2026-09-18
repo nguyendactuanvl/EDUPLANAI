@@ -1,3 +1,4 @@
+import { saveAs } from 'file-saver';
 import html2canvas from 'html2canvas';
 
 export async function exportHtmlToWord(element: HTMLElement, filename: string, mathFormat: 'omml' | 'mathml' | 'latex' | 'image' | boolean = 'omml') {
@@ -73,7 +74,7 @@ export async function exportHtmlToWord(element: HTMLElement, filename: string, m
                             svgClone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
                         }
                         const svgHtml = svgClone.outerHTML;
-                        const base64Svg = "data:image/svg+xml;base64," + window.btoa(unescape(encodeURIComponent(svgHtml)));
+                        const base64Svg = "data:image/svg;base64," + window.btoa(unescape(encodeURIComponent(svgHtml)));
                         
                         const img = document.createElement("img");
                         img.src = base64Svg;
@@ -223,6 +224,24 @@ export async function exportHtmlToWord(element: HTMLElement, filename: string, m
             }
         }
 
+        
+        // Add borders to regular markdown tables
+        const allTables = clone.querySelectorAll('table');
+        allTables.forEach(t => {
+            if (!t.getAttribute('style') || !t.getAttribute('style')?.includes('border: none')) {
+                t.setAttribute('border', '1');
+                t.style.borderCollapse = 'collapse';
+                t.style.width = '100%';
+                t.style.marginBottom = '10pt';
+                
+                const cells = t.querySelectorAll('th, td');
+                cells.forEach(c => {
+                    (c as HTMLElement).style.border = '1px solid black';
+                    (c as HTMLElement).style.padding = '6pt';
+                });
+            }
+        });
+
         let contentHtml = clone.innerHTML;
         
         contentHtml = contentHtml.replace(/[\u200B-\u200D\uFEFF]/g, "");
@@ -233,15 +252,20 @@ export async function exportHtmlToWord(element: HTMLElement, filename: string, m
         const footer = "</div></body></html>";
         const sourceHTML = header + contentHtml + footer;
         
-        const blob = new Blob(['\ufeff', sourceHTML], { type: 'application/msword' });
-        const source = URL.createObjectURL(blob);
-        const fileDownload = document.createElement("a");
-        document.body.appendChild(fileDownload);
-        fileDownload.href = source;
-        fileDownload.target = "_blank";
-        fileDownload.download = filename.endsWith('.doc') ? filename : filename + '.doc';
-        fileDownload.click();
-        document.body.removeChild(fileDownload);
+        // Use the backend to generate a real native .docx file
+        const response = await fetch('/api/export-docx', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ html: contentHtml })
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to generate DOCX from server');
+        }
+        
+        const docxBlob = await response.blob();
+        const finalFilename = filename.replace(/\.doc$/, '') + '.docx';
+        saveAs(docxBlob, finalFilename);
     } catch (err) {
         console.error("Export failed:", err);
         alert("Có lỗi xảy ra khi xuất file Word.");
