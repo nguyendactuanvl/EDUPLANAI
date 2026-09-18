@@ -10,7 +10,7 @@ import { Link } from 'lucide-react';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import { exportHtmlToWord } from '../lib/exportUtils';
-import { fixMath, cleanQuestionStem } from '../lib/utils';
+import { fixMath, cleanQuestionStem, parseApiResponse } from '../lib/utils';
 import { useState, useRef, useEffect } from "react";
 import { FileCheck, Sparkles, Shuffle, Download, Share2, Plus, Trash2, Printer, UploadCloud, FileSpreadsheet, FileText, X, ExternalLink } from "lucide-react";
 
@@ -434,14 +434,18 @@ ${customPrompt}
 
       if (!response.ok) {
         const text = await response.text();
-      let err;
-      try { err = JSON.parse(text); } catch(e) { throw new Error(`Lỗi phản hồi từ máy chủ (không phải JSON). Chi tiết: ${text ? text.substring(0, 150) : ""}`); }
-        throw new Error(err.error || "Có lỗi xảy ra khi tạo đề.");
+        let errorMsg = "Có lỗi xảy ra khi tạo đề.";
+        try {
+          const err = parseApiResponse(text);
+          errorMsg = err.error || errorMsg;
+        } catch(e: any) {
+          errorMsg = e.message || errorMsg;
+        }
+        throw new Error(errorMsg);
       }
 
       const text = await response.text();
-      let data;
-      try { data = JSON.parse(text); } catch(e) { throw new Error(`Lỗi phản hồi từ máy chủ (không phải JSON). Chi tiết: ${text ? text.substring(0, 150) : ""}`); }
+      const data = parseApiResponse<any>(text);
       setExamName(data.examName || "Đề kiểm tra");
       setQuestions(data.questions || []);
       setActiveTab("exam");

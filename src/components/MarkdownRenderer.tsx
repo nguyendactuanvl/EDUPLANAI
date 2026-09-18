@@ -1,13 +1,17 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import rehypeRaw from 'rehype-raw';
+import katex from 'katex';
+// @ts-ignore
+import renderMathInElement from 'katex/dist/contrib/auto-render.js';
 import { TikzRenderer } from './TikzRenderer';
 import { fixMath } from '../lib/utils';
 
 export const MarkdownRenderer = ({ content, className }: { content: string, className?: string }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
   let processedContent = fixMath(content || '');
 
   // 0. Unescape escaped dollar signs so KaTeX/remark-math parses them as math delimiters
@@ -18,10 +22,17 @@ export const MarkdownRenderer = ({ content, className }: { content: string, clas
   processedContent = processedContent.replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$');
 
   // Normalize spaces inside inline $ ... $ so remark-math recognizes them (e.g. "$ 1 $" -> "$1$", "$ x = 2 $" -> "$x = 2$")
+  // and pull trailing punctuation OUT of the inline math block ($0.$ -> $0$.)
   processedContent = processedContent.replace(/(?<!\$)\$(?!\$)\s*([^\$\n]+?)\s*(?<!\$)\$(?!\$)/g, (match, formula) => {
-    const trimmed = formula.trim();
+    let trimmed = formula.trim();
     if (!trimmed) return match;
-    return `$${trimmed}$`;
+    let trailingPunct = "";
+    const punctMatch = trimmed.match(/([.,;:!?]+)$/);
+    if (punctMatch && !/[\\\}]/.test(punctMatch[1])) {
+      trailingPunct = punctMatch[1];
+      trimmed = trimmed.slice(0, -trailingPunct.length).trim();
+    }
+    return `$${trimmed}$${trailingPunct}`;
   });
 
   // 0.1 Unwrap any existing code blocks around SVG
@@ -58,10 +69,67 @@ export const MarkdownRenderer = ({ content, className }: { content: string, clas
     }
   });
 
-  return (
-    <div className={className || "markdown-body prose prose-slate max-w-none prose-headings:text-slate-800 prose-h2:text-2xl prose-h2:border-b prose-h2:pb-2 prose-h3:text-xl prose-a:text-emerald-600 prose-table:border-collapse prose-th:border prose-th:bg-slate-50 prose-td:border prose-td:p-2"}>
-      <Markdown 
+  // 3. Pre-render LaTeX inside raw HTML tags (e.g. <table>, <td>, <div>)
+  // Because remark-math ignores LaTeX inside raw HTML elements
+  if (/<(table|td|th|div|span|p)[^>]*>/i.test(processedContent)) {
+    processedContent = processedContent.replace(/(<(table|tr|td|th|div|span|p)[^>]*>[\s\S]*?<\/\2>)/gi, (htmlBlock) => {
+      // Replace $$...$$ in HTML
+      let rendered = htmlBlock.replace(/\$\$([\s\S]*?)\$\$/g, (m, tex) => {
+        try {
+          return katex.renderToString(tex.trim(), { displayMode: true, throwOnError: false });
+        } catch (e) {
+          return m;
+        }
+      });
+      // Replace $...$ in HTML
+      rendered = rendered.replace(/(?<!\$)\$(?!\$)([^\$\n]+?)(?<!\$)\$(?!\$)/g, (m, tex) => {
+        try {
+          let trimmed = tex.trim();
+          let trailingPunct = "";
+          const punctMatch = trimmed.match(/([.,;:!?]+)$/);
+          if (punctMatch && !/[\\\}]/.test(punctMatch[1])) {
+            trailingPunct = punctMatch[1];
+            trimmed = trimmed.slice(0, -trailingPunct.length).trim();
+          }
+          return katex.renderToString(trimmed, { displayMode: false, throwOnError: false }) + trailingPunct;
+        } catch (e) {
+          return m;
+        }
+      });
+      return rendered;
+    });
+  }
 
+  // 4. Auto-scanner effect: whenever content updates or AI streams in new text,
+  // scan the rendered DOM container with katex auto-render to catch any unparsed formula delimiters
+  useEffect(() => {
+    if (!containerRef.current) return;
+    try {
+      if (typeof renderMathInElement === 'function') {
+        renderMathInElement(containerRef.current, {
+          delimiters: [
+            { left: "$$", right: "$$", display: true },
+            { left: "$", right: "$", display: false },
+            { left: "\\(", right: "\\)", display: false },
+            { left: "\\[", right: "\\]", display: true }
+          ],
+          throwOnError: false,
+          errorColor: '#cc0000',
+          ignoredTags: ["script", "noscript", "style", "textarea", "pre", "code"],
+          ignoredClasses: ["katex", "katex-display", "katex-html", "katex-mathml"]
+        });
+      }
+    } catch (err) {
+      console.warn("KaTeX auto-render pass completed with warnings:", err);
+    }
+  }, [processedContent]);
+
+  return (
+    <div 
+      ref={containerRef}
+      className={className || "markdown-body prose prose-slate max-w-none prose-headings:text-slate-800 prose-h2:text-2xl prose-h2:border-b prose-h2:pb-2 prose-h3:text-xl prose-a:text-emerald-600 prose-table:border-collapse prose-th:border prose-th:bg-slate-50 prose-td:border prose-td:p-2"}
+    >
+      <Markdown 
         remarkPlugins={[remarkMath, remarkGfm]} 
         rehypePlugins={[rehypeRaw, [rehypeKatex, { strict: false, throwOnError: false }]]}
         components={{
@@ -103,3 +171,4 @@ export const MarkdownRenderer = ({ content, className }: { content: string, clas
     </div>
   );
 };
+

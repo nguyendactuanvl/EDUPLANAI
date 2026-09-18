@@ -2,11 +2,8 @@ import { apiFetch } from '../lib/apiFetch';
 import { exportHtmlToWord } from '../lib/exportUtils';
 import React, { useState, useRef } from 'react';
 import { Upload, X, FileText, Loader2, Download, AlertCircle } from 'lucide-react';
-import Markdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
-import rehypeRaw from 'rehype-raw';
+import { MarkdownRenderer } from '../components/MarkdownRenderer';
+import { parseApiResponse } from '../lib/utils';
 import mammoth from 'mammoth';
 
 const fileToBase64 = (file: File): Promise<string> => {
@@ -105,8 +102,7 @@ export function PdfToWord() {
       }
 
       const text = await response.text();
-      let data;
-      try { data = JSON.parse(text); } catch(e) { throw new Error(`Lỗi phản hồi từ máy chủ (không phải JSON). Chi tiết: ${text ? text.substring(0, 150) : ""}`); }
+      const data = parseApiResponse<any>(text);
       setResultText(typeof data.result === 'string' ? data.result : (data.result?.candidates?.[0]?.content?.parts?.[0]?.text || JSON.stringify(data.result)));
     } catch (err: any) {
       console.error(err);
@@ -243,13 +239,8 @@ export function PdfToWord() {
           </div>
 
           <div className="bg-slate-50 rounded-xl p-8 border border-slate-200">
-            <div ref={exportRef} className="markdown-body prose prose-slate max-w-none prose-headings:text-slate-800 prose-h2:text-2xl prose-h2:text-blue-700 prose-h2:border-b prose-h2:pb-2 prose-h3:text-xl prose-a:text-emerald-600">
-              <Markdown 
-                remarkPlugins={[remarkMath, remarkGfm]} 
-                rehypePlugins={[rehypeRaw, [rehypeKatex, { strict: false, throwOnError: false }]]}
-              >
-                {resultText}
-              </Markdown>
+            <div ref={exportRef}>
+              <MarkdownRenderer content={resultText} />
             </div>
           </div>
         </div>

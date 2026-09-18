@@ -1,4 +1,5 @@
 import { apiFetch } from '../lib/apiFetch';
+import { parseApiResponse } from '../lib/utils';
 import { useState, useEffect } from "react";
 import { Calendar, Plus, Upload, CheckSquare, Trash2, Loader2, FileImage, Moon } from "lucide-react";
 
@@ -97,8 +98,7 @@ export function WeeklyTimetable() {
           body: JSON.stringify({ file: base64, type: "timetable" })
         });
         const text = await res.text();
-      let data;
-      try { data = JSON.parse(text); } catch(e) { throw new Error(`Lỗi phản hồi từ máy chủ: ${text.substring(0, 50)}...`); }
+        const data = parseApiResponse<any>(text);
         
         if (data.entries) {
           const newTimetable = { ...timetable };

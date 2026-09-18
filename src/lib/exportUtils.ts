@@ -172,6 +172,17 @@ export async function exportHtmlToWord(element: HTMLElement, filename: string, m
                         cloned.parentNode?.replaceChild(img, cloned);
                     } catch (e) {
                         console.error("KaTeX rasterize error:", e);
+                        // Fallback: extract LaTeX annotation so it doesn't vanish in Word
+                        try {
+                            const annotationNode = orig.querySelector("annotation[encoding='application/x-tex']");
+                            const tex = annotationNode ? annotationNode.textContent || "" : "";
+                            if (tex && cloned.parentNode) {
+                                const textNode = document.createTextNode(isBlock ? " " + tex + " " : " $" + tex + "$ ");
+                                cloned.parentNode.replaceChild(textNode, cloned);
+                            }
+                        } catch (fallbackErr) {
+                            // ignore
+                        }
                     }
                 }));
             }

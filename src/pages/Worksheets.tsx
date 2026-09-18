@@ -12,7 +12,7 @@ import rehypeKatex from "rehype-katex";
 import rehypeRaw from "rehype-raw";
 import { saveToHistory, getHistory } from '../lib/history';
 import { HistoryItem } from '../types';
-import { cn } from "../lib/utils";
+import { cn, parseApiResponse } from "../lib/utils";
 import { Presentation } from "lucide-react";
 import { printElement } from '../lib/print';
 
@@ -197,16 +197,7 @@ export function Worksheets() {
       }
 
       const text = await response.text();
-      let data;
-      try { 
-        data = JSON.parse(text); 
-      } catch(e) { 
-        if (text.includes("SERVER_ERROR:")) {
-            const match = text.match(/SERVER_ERROR: (.*)"/);
-            throw new Error(match ? match[1] : "Lỗi từ máy chủ AI.");
-        }
-        throw new Error(`Lỗi phản hồi từ máy chủ (không phải JSON). Chi tiết: ${text ? text.substring(0, 150) : ""}`); 
-      }
+      const data = parseApiResponse<{ result: string }>(text);
       setSuggestion(data.result);
       
       // Save to history

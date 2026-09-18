@@ -14,6 +14,7 @@ import { saveToHistory } from '../lib/history';
 import { TextbookManager } from '../components/TextbookManager';
 import { Textbook } from '../lib/textbooks';
 import { printElement } from '../lib/print';
+import { parseApiResponse } from '../lib/utils';
 
 
 export function LessonPlan() {
@@ -163,8 +164,7 @@ export function LessonPlan() {
       }
 
       const text = await response.text();
-      let data;
-      try { data = JSON.parse(text); } catch(e) { throw new Error(`Lỗi phản hồi từ máy chủ (không phải JSON). Chi tiết: ${text ? text.substring(0, 150) : ""}`); }
+      const data = parseApiResponse<{ result: string }>(text);
       setSuggestion(data.result);
       
       // Save to history

@@ -3,12 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { getHistory, deleteFromHistory, clearHistory } from "../lib/history";
 import { HistoryItem } from "../types";
 import { Trash2, Download, Eye, Clock, BookOpen } from "lucide-react";
-import Markdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
-import rehypeRaw from 'rehype-raw';
-import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css';
+import { MarkdownRenderer } from '../components/MarkdownRenderer';
 import { cn } from "../lib/utils";
 import { printElement } from '../lib/print';
 
@@ -220,13 +215,8 @@ export function HistoryPage() {
               </button>
             </div>
             <div className="p-8 overflow-y-auto flex-1">
-              <div ref={exportRef} className="markdown-body prose prose-slate max-w-none prose-headings:text-slate-800 prose-h2:text-2xl prose-h2:border-b prose-h2:pb-2 prose-h3:text-xl prose-a:text-emerald-600 prose-table:border-collapse prose-th:border prose-th:bg-slate-50 prose-td:border prose-td:p-2">
-                <Markdown 
-                  remarkPlugins={[remarkMath, remarkGfm]} 
-                  rehypePlugins={[rehypeRaw, [rehypeKatex, { strict: false, throwOnError: false }]]}
-                >
-                  {viewingItem.content}
-                </Markdown>
+              <div ref={exportRef}>
+                <MarkdownRenderer content={viewingItem.content} />
               </div>
             </div>
           </div>

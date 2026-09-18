@@ -3,6 +3,7 @@ import { exportHtmlToWord } from '../lib/exportUtils';
 import { useState, useEffect } from "react";
 import { Upload, Plus, Save, Trash2, Award, FileText, Loader2, FileImage, Search, Edit3, Download, Printer, Trophy } from "lucide-react";
 import { Student } from "../types";
+import { parseApiResponse } from "../lib/utils";
 
 export function HomeroomManagement() {
   const [students, setStudents] = useState<Student[]>([]);
@@ -185,8 +186,7 @@ export function HomeroomManagement() {
            });
            
            const textRes = await res.text();
-           let data;
-           try { data = JSON.parse(textRes); } catch(e) { throw new Error(`Lỗi phản hồi từ máy chủ: ${textRes.substring(0, 50)}...`); }
+           const data = parseApiResponse<any>(textRes);
            
            if (!res.ok) throw new Error(data.error || "Không thể phân tích dữ liệu");
            
@@ -227,8 +227,7 @@ export function HomeroomManagement() {
              body: JSON.stringify({ file: base64, type: "student_profiles" })
            });
            const text = await res.text();
-      let data;
-      try { data = JSON.parse(text); } catch(e) { throw new Error(`Lỗi phản hồi từ máy chủ: ${text.substring(0, 50)}...`); }
+           const data = parseApiResponse<any>(text);
            
            if (data.students && Array.isArray(data.students)) {
              const newStudents = data.students.map((st: any, i: number) => ({

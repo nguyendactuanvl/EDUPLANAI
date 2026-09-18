@@ -5,6 +5,28 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+export function parseApiResponse<T = any>(text: string): T {
+  if (!text || !text.trim()) {
+    throw new Error("Máy chủ phản hồi rỗng (kết nối bị gián đoạn hoặc hết thời gian chờ). Vui lòng thử lại.");
+  }
+  const clean = text.trim();
+  if (clean.includes("SERVER_ERROR:")) {
+    const match = clean.match(/SERVER_ERROR:\s*([^"\n\r]+)/);
+    throw new Error(match ? match[1].trim() : "Lỗi từ máy chủ AI.");
+  }
+  try {
+    return JSON.parse(clean);
+  } catch (e) {
+    const jsonMatch = clean.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        return JSON.parse(jsonMatch[0]);
+      } catch (inner) {}
+    }
+    throw new Error("Phản hồi từ máy chủ không đúng định dạng. Vui lòng bấm tạo lại.");
+  }
+}
+
 export function cleanQuestionStem(content: any, options?: any[]): string {
   if (!content) return '';
   let text = String(content).trim();
@@ -167,11 +189,20 @@ export const fixMath = (text: any) => {
         return `\n$$\n${env.trim()}\n$$\n`;
     });
 
-    // 2.5. Normalize spaces inside inline $ ... $ so remark-math recognizes them (e.g. "$ 1 $" -> "$1$", "$ x = 2 $" -> "$x = 2$")
+    // 2.5. Normalize spaces and trailing punctuation inside inline $ ... $ so remark-math and KaTeX recognize them
+    // (e.g. "$ 1 $" -> "$1$", "$-\pi < -2 \Leftrightarrow \pi^2 < 4.$" -> "$-\pi < -2 \Leftrightarrow \pi^2 < 4$.")
     t = t.replace(/(?<!\$)\$(?!\$)\s*([^\$\n]+?)\s*(?<!\$)\$(?!\$)/g, (match, formula) => {
-        const trimmed = formula.trim();
+        let trimmed = formula.trim();
         if (!trimmed) return match;
-        return `$${trimmed}$`;
+        
+        let trailingPunct = "";
+        const punctMatch = trimmed.match(/([.,;:!?]+)$/);
+        if (punctMatch && !/[\\\}]/.test(punctMatch[1])) {
+            trailingPunct = punctMatch[1];
+            trimmed = trimmed.slice(0, -trailingPunct.length).trim();
+        }
+        
+        return `$${trimmed}$${trailingPunct}`;
     });
 
     // 2.8. Protect existing math blocks & code blocks while wrapping naked math commands

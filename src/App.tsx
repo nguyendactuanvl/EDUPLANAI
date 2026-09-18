@@ -6,6 +6,7 @@
 import { Menu, Sparkles, Key, AlertCircle } from "lucide-react";
 import React, { useState, Suspense, useEffect } from "react";
 import { Sidebar } from "./components/Sidebar";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 const EducationalPlan = React.lazy(() => import("./pages/EducationalPlan").then(module => ({ default: module.EducationalPlan })));
 const LessonPlan = React.lazy(() => import("./pages/LessonPlan").then(module => ({ default: module.LessonPlan })));
 const Circulars = React.lazy(() => import("./pages/Circulars").then(module => ({ default: module.Circulars })));
@@ -116,20 +117,22 @@ export default function App() {
         </header>
 
         <div className="flex-1 overflow-y-auto relative w-full h-full">
-          <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-500">Đang tải...</div>}>
-          {activeTab === "khgd" && <EducationalPlan />}
-          {activeTab === "khdh" && <LessonPlan />}
-          {activeTab === "worksheets" && <Worksheets />}
-          {activeTab === "exercise" && <ExerciseSolver />}
-                              {activeTab === "gamification" && <Gamification />}
-          {activeTab === "classmap" && <ClassMap />}
-          {activeTab === "homeroom" && <HomeroomManagement />}
-          {activeTab === "timetable" && <WeeklyTimetable />}
-          {activeTab === "exam" && <ExamGenerator />}
-          {activeTab === "pdf2word" && <PdfToWord />}
-          {activeTab === "circulars" && <Circulars />}
-          {activeTab === "history" && <HistoryPage />}
-                  </Suspense>
+          <ErrorBoundary key={activeTab}>
+            <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-500">Đang tải...</div>}>
+              {activeTab === "khgd" && <EducationalPlan />}
+              {activeTab === "khdh" && <LessonPlan />}
+              {activeTab === "worksheets" && <Worksheets />}
+              {activeTab === "exercise" && <ExerciseSolver />}
+              {activeTab === "gamification" && <Gamification />}
+              {activeTab === "classmap" && <ClassMap />}
+              {activeTab === "homeroom" && <HomeroomManagement />}
+              {activeTab === "timetable" && <WeeklyTimetable />}
+              {activeTab === "exam" && <ExamGenerator />}
+              {activeTab === "pdf2word" && <PdfToWord />}
+              {activeTab === "circulars" && <Circulars />}
+              {activeTab === "history" && <HistoryPage />}
+            </Suspense>
+          </ErrorBoundary>
         </div>
       </main>
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />

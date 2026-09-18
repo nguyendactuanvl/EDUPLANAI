@@ -2,6 +2,7 @@ import { apiFetch } from '../lib/apiFetch';
 import { useState, useEffect, useRef } from "react";
 import { Trophy, Star, MinusCircle, Play, Users, Medal, Crown, Filter, History, Loader2, Upload, Plus, Trash2, Edit2, FolderOpen, MessageSquare, X, Send } from "lucide-react";
 import { Student } from "../types";
+import { parseApiResponse } from "../lib/utils";
 import confetti from "canvas-confetti";
 
 interface ScoreRecord {
@@ -168,8 +169,7 @@ export function Gamification() {
           body: JSON.stringify({ file: base64, type: "students" })
         });
         const text = await res.text();
-      let data;
-      try { data = JSON.parse(text); } catch(e) { throw new Error(`Lỗi phản hồi từ máy chủ: ${text.substring(0, 50)}...`); }
+        const data = parseApiResponse<any>(text);
         
         if (data.students && Array.isArray(data.students)) {
           const newStudents = data.students.map((name: string, i: number) => ({
@@ -302,8 +302,7 @@ export function Gamification() {
         body: JSON.stringify({ prompt: aiQuery, context: rankedData })
       });
       const text = await res.text();
-      let data;
-      try { data = JSON.parse(text); } catch(e) { throw new Error(`Lỗi phản hồi từ máy chủ: ${text.substring(0, 50)}...`); }
+      const data = parseApiResponse<any>(text);
       if (res.ok) {
         setAiResponse(data.text);
       } else {
