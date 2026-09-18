@@ -5,9 +5,10 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import rehypeRaw from 'rehype-raw';
 import { TikzRenderer } from './TikzRenderer';
+import { fixMath } from '../lib/utils';
 
 export const MarkdownRenderer = ({ content, className }: { content: string, className?: string }) => {
-  let processedContent = content || '';
+  let processedContent = fixMath(content || '');
 
   // 0. Unescape escaped dollar signs so KaTeX/remark-math parses them as math delimiters
   processedContent = processedContent.replace(/\\(\$)/g, '$1');

@@ -25,6 +25,131 @@ export function cleanQuestionStem(content: any, options?: any[]): string {
   return text.trim();
 }
 
+export const wrapAllNakedMath = (str: string): string => {
+  const mathCmds = [
+    "dfrac", "frac", "sqrt", "vec", "overrightarrow", "int", "iint", "iiint", "oint", 
+    "lim", "sum", "prod", "log", "ln", "sin", "cos", "tan", "cot", "arcsin", "arccos", "arctan",
+    "alpha", "beta", "gamma", "delta", "Delta", "pi", "theta", "Theta", "lambda", "Lambda",
+    "mu", "sigma", "Sigma", "omega", "Omega", "phi", "Phi", "in", "notin", "subset", "supset",
+    "cup", "cap", "emptyset", "forall", "exists", "infty", "pm", "mp", "times", "div",
+    "le", "ge", "leq", "geq", "neq", "approx", "equiv", "sim", "cong", "parallel", "perp", "angle", "circ", "partial", "nabla"
+  ].join("|");
+
+  const stopWords = /^(và|hoặc|với|khi|thì|là|bằng|thuộc|trên|trong|tại|sao\s+cho|đồng\s+biến|nghịch\s+biến|liên\s+tục|có|tìm|tính|chứng\s+minh|xét|giải|cho|gọi|biết|nếu|suy\s+ra|tương\s+đương|kết\s+luận|hãy|để|đáp\s+án|phương\s+trình|hệ\s+phương\s+trình|bất\s+phương\s+trình|hàm\s+số|đồ\s+thị|vectơ|vecto|tọa\s+độ|mặt\s+phẳng|đường\s+thẳng|điểm|khoảng|đoạn|nửa\s+khoảng)\b/i;
+
+  const findStartWithPrefix = (text: string, cmdIndex: number): number => {
+    const before = text.slice(0, cmdIndex);
+    const prefixMatch = before.match(/(?:^|[\s\(\[\{;])([a-zA-Z](?:_\{?[0-9a-zA-Z]+\}?)?(?:\([a-zA-Z0-9,\s]*\))?\s*(?:[=><\le\ge\approx\neq]|>=|<=|==|!=|\\le|\\ge|\\approx|\\neq|\\sim)?\s*)$/);
+    if (prefixMatch && prefixMatch[1]) {
+      return cmdIndex - prefixMatch[1].length;
+    }
+    return cmdIndex;
+  };
+
+  const findMathSpan = (s: string, startIdx: number): { endIndex: number; formula: string } => {
+    let i = startIdx;
+    const len = s.length;
+    let braceDepth = 0;
+    let bracketDepth = 0;
+    let parenDepth = 0;
+    let lastValidEnd = startIdx;
+
+    while (i < len) {
+      const ch = s[i];
+
+      if (ch === "\\") {
+        const restCmd = s.slice(i).match(/^\\[a-zA-Z]+/);
+        if (restCmd) {
+          i += restCmd[0].length;
+          lastValidEnd = i;
+          continue;
+        } else {
+          i += 2;
+          lastValidEnd = i;
+          continue;
+        }
+      }
+
+      if (ch === "{") {
+        braceDepth++;
+      } else if (ch === "}") {
+        braceDepth--;
+        if (braceDepth < 0) break;
+        if (braceDepth === 0 && bracketDepth === 0 && parenDepth === 0) {
+          lastValidEnd = i + 1;
+        }
+      } else if (ch === "[") {
+        bracketDepth++;
+      } else if (ch === "]") {
+        bracketDepth--;
+        if (bracketDepth < 0) break;
+        if (braceDepth === 0 && bracketDepth === 0 && parenDepth === 0) {
+          lastValidEnd = i + 1;
+        }
+      } else if (ch === "(") {
+        parenDepth++;
+      } else if (ch === ")") {
+        parenDepth--;
+        if (parenDepth < 0) break;
+        if (braceDepth === 0 && bracketDepth === 0 && parenDepth === 0) {
+          lastValidEnd = i + 1;
+        }
+      } else if (braceDepth === 0 && bracketDepth === 0 && parenDepth === 0) {
+        if (/^[.,:;?!](\s|$)/.test(s.slice(i))) {
+          break;
+        }
+
+        if (/[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(ch)) {
+          break;
+        }
+
+        if (/[\s\n\r]/.test(ch)) {
+          const afterSpace = s.slice(i).trimStart();
+          if (!afterSpace) break;
+
+          if (stopWords.test(afterSpace) || /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(afterSpace.charAt(0))) {
+            break;
+          }
+
+          if (/^([+\-*\/=<>]|\\|\d+|[a-zA-Z]{1,4}\b|\(|\)|\[|\]|\{|\})/.test(afterSpace)) {
+            i += (s.slice(i).length - afterSpace.length);
+            lastValidEnd = i;
+            continue;
+          } else {
+            break;
+          }
+        }
+
+        lastValidEnd = i + 1;
+      }
+      i++;
+    }
+
+    return { endIndex: lastValidEnd, formula: s.slice(startIdx, lastValidEnd).trim() };
+  };
+
+  let result = "";
+  let idx = 0;
+  const cmdRegex = new RegExp(`\\\\(?:${mathCmds})(?=[^a-zA-Z]|$)`, "g");
+
+  while (idx < str.length) {
+    cmdRegex.lastIndex = idx;
+    const match = cmdRegex.exec(str);
+    if (!match) {
+      result += str.slice(idx);
+      break;
+    }
+
+    const startWithPrefix = findStartWithPrefix(str, match.index);
+    result += str.slice(idx, startWithPrefix);
+    const span = findMathSpan(str, startWithPrefix);
+    result += `$${span.formula}$`;
+    idx = span.endIndex;
+  }
+
+  return result;
+};
+
 export const fixMath = (text: any) => {
     if (!text || text === 'undefined') return '';
     if (typeof text !== 'string') text = String(text);
@@ -37,12 +162,36 @@ export const fixMath = (text: any) => {
     t = t.replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$');
     t = t.replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$');
 
+    // 2.2. Wrap naked LaTeX environments (cases, aligned, array, matrix, etc.) if not already in $$...$$ or $...$
+    t = t.replace(/(?<!\$)\s*(\\begin\s*\{(cases|aligned|array|matrix|pmatrix|bmatrix|vmatrix|Vmatrix|split|gather|align)\*?\}[\s\S]*?\\end\s*\{\2\*?\})\s*(?!\$)/g, (match, env) => {
+        return `\n$$\n${env.trim()}\n$$\n`;
+    });
+
     // 2.5. Normalize spaces inside inline $ ... $ so remark-math recognizes them (e.g. "$ 1 $" -> "$1$", "$ x = 2 $" -> "$x = 2$")
     t = t.replace(/(?<!\$)\$(?!\$)\s*([^\$\n]+?)\s*(?<!\$)\$(?!\$)/g, (match, formula) => {
         const trimmed = formula.trim();
         if (!trimmed) return match;
         return `$${trimmed}$`;
     });
+
+    // 2.8. Protect existing math blocks & code blocks while wrapping naked math commands
+    const tokenRegex = /(```[\s\S]*?```|\$\$[\s\S]*?\$\$|\$(?:\\\$|[^\$\n])+?\$)/g;
+    const parts: { isProtected: boolean; text: string }[] = [];
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+
+    while ((match = tokenRegex.exec(t)) !== null) {
+        if (match.index > lastIndex) {
+            parts.push({ isProtected: false, text: t.substring(lastIndex, match.index) });
+        }
+        parts.push({ isProtected: true, text: match[0] });
+        lastIndex = tokenRegex.lastIndex;
+    }
+    if (lastIndex < t.length) {
+        parts.push({ isProtected: false, text: t.substring(lastIndex) });
+    }
+
+    t = parts.map(p => p.isProtected ? p.text : wrapAllNakedMath(p.text)).join('');
 
     // 3. Fix BBT missing hlines and vertical lines
     if (t.includes('\\begin{array}')) {
