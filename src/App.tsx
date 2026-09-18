@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
-
+import { Analytics } from '@vercel/analytics/react';
 import { Menu, Sparkles, Key, AlertCircle } from "lucide-react";
 import React, { useState, Suspense, useEffect } from "react";
 import { Sidebar } from "./components/Sidebar";
@@ -136,6 +136,7 @@ export default function App() {
         </div>
       </main>
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+      <Analytics />
     </div>
   );
 }
