@@ -9,35 +9,25 @@ import WordExtractor from 'word-extractor';
 
 export const maxDuration = 60; // 1 minute max duration on Vercel Hobby
 
-const MATH_FORMATTING_RULES = `
-QUY TẮC ĐỊNH DẠNG TOÁN HỌC VÀ VĂN BẢN (BẮT BUỘC TUÂN THỦ NGHIÊM NGẶT):
+const MATH_FORMATTING_RULES = `QUY TẮC ĐỊNH DẠNG TOÁN HỌC VÀ VĂN BẢN (BẮT BUỘC TUÂN THỦ NGHIÊM NGẶT):
 1. Mọi công thức Toán bắt buộc viết bằng cú pháp chuẩn LaTeX (tuyệt đối không dùng ký tự Unicode như √, ∫).
 2. Công thức nằm cùng dòng văn bản: Luôn kẹp trong cặp dấu $...$ (ví dụ: $y = \dfrac{ax+b}{cx+d}$, $x \in [1; 5]$). LUÔN CÓ KHOẢNG TRẮNG trước và sau dấu $ để không bị dính chữ.
 3. Công thức nằm riêng một dòng độc lập: Luôn kẹp trong cặp dấu $...$.
 4. Ký hiệu bắt buộc: Phân số dùng \dfrac{a}{b}, hệ phương trình dùng \begin{cases} ... \end{cases}.
 5. Bố cục văn bản dùng định dạng Markdown rõ ràng.
-6. [CỰC KỲ QUAN TRỌNG] VỀ BẢNG BIẾN THIÊN (BBT):
-   - Với **Bảng biến thiên**, HÃY dùng môi trường LaTeX dạng ma trận \begin{array} kẹp trong khối $...$.
-   - [QUAN TRỌNG] BẮT BUỘC PHẢI DÙNG lệnh \hline giữa tất cả các dòng của BBT để tạo đường kẻ ngang (y' và y). Không được thiếu \hline ở bất kỳ dòng nào.
-   - TUYỆT ĐỐI KHÔNG DÙNG cú pháp nhân bản cột (như *{3}{c|}). Bạn PHẢI viết rõ từng cột (ví dụ: {|c|c|c|c|c|}).
-   - Nếu có điểm mà y và y' không xác định, BẮT BUỘC tạo 2 vạch đứng liên tục. Cách tốt nhất trong KaTeX là gộp 2 vạch đứng ở khai báo cột (ví dụ: {|c|c||c|}) tại vị trí không xác định, hoặc điền dấu || trực tiếp vào ô tương ứng ở cả dòng y' và y.
-   Ví dụ Bảng biến thiên hợp lệ (CÓ đường kẻ ngang và vạch đôi):
-   $$
-   \begin{array}{|c|lccc||ccc|}
-   \hline
-   x & -\infty & & -1 & & 2 & & +\infty \\
-   \hline
-   y' & & + & 0 & - & || & + & \\
-   \hline
-   y & & \nearrow & 5 & \searrow & || & \nearrow & +\infty \\
-   \hline
-   \end{array}
-   $$
-7. HÌNH VẼ VÀ ĐỒ THỊ BẰNG TIKZ:
-   - BẮT BUỘC sử dụng TikZ nếu bài toán cần hình vẽ.
-   - BẮT BUỘC phải bao bọc mã bên trong \\begin{tikzpicture} và \\end{tikzpicture}.
-   - Mã TikZ phải được bọc trong khối markdown \`\`\`tikz ... \`\`\`.
-   - LƯU Ý: Chỉ dùng các lệnh vẽ cơ bản (\\draw, \\node, \\fill). TUYỆT ĐỐI KHÔNG dùng pgfplots (không dùng \\begin{axis}). Không dùng \\usepackage.`;
+6. [CỰC KỲ QUAN TRỌNG] BẢNG BIẾN THIÊN VÀ ĐỒ THỊ BẰNG TIKZ:
+   - BẮT BUỘC đặt toàn bộ code vẽ bảng biến thiên hoặc đồ thị vào trong khối markdown \`\`\`tikz ... \`\`\`. 
+   - BẮT BUỘC phải bao bọc mã bên trong \begin{tikzpicture} và \end{tikzpicture}. KHÔNG DÙNG pgfplots (axis).
+   - VỚI BẢNG BIẾN THIÊN: Dùng gói tkz-tab chuẩn mực. KHÔNG dùng môi trường ma trận array.
+     + Cấu hình bắt buộc: \tkzTabInit[lgt=1.5, espcl=3]...
+     + Điểm gián đoạn (không xác định) bắt buộc dùng 2 vạch song song: ký hiệu d, -d/, +d/ trong tkz-tab.
+     + Ký hiệu tổng quát: x_1, x_2, y_{CĐ}, y_{CT}, -\infty, +\infty.
+   - VỚI ĐỒ THỊ: 
+     + Tuyệt đối KHÔNG dùng đường cong Bezier (.. controls ..) kéo tự do làm sai tiếp tuyến đồ thị hàm số.
+     + Phải dùng hàm giải tích chuẩn (ví dụ: \draw[domain=..., samples=100] plot (\\x, \{hàm_số\})).
+     + Điểm cực trị phải có tiếp tuyến ngang chính xác. 
+     + Đường tiệm cận đứng, ngang, xiên phải vẽ nét đứt (dashed).
+     + Phải gióng tọa độ đầy đủ nhãn tổng quát. Ký hiệu hệ trục Oxy (có mũi tên, nhãn x, y, O).`;
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
@@ -421,6 +411,15 @@ Trả về danh sách các tiết học/lịch công tác.`;
             }
           },
           required: ["students"]
+        };
+      } else if (type === "raw_text") {
+        promptText = "Trích xuất toàn bộ nội dung văn bản từ tài liệu đính kèm. Hãy giữ nguyên định dạng ngắt dòng. Trả về toàn bộ dưới dạng chuỗi trong trường text.";
+        responseSchema = {
+          type: Type.OBJECT,
+          properties: {
+            text: { type: Type.STRING }
+          },
+          required: ["text"]
         };
       } else {
         throw new Error("Invalid extract type");

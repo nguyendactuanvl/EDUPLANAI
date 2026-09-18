@@ -166,6 +166,47 @@ export function HomeroomManagement() {
     }, 250);
   };
 
+  const handleRuleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.type.startsWith('image/') || file.name.endsWith('.pdf') || file.name.endsWith('.doc') || file.name.endsWith('.docx')) {
+       const reader = new FileReader();
+       reader.onload = async (event) => {
+         const base64 = event.target?.result as string;
+         setIsExtracting(true);
+         try {
+           const res = await apiFetch("/api/extract-data", {
+             method: "POST",
+             headers: {
+               "Content-Type": "application/json",
+             },
+             body: JSON.stringify({ file: base64, type: "raw_text" })
+           });
+           
+           const textRes = await res.text();
+           let data;
+           try { data = JSON.parse(textRes); } catch(e) { throw new Error(`Lỗi phản hồi từ máy chủ: ${textRes.substring(0, 50)}...`); }
+           
+           if (!res.ok) throw new Error(data.error || "Không thể phân tích dữ liệu");
+           
+           if (data.text) {
+             setCompetitionRules(data.text);
+           }
+         } catch (error: any) {
+           alert("Lỗi: " + error.message);
+         } finally {
+           setIsExtracting(false);
+           // Reset input
+           e.target.value = '';
+         }
+       };
+       reader.readAsDataURL(file);
+    } else {
+      alert("Vui lòng tải lên file ảnh, PDF hoặc Word.");
+    }
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -530,8 +571,8 @@ export function HomeroomManagement() {
             />
             <div className="mt-3">
               <label className="w-full flex items-center justify-center gap-2 px-4 py-2 border-2 border-dashed border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg cursor-pointer transition-colors text-sm font-medium">
-                <Upload className="w-4 h-4" /> Tải lên File quy định (PDF/Word)
-                <input type="file" className="hidden" />
+                {isExtracting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />} {isExtracting ? 'Đang trích xuất AI...' : 'Tải lên File quy định (PDF/Word)'}
+                <input type="file" className="hidden" accept="image/*,.pdf,.doc,.docx" onChange={handleRuleFileUpload} disabled={isExtracting} />
               </label>
             </div>
           </div>

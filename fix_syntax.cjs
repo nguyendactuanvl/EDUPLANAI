@@ -1,14 +1,9 @@
 const fs = require('fs');
+let code = fs.readFileSync('api/index.ts', 'utf8');
 
-const fixFile = (file) => {
-  if (!fs.existsSync(file)) return;
-  let code = fs.readFileSync(file, 'utf8');
-  code = code.replace(/\`\$\{(GiaoAn_\$\{.*?\}|PhieuHocTap_\$\{.*?\}|LoiGiai_\$\{.*?\}|TaiLieu_DaChuyenDoi_\$\{.*?\})\}_/g, '`$1_');
-  fs.writeFileSync(file, code);
-};
+const oldLine = "+ Phải dùng hàm giải tích chuẩn (ví dụ: \\draw[domain=..., samples=100] plot (\\x, {hàm_số})).";
+const newLine = "+ Phải dùng hàm giải tích chuẩn (ví dụ: \\draw[domain=..., samples=100] plot (\\x, \\{hàm_số\\})).";
 
-fixFile('src/pages/LessonPlan.tsx');
-fixFile('src/pages/Worksheets.tsx');
-fixFile('src/pages/ExerciseSolver.tsx');
-fixFile('src/pages/PdfToWord.tsx');
-console.log("Syntax fixed");
+code = code.replace(oldLine, newLine);
+fs.writeFileSync('api/index.ts', code);
+console.log("Fixed syntax");
