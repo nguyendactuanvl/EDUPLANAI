@@ -319,9 +319,14 @@ async function keepAliveExecute(req: any, res: any, fn: () => Promise<any>) {
     if (!headersSent) {
       return handleAiError(error, req, res);
     } else {
-      res.write(`
-
-"SERVER_ERROR: ${error.message}"`);
+      let rawMsg = error?.message || String(error);
+      try {
+        const parsed = JSON.parse(rawMsg);
+        if (parsed?.error?.message) rawMsg = parsed.error.message;
+        else if (parsed?.message) rawMsg = parsed.message;
+      } catch (e) {}
+      const cleanMsg = rawMsg.replace(/[\r\n]+/g, ' ').replace(/"/g, "'").trim();
+      res.write(`\n\nSERVER_ERROR: ${cleanMsg}\n`);
       res.end();
     }
   }
@@ -330,7 +335,7 @@ async function keepAliveExecute(req: any, res: any, fn: () => Promise<any>) {
 
 async function generateWithFallback(req: any, payloadOptions: any) {
   const client = getAiClient(req);
-  const models = ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-flash"];
+  const models = ["gemini-3.8-flash", "gemini-3.1-pro-preview", "gemini-flash-latest", "gemini-3.1-flash-lite"];
   let primaryError: any = null;
   
   const maxRetries = 3;
@@ -344,6 +349,7 @@ async function generateWithFallback(req: any, payloadOptions: any) {
           ...payloadOptions, 
           model,
           config: {
+            maxOutputTokens: 8192,
             ...config,
             systemInstruction: `Bạn là chuyên gia Toán học. BẮT BUỘC dùng cú pháp LaTeX chuẩn kẹp trong cặp dấu $...$ (nội dòng) hoặc $...$ (khối dòng) cho TẤT CẢ các thành phần toán:
 - Chỉ số dưới BẮT BUỘC dùng dấu gạch dưới: $u_1$, $u_6$, $S_{10}$, $N_0$, $N_t$.
@@ -569,7 +575,8 @@ app.all("/api/generate-exam", async (req, res) => {
       customPrompt = "", 
       qCounts = {},
       matrixFile,
-      selectedTopics = []
+      selectedTopics = [],
+      detailedSolution = true
     } = req.body;
 
     let files = resolveFiles(req.body);
@@ -613,7 +620,7 @@ ${MATH_FORMATTING_RULES}
 - Câu trắc nghiệm (mc): mảng "options" phải có ĐÚNG 4 phần tử dạng chuỗi. "correctOptionIndex" là chỉ số đáp án đúng (0, 1, 2, 3).
 - Câu đúng/sai (tf): "tfStatements" phải là mảng ĐÚNG 4 đối tượng [{ "statement": "...", "correct": true/false }].
 - Câu trả lời ngắn (sa): "correctAnswer" là chuỗi kết quả ngắn gọn (ví dụ: "3", "-1/2", "5").
-- BẮT BUỘC kèm lời giải chi tiết (explanation) rõ ràng, chuẩn xác sư phạm cho từng câu hỏi.
+${detailedSolution !== false ? '- BẮT BUỘC kèm lời giải chi tiết (explanation) rõ ràng, chuẩn xác sư phạm cho từng câu hỏi.' : '- Giáo viên KHÔNG yêu cầu lời giải chi tiết. Hãy để trường "explanation" là chuỗi ngắn gọn để tối ưu tốc độ tạo đề.'}
 
 BẮT BUỘC TRẢ VỀ DUY NHẤT MỘT ĐỐI TƯỢNG JSON HỢP LỆ VỚI CẤU TRÚC SAU:
 {
@@ -687,8 +694,22 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT MỘT ĐỐI TƯỢNG JSON HỢP LỆ VỚI C
     try {
       parsedData = JSON.parse(rawText);
     } catch (e) {
-      const cleanJson = rawText.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
-      parsedData = JSON.parse(cleanJson);
+      try {
+        const cleanJson = rawText.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
+        parsedData = JSON.parse(cleanJson);
+      } catch (e2) {
+        const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          try {
+            parsedData = JSON.parse(jsonMatch[0]);
+          } catch (e3) {
+            // Salvage questions if JSON was truncated
+            parsedData = { examName: `Đề kiểm tra ${subject} ${grade}`, questions: [] };
+          }
+        } else {
+          parsedData = { examName: `Đề kiểm tra ${subject} ${grade}`, questions: [] };
+        }
+      }
     }
 
     if (!parsedData.questions || !Array.isArray(parsedData.questions)) {

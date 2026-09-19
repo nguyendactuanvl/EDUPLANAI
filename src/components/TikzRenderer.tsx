@@ -40,17 +40,43 @@ export function renderTikzFallbackSvg(raw: string): string | null {
   try {
     const cleaned = cleanTikzCode(raw);
     const svgElements: string[] = [];
-    
-    // Scale factor & coordinate center for standard 2D Cartesian diagrams
-    const scale = 36;
-    const originX = 180;
-    const originY = 160;
-    const toSvgX = (x: number) => originX + x * scale;
-    const toSvgY = (y: number) => originY - y * scale;
+    const allCoords: { x: number; y: number }[] = [];
+
+    // Extract all coordinates from draw and node commands to compute dynamic bounding box
+    const coordRegexGlobal = /\(\s*([-\d\.]+)\s*,\s*([-\d\.]+)\s*\)/g;
+    let anyMatch;
+    while ((anyMatch = coordRegexGlobal.exec(cleaned)) !== null) {
+      allCoords.push({ x: parseFloat(anyMatch[1]), y: parseFloat(anyMatch[2]) });
+    }
+
+    // Default bounding box if few or no coordinates detected
+    let minX = -4, maxX = 4, minY = -3, maxY = 3;
+    if (allCoords.length >= 2) {
+      minX = Math.min(...allCoords.map(c => c.x));
+      maxX = Math.max(...allCoords.map(c => c.x));
+      minY = Math.min(...allCoords.map(c => c.y));
+      maxY = Math.max(...allCoords.map(c => c.y));
+    }
+
+    // Add 15% margin
+    const spanX = Math.max(maxX - minX, 2);
+    const spanY = Math.max(maxY - minY, 2);
+    const padX = spanX * 0.15;
+    const padY = spanY * 0.15;
+    const adjMinX = minX - padX;
+    const adjMaxX = maxX + padX;
+    const adjMinY = minY - padY;
+    const adjMaxY = maxY + padY;
+
+    const svgWidth = 380;
+    const svgHeight = Math.max(200, Math.min(340, Math.round(svgWidth * ((adjMaxY - adjMinY) / (adjMaxX - adjMinX)))));
+
+    const toSvgX = (x: number) => ((x - adjMinX) / (adjMaxX - adjMinX)) * svgWidth;
+    const toSvgY = (y: number) => svgHeight - ((y - adjMinY) / (adjMaxY - adjMinY)) * svgHeight;
 
     svgElements.push(`<defs>
       <marker id="arrow-head" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-        <path d="M 0 1 L 10 5 L 0 9 z" fill="#334155" />
+        <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#334155" />
       </marker>
     </defs>`);
 
@@ -62,9 +88,20 @@ export function renderTikzFallbackSvg(raw: string): string | null {
       const body = match[2] || '';
 
       const isArrow = opts.includes('->') || opts.includes('stealth') || opts.includes('latex');
-      const isDashed = opts.includes('dashed');
-      const strokeColor = opts.includes('red') ? '#dc2626' : opts.includes('blue') ? '#2563eb' : '#334155';
-      const fillColor = (opts.includes('fill') || body.includes('fill')) ? 'rgba(148, 163, 184, 0.25)' : 'none';
+      const isDashed = opts.includes('dashed') || opts.includes('dotted');
+      const strokeColor = opts.includes('red') ? '#dc2626' : opts.includes('blue') ? '#2563eb' : opts.includes('emerald') || opts.includes('green') ? '#059669' : '#334155';
+      const fillColor = (opts.includes('fill') || body.includes('fill')) ? 'rgba(148, 163, 184, 0.22)' : 'none';
+
+      // Circle support: (x,y) circle [radius=r] or (x,y) circle (r)
+      const circleMatch = body.match(/\(\s*([-\d\.]+)\s*,\s*([-\d\.]+)\s*\)\s*circle\s*(?:\[radius=\s*([-\d\.]+)\s*\]|\(\s*([-\d\.]+)\s*\))/);
+      if (circleMatch) {
+        const cx = parseFloat(circleMatch[1]);
+        const cy = parseFloat(circleMatch[2]);
+        const r = parseFloat(circleMatch[3] || circleMatch[4] || '1');
+        const rx = (r / (adjMaxX - adjMinX)) * svgWidth;
+        svgElements.push(`<circle cx="${toSvgX(cx)}" cy="${toSvgY(cy)}" r="${rx}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${opts.includes('thick') ? 2 : 1.5}" ${isDashed ? 'stroke-dasharray="4,4"' : ''} />`);
+        continue;
+      }
 
       // Match coordinates (x, y)
       const coordRegex = /\(\s*([-\d\.]+)\s*,\s*([-\d\.]+)\s*\)/g;
@@ -75,12 +112,13 @@ export function renderTikzFallbackSvg(raw: string): string | null {
       }
 
       if (coords.length >= 2) {
-        if (body.includes('-- cycle') || opts.includes('fill')) {
-          const pointsStr = coords.map(c => `${toSvgX(c.x)},${toSvgY(c.y)}`).join(' ');
+        if (body.includes('-- cycle') || (opts.includes('fill') && !isArrow)) {
+          const pointsStr = coords.map(c => `${toSvgX(c.x).toFixed(1)},${toSvgY(c.y).toFixed(1)}`).join(' ');
           svgElements.push(`<polygon points="${pointsStr}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${opts.includes('thick') ? 2 : 1.5}" ${isDashed ? 'stroke-dasharray="4,4"' : ''} />`);
         } else {
           for (let i = 0; i < coords.length - 1; i++) {
-            svgElements.push(`<line x1="${toSvgX(coords[i].x)}" y1="${toSvgY(coords[i].y)}" x2="${toSvgX(coords[i+1].x)}" y2="${toSvgY(coords[i+1].y)}" stroke="${strokeColor}" stroke-width="${opts.includes('thick') ? 2 : 1.5}" ${isDashed ? 'stroke-dasharray="4,4"' : ''} ${isArrow ? 'marker-end="url(#arrow-head)"' : ''} />`);
+            const hasArrow = isArrow && (i === coords.length - 2);
+            svgElements.push(`<line x1="${toSvgX(coords[i].x).toFixed(1)}" y1="${toSvgY(coords[i].y).toFixed(1)}" x2="${toSvgX(coords[i+1].x).toFixed(1)}" y2="${toSvgY(coords[i+1].y).toFixed(1)}" stroke="${strokeColor}" stroke-width="${opts.includes('thick') ? 2 : 1.5}" ${isDashed ? 'stroke-dasharray="4,4"' : ''} ${hasArrow ? 'marker-end="url(#arrow-head)"' : ''} />`);
           }
         }
       }
@@ -99,17 +137,58 @@ export function renderTikzFallbackSvg(raw: string): string | null {
       if (posOpt.includes('left')) dx = -10;
       if (posOpt.includes('above')) dy = -10;
       if (posOpt.includes('below')) dy = 16;
-      svgElements.push(`<text x="${toSvgX(x) + dx}" y="${toSvgY(y) + dy}" font-family="sans-serif" font-size="13" font-style="italic" fill="#1e293b" text-anchor="middle">${text}</text>`);
+      svgElements.push(`<text x="${(toSvgX(x) + dx).toFixed(1)}" y="${(toSvgY(y) + dy).toFixed(1)}" font-family="'Times New Roman', Times, serif" font-size="14" font-weight="500" font-style="italic" fill="#0f172a" text-anchor="middle">${text}</text>`);
     }
 
     if (svgElements.length <= 1) return null;
 
-    return `<svg width="360" height="320" viewBox="0 0 360 320" xmlns="http://www.w3.org/2000/svg" class="max-w-full h-auto">
+    return `<svg width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}" xmlns="http://www.w3.org/2000/svg" class="max-w-full h-auto mx-auto my-2 drop-shadow-sm bg-white rounded-lg p-2 border border-slate-200">
       ${svgElements.join('\n      ')}
     </svg>`;
   } catch (e) {
     return null;
   }
+}
+
+export function getTikzSvg(raw: string): string | null {
+  if (!raw) return null;
+  const cleaned = cleanTikzCode(raw);
+  const cached = tikzCache.get(raw) || tikzCache.get(cleaned);
+  if (cached) return cached;
+  try {
+    const key = 'tikz_cache_' + btoa(encodeURIComponent(cleaned.slice(0, 100)));
+    const local = localStorage.getItem(key);
+    if (local) {
+      tikzCache.set(raw, local);
+      tikzCache.set(cleaned, local);
+      return local;
+    }
+  } catch (e) {}
+  const fallback = renderTikzFallbackSvg(raw);
+  if (fallback) {
+    tikzCache.set(raw, fallback);
+    tikzCache.set(cleaned, fallback);
+  }
+  return fallback;
+}
+
+/**
+ * Converts any TikZ blocks inside markdown/html into pre-rendered SVG strings
+ * So that students opening the exam experience INSTANT image loading (0.001s)
+ */
+export function embedTikzSvgsInText(text: string): string {
+  if (!text) return '';
+  let result = text;
+  // Replace ```tikz ... ``` or \begin{tikzpicture} ... \end{tikzpicture}
+  result = result.replace(/(?:```[a-z]*\s*([\s\S]*?\\begin\s*\{tikzpicture\}[\s\S]*?\\end\s*\{tikzpicture\})\s*```|```tikz\s*([\s\S]*?)```|(\\begin\s*\{tikzpicture\}[\s\S]*?\\end\s*\{tikzpicture\}))/gi, (match, inner1, inner2, inner3) => {
+    const tikzCode = inner1 || (inner2 ? `\\begin{tikzpicture}\n${inner2}\n\\end{tikzpicture}` : inner3 || match);
+    const svg = getTikzSvg(tikzCode);
+    if (svg) {
+      return `\n\n${svg}\n\n`;
+    }
+    return match;
+  });
+  return result;
 }
 
 const tikzRenderQueue: Array<() => void> = [];
@@ -187,19 +266,31 @@ export const TikzRenderer = ({ content }: { content: string }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const scriptRef = useRef<HTMLScriptElement | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [cachedSvg, setCachedSvg] = useState<string | null>(tikzCache.get(content) || null);
+  
+  // Instant resolution: use cached SVG or instant geometric fallback SVG
+  const initialSvg = getTikzSvg(content);
+  const [cachedSvg, setCachedSvg] = useState<string | null>(initialSvg);
+  const [isLoading, setIsLoading] = useState(!initialSvg);
 
   useEffect(() => {
+    // If we already have a valid SVG rendered, no need to block
     if (cachedSvg) {
-        setIsLoading(false);
-        return;
+      setIsLoading(false);
+      return;
     }
 
     let timeoutId: any;
     let observer: MutationObserver | null = null;
     let isMounted = true;
     const startTime = Date.now();
+    const cleaned = cleanTikzCode(content);
+
+    // Fast initial fallback attempt
+    const quickFallback = renderTikzFallbackSvg(cleaned);
+    if (quickFallback) {
+      setCachedSvg(quickFallback);
+      setIsLoading(false);
+    }
 
     const renderTikz = () => {
       if (!isMounted) return;
@@ -207,23 +298,33 @@ export const TikzRenderer = ({ content }: { content: string }) => {
       let processFn = (window as any).process_tikz || (window as any).onload;
       if (typeof processFn !== "function") {
         const timeElapsed = Date.now() - startTime;
-        if (timeElapsed > 10000) {
+        if (timeElapsed > 1500) {
+          // Do not block student. Use fallback immediately.
+          const fallback = renderTikzFallbackSvg(cleaned);
+          if (fallback) {
+            tikzCache.set(content, fallback);
+            tikzCache.set(cleaned, fallback);
+            setCachedSvg(fallback);
             setIsLoading(false);
-            setError("Không thể tải thư viện vẽ hình TikZ. Máy chủ TikzJax có thể đang phản hồi chậm hoặc bị chặn.");
-            isWorkerProcessing = false;
-            processQueue();
-            return;
+          } else {
+            setIsLoading(false);
+            setError("Hình vẽ đang được tải...");
+          }
+          isWorkerProcessing = false;
+          processQueue();
+          return;
         }
-        timeoutId = setTimeout(renderTikz, 200);
+        timeoutId = setTimeout(renderTikz, 150);
         return;
       }
       
-      setIsLoading(true);
+      if (!cachedSvg) {
+        setIsLoading(true);
+      }
       setError(null);
       
       if (containerRef.current) {
         containerRef.current.innerHTML = '';
-        const cleaned = cleanTikzCode(content);
         
         const div = document.createElement("div");
         const script = document.createElement("script");
@@ -245,13 +346,17 @@ export const TikzRenderer = ({ content }: { content: string }) => {
                           const svgContent = svg.outerHTML;
                           tikzCache.set(content, svgContent);
                           tikzCache.set(cleaned, svgContent);
+                          try {
+                            const key = 'tikz_cache_' + btoa(encodeURIComponent(cleaned.slice(0, 100)));
+                            localStorage.setItem(key, svgContent);
+                          } catch (e) {}
                           setCachedSvg(svgContent);
                           setIsLoading(false);
                           
                           if (observer) observer.disconnect();
                           
                           isWorkerProcessing = false;
-                          setTimeout(processQueue, 50);
+                          setTimeout(processQueue, 30);
                           return;
                       }
                   }
@@ -271,7 +376,7 @@ export const TikzRenderer = ({ content }: { content: string }) => {
           }
           
           timeoutId = setTimeout(() => {
-              if (isMounted && isLoading) {
+              if (isMounted) {
                   const svg = containerRef.current?.querySelector('svg');
                   if (svg) {
                       fixSvgLines(svg);
@@ -286,15 +391,13 @@ export const TikzRenderer = ({ content }: { content: string }) => {
                           tikzCache.set(content, fallback);
                           tikzCache.set(cleaned, fallback);
                           setCachedSvg(fallback);
-                      } else {
-                          setError("Không thể biên dịch hình vẽ TikZ.");
                       }
                       setIsLoading(false);
                   }
                   isWorkerProcessing = false;
                   processQueue();
               }
-          }, 4000);
+          }, 2000);
           
         } catch (err: any) {
           console.error("Error processing TikZ code:", err);

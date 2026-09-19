@@ -11,8 +11,28 @@ export function parseApiResponse<T = any>(text: string): T {
   }
   const clean = text.trim();
   if (clean.includes("SERVER_ERROR:")) {
-    const match = clean.match(/SERVER_ERROR:\s*([^"\n\r]+)/);
-    throw new Error(match ? match[1].trim() : "Lỗi từ máy chủ AI.");
+    const rawError = clean.substring(clean.indexOf("SERVER_ERROR:") + 13).trim();
+    let errorMsg = rawError;
+    try {
+      const parsed = JSON.parse(rawError);
+      if (parsed?.error?.message) errorMsg = parsed.error.message;
+      else if (parsed?.message) errorMsg = parsed.message;
+    } catch (e) {
+      const jsonMatch = rawError.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          const parsed = JSON.parse(jsonMatch[0]);
+          if (parsed?.error?.message) errorMsg = parsed.error.message;
+          else if (parsed?.message) errorMsg = parsed.message;
+        } catch (e2) {}
+      }
+    }
+    // Clean up single braces or broken fragments
+    errorMsg = errorMsg.replace(/^["'\s]+|["'\s]+$/g, '').trim();
+    if (errorMsg === "{" || errorMsg === "}" || !errorMsg) {
+      errorMsg = "Hệ thống AI xử lý quá thời gian chờ hoặc tạm thời quá tải. Vui lòng bấm tạo lại hoặc giảm bớt số lượng câu hỏi.";
+    }
+    throw new Error(errorMsg);
   }
   try {
     return JSON.parse(clean);
@@ -21,7 +41,29 @@ export function parseApiResponse<T = any>(text: string): T {
     if (jsonMatch) {
       try {
         return JSON.parse(jsonMatch[0]);
-      } catch (inner) {}
+      } catch (inner) {
+        // Try salvaging valid question objects if JSON was truncated
+        const questionsMatch = jsonMatch[0].match(/"questions"\s*:\s*\[([\s\S]*)/);
+        if (questionsMatch) {
+          const salvagedQuestions: any[] = [];
+          const questionRegex = /\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g;
+          let qm: RegExpExecArray | null;
+          while ((qm = questionRegex.exec(questionsMatch[1])) !== null) {
+            try {
+              const qObj = JSON.parse(qm[0]);
+              if (qObj.content && (qObj.options || qObj.tfStatements || qObj.correctAnswer)) {
+                salvagedQuestions.push(qObj);
+              }
+            } catch (ignore) {}
+          }
+          if (salvagedQuestions.length > 0) {
+            return {
+              examName: "Đề kiểm tra",
+              questions: salvagedQuestions
+            } as unknown as T;
+          }
+        }
+      }
     }
     throw new Error("Phản hồi từ máy chủ không đúng định dạng. Vui lòng bấm tạo lại.");
   }
@@ -292,8 +334,8 @@ export const fixMath = (text: any) => {
         return `$${trimmed}$${trailingPunct}`;
     });
 
-    // 2.9. Protect existing math blocks & code blocks while wrapping naked math commands
-    const tokenRegex = /(```[\s\S]*?```|\$\$[\s\S]*?\$\$|\$(?:\\\$|[^\$\n])+?\$)/g;
+    // 2.9. Protect existing math blocks, code blocks, TikZ, and SVGs while wrapping naked math commands
+    const tokenRegex = /(```[\s\S]*?```|<svg[\s\S]*?<\/svg>|<tikz-diagram[\s\S]*?<\/tikz-diagram>|<svg-wrapper[\s\S]*?<\/svg-wrapper>|\\begin\s*\{tikzpicture\}[\s\S]*?\\end\s*\{tikzpicture\}|\$\$[\s\S]*?\$\$|\$(?:\\\$|[^\$\n])+?\$)/gi;
     const parts: { isProtected: boolean; text: string }[] = [];
     let lastIndex = 0;
     let match: RegExpExecArray | null;

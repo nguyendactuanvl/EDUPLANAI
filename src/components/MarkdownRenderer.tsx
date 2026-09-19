@@ -174,6 +174,29 @@ export const MarkdownRenderer = ({ content, className }: { content: string, clas
               return <div className="text-red-500">Lỗi hiển thị hình ảnh TikZ</div>;
             }
           },
+          img: ({node, src, alt, ...props}: any) => {
+            let cleanSrc = src || '';
+            // Auto convert Google Drive preview/view links to direct streaming image links
+            if (cleanSrc.includes('drive.google.com/file/d/')) {
+              const fileId = cleanSrc.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)?.[1];
+              if (fileId) {
+                cleanSrc = `https://drive.google.com/uc?export=view&id=${fileId}`;
+              }
+            }
+            return (
+              <img
+                src={cleanSrc}
+                alt={alt || 'Hình minh họa bài thi'}
+                loading="eager"
+                referrerPolicy="no-referrer"
+                className="max-w-full h-auto rounded-lg mx-auto my-3 border border-slate-200 shadow-sm"
+                onError={(e) => {
+                  (e.target as HTMLElement).setAttribute('data-error', 'true');
+                }}
+                {...props}
+              />
+            );
+          },
           code({node, inline, className, children, ...props}: any) {
             return <code className={className} {...props}>{children}</code>;
           }

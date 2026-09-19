@@ -1,4 +1,5 @@
 import { MarkdownRenderer } from "../components/MarkdownRenderer";
+import { embedTikzSvgsInText } from "../components/TikzRenderer";
 import { apiFetch } from '../lib/apiFetch';
 
 import { fullPlan } from "../data/mockData";
@@ -528,7 +529,8 @@ ${customPrompt}
           subject, grade, duration, examType, matrix, customPrompt: finalPrompt,
           qCounts: activeQCounts,
           matrixFile: matrixBase64,
-          selectedTopics
+          selectedTopics,
+          detailedSolution: outputConfig.detailedSolution
         })
       });
 
@@ -554,10 +556,14 @@ ${customPrompt}
         setQuestions(data.questions);
         setActiveTab("exam");
       } else {
-        throw new Error("Không tìm thấy danh sách câu hỏi trong phản hồi của AI. Thầy cô có thể bấm nút Tải đề mẫu hoặc thêm câu hỏi thủ công.");
+        throw new Error("Không tìm thấy danh sách câu hỏi trong phản hồi của AI. Thầy cô có thể bấm nút 'Tải đề mẫu' bên dưới để dùng ngay hoặc thử tạo lại.");
       }
     } catch (err: any) {
-      setError(err.message);
+      let msg = err.message || "Có lỗi xảy ra khi tạo đề.";
+      if (msg === "{" || msg === "}" || msg.trim() === "") {
+        msg = "Hệ thống AI xử lý quá thời gian chờ hoặc tạm thời quá tải. Thầy cô vui lòng bấm nút '+ TẠO ĐỀ BẰNG AI' lại một lần nữa hoặc bấm 'Tải đề mẫu' để xem đề chuẩn.";
+      }
+      setError(msg);
     } finally {
       setIsGenerating(false);
     }
@@ -643,9 +649,21 @@ ${customPrompt}
 
   const handleShare = async () => {
     try {
+      // Pre-render TikZ figures into high-speed native SVG so students load images INSTANTLY (0.001s)
+      const examsToProcess = (shuffledExams && shuffledExams.length > 0) ? shuffledExams : [{ code: '101', questions }];
+      const optimizedCodes = examsToProcess.map(exam => ({
+        ...exam,
+        questions: exam.questions.map((q: any) => ({
+          ...q,
+          content: embedTikzSvgsInText(q.content || q.question || q.text || ''),
+          explanation: q.explanation ? embedTikzSvgsInText(q.explanation) : undefined,
+          options: q.options ? q.options.map((opt: string) => embedTikzSvgsInText(opt)) : undefined
+        }))
+      }));
+
       const dataToShare = { 
         examData: { examName, duration },
-        codes: shuffledExams 
+        codes: optimizedCodes 
       };
 
       setShareLink("Đang tạo link thi...");
@@ -1001,7 +1019,41 @@ ${customPrompt}
                      <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={outputConfig.detailedSolution} onChange={e=>setOutputConfig({...outputConfig, detailedSolution: e.target.checked})} className="w-4 h-4 text-blue-600 rounded border-slate-300" /> Lời giải chi tiết</label>
                   </div>
                   <div className="mt-8 flex flex-col gap-4">
-                     {error && <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded-lg">{error}</div>}
+                     {error && (
+                       <div className="p-4 bg-red-50 text-red-800 border border-red-200 rounded-xl space-y-3">
+                         <div className="flex items-start gap-2">
+                           <span className="text-red-500 text-lg leading-none mt-0.5">⚠️</span>
+                           <div className="flex-1">
+                             <p className="font-semibold text-red-900">Không thể hoàn tất tạo đề:</p>
+                             <p className="text-sm text-red-700 mt-1 whitespace-pre-wrap">{error}</p>
+                           </div>
+                         </div>
+                         <div className="flex flex-wrap gap-2 pt-1 border-t border-red-100">
+                           <button
+                             type="button"
+                             onClick={handleGenerate}
+                             disabled={isGenerating}
+                             className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-md shadow-sm transition-colors flex items-center gap-1.5"
+                           >
+                             <Sparkles className="w-3.5 h-3.5" /> Thử tạo lại
+                           </button>
+                           <button
+                             type="button"
+                             onClick={handleLoadSampleExam}
+                             className="px-3 py-1.5 bg-white hover:bg-red-50 text-red-700 border border-red-300 text-xs font-medium rounded-md transition-colors"
+                           >
+                             ⚡ Nạp Đề Mẫu Chuẩn 2025
+                           </button>
+                           <button
+                             type="button"
+                             onClick={() => window.dispatchEvent(new CustomEvent('show-api-key-modal'))}
+                             className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-medium rounded-md transition-colors"
+                           >
+                             🔑 Nhập API Key riêng
+                           </button>
+                         </div>
+                       </div>
+                     )}
                      <div className="flex gap-4">
                      <button onClick={handleGenerate} disabled={isGenerating} className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg flex items-center gap-2 transition-colors disabled:opacity-70 shadow-sm">
                         {isGenerating ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <Sparkles className="w-5 h-5" />} 
@@ -1675,12 +1727,12 @@ ${customPrompt}
                                             code: exam.code,
                                             questions: exam.questions.map((q: any) => ({
                                                 type: q.type,
-                                                content: q.content,
-                                                options: q.options,
+                                                content: embedTikzSvgsInText(q.content || q.question || q.text || ''),
+                                                options: q.options ? q.options.map((opt: string) => embedTikzSvgsInText(opt)) : undefined,
                                                 correctOptionIndex: q.correctOptionIndex,
                                                 correct: q.correct,
                                                 correctAnswer: q.correctAnswer,
-                                                tfStatements: q.tfStatements?.map((tf: any) => ({ statement: tf.statement, correct: tf.correct }))
+                                                tfStatements: q.tfStatements?.map((tf: any) => ({ statement: embedTikzSvgsInText(tf.statement || ''), correct: tf.correct }))
                                             }))
                                         }
                                     ]
@@ -1740,12 +1792,12 @@ ${customPrompt}
                                             code: exam.code,
                                             questions: exam.questions.map((q: any) => ({
                                                 type: q.type,
-                                                content: q.content,
-                                                options: q.options,
+                                                content: embedTikzSvgsInText(q.content || q.question || q.text || ''),
+                                                options: q.options ? q.options.map((opt: string) => embedTikzSvgsInText(opt)) : undefined,
                                                 correctOptionIndex: q.correctOptionIndex,
                                                 correct: q.correct,
                                                 correctAnswer: q.correctAnswer,
-                                                tfStatements: q.tfStatements?.map((tf: any) => ({ statement: tf.statement, correct: tf.correct }))
+                                                tfStatements: q.tfStatements?.map((tf: any) => ({ statement: embedTikzSvgsInText(tf.statement || ''), correct: tf.correct }))
                                             }))
                                         }
                                     ]
