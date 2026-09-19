@@ -9,6 +9,7 @@ import { apiFetch } from '../lib/apiFetch';
 import LZString from 'lz-string';
 import { Clock, Copy } from 'lucide-react';
 import { fixMath, cleanQuestionStem, cleanOptionText } from "../lib/utils";
+import { fetchExamFromCloud } from "../lib/cloudExamStore";
 
 export function StudentExamView({ examId, examRawData }: { examId?: string, examRawData?: string }) {
   const [loading, setLoading] = useState(Boolean(examId || examRawData));
@@ -32,34 +33,13 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
     setLoading(true);
     setError(null);
     
-    const cached = localStorage.getItem(`examCache_${cleanId}`);
-    
     try {
-      const res = await apiFetch(`/api/exams/${cleanId}`);
-      if (!res.ok) {
-        if (cached) {
-          try {
-            const data = JSON.parse(cached);
-            setExamData(data);
-            if (data.codes && data.codes.length > 0) {
-              const randomCode = data.codes[Math.floor(Math.random() * data.codes.length)].code;
-              setSelectedCode(randomCode);
-            } else {
-              setSelectedCode("101");
-            }
-            setLoading(false);
-            return;
-          } catch (e) {}
-        }
-        throw new Error(`Không tìm thấy bài thi với mã "${cleanId}". Có thể mã chưa đúng hoặc phòng thi chưa được mở.`);
-      }
+      const data = await fetchExamFromCloud(cleanId);
 
-      const data = await res.json();
       if (!data) {
-        throw new Error("Dữ liệu đề thi không hợp lệ hoặc đã hết hạn.");
+        throw new Error(`Không tìm thấy bài thi với mã "${cleanId}". Vui lòng kiểm tra lại mã PIN hoặc yêu cầu thầy/cô gửi lại link.`);
       }
 
-      localStorage.setItem(`examCache_${cleanId}`, JSON.stringify(data));
       setExamData(data);
       if (data.codes && data.codes.length > 0) {
         const randomCode = data.codes[Math.floor(Math.random() * data.codes.length)].code;
@@ -68,20 +48,6 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
         setSelectedCode("101");
       }
     } catch (err: any) {
-      if (cached) {
-        try {
-          const data = JSON.parse(cached);
-          setExamData(data);
-          if (data.codes && data.codes.length > 0) {
-            const randomCode = data.codes[Math.floor(Math.random() * data.codes.length)].code;
-            setSelectedCode(randomCode);
-          } else {
-            setSelectedCode("101");
-          }
-          setLoading(false);
-          return;
-        } catch (e) {}
-      }
       setError(err.message || "Lỗi kết nối đến phòng thi.");
     } finally {
       setLoading(false);

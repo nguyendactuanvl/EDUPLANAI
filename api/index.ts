@@ -6,6 +6,7 @@ import path from "path";
 import { GoogleGenAI, Type } from "@google/genai";
 import mammoth from 'mammoth';
 import WordExtractor from 'word-extractor';
+import LZString from 'lz-string';
 
 
 
@@ -1158,13 +1159,20 @@ app.all("/api/exams/share", (req, res) => {
     sharedExamsStore.set(examId.toUpperCase(), req.body);
 
     saveExamsToDisk();
+
+    // Asynchronously push to persistent cloud KV store so Vercel lambdas & other devices can always find it
+    try {
+      const compressed = LZString.compressToEncodedURIComponent(JSON.stringify(req.body));
+      fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/jaku8xjm/${encodeURIComponent(examId.toUpperCase())}/${encodeURIComponent(compressed)}`, { method: 'POST' }).catch(() => {});
+    } catch (kvErr) {}
+
     res.json({ examId });
   } catch (error) {
     res.status(500).json({ error: "Lỗi chia sẻ đề thi" });
   }
 });
 
-app.get("/api/exams/:id", (req, res) => {
+app.get("/api/exams/:id", async (req, res) => {
   const rawId = (req.params.id || '').trim();
   let data = sharedExamsStore.get(rawId) 
     || sharedExamsStore.get(rawId.toLowerCase()) 
@@ -1177,6 +1185,29 @@ app.get("/api/exams/:id", (req, res) => {
       || sharedExamsStore.get(rawId.toUpperCase());
   }
 
+  // If not found in local memory/disk (e.g. fresh Vercel serverless cold-start), fetch from persistent cloud KV
+  if (!data) {
+    try {
+      const kvRes = await fetch(`https://keyvalue.immanuel.co/api/KeyVal/GetValue/jaku8xjm/${encodeURIComponent(rawId.toUpperCase())}`, {
+        signal: AbortSignal.timeout(5000)
+      });
+      if (kvRes.ok) {
+        const val = await kvRes.json();
+        if (val && typeof val === 'string') {
+          const decompressed = LZString.decompressFromEncodedURIComponent(val);
+          if (decompressed) {
+            data = JSON.parse(decompressed);
+            sharedExamsStore.set(rawId, data);
+            sharedExamsStore.set(rawId.toUpperCase(), data);
+            saveExamsToDisk();
+          }
+        }
+      }
+    } catch (kvFetchErr) {
+      console.warn("Cloud KV fetch fallback error:", kvFetchErr);
+    }
+  }
+
   if (data) {
     res.setHeader('Cache-Control', 'public, max-age=60');
     res.json(data);
@@ -1185,56 +1216,17 @@ app.get("/api/exams/:id", (req, res) => {
   }
 });
 
-// URL Shortener using TinyURL with fallback to is.gd / direct link
+// Clean link return without external shorteners that Zalo blocks
 app.post("/api/shorten", async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
   try {
     const { url } = req.body;
     if (!url) return res.status(400).json({ error: "Missing url" });
-    
-    let shortUrl = '';
-    // Provider 1: TinyURL
-    try {
-      const response = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(url)}`, {
-        signal: AbortSignal.timeout(6000)
-      });
-      if (response.ok) {
-        const text = await response.text();
-        if (text.startsWith('http')) {
-          shortUrl = text.trim();
-        }
-      }
-    } catch (e) {
-      console.warn("TinyURL failed, checking fallback:", e);
-    }
-
-    // Provider 2: is.gd fallback if TinyURL failed
-    if (!shortUrl) {
-      try {
-        const response = await fetch(`https://is.gd/create.php?format=simple&url=${encodeURIComponent(url)}`, {
-          signal: AbortSignal.timeout(4000)
-        });
-        if (response.ok) {
-          const text = await response.text();
-          if (text.startsWith('http')) {
-            shortUrl = text.trim();
-          }
-        }
-      } catch (e) {
-        console.warn("is.gd failed too:", e);
-      }
-    }
-
-    // If both services fail, return the url itself (which for examId is already very short)
-    if (!shortUrl) {
-      shortUrl = url;
-    }
-
-    res.json({ shortUrl });
+    // NEVER return tinyurl.com or foreign domains that Zalo blocks!
+    res.json({ shortUrl: url });
   } catch (error: any) {
-    console.error("Shorten error:", error);
-    res.status(500).json({ error: "Lỗi rút gọn link", shortUrl: req.body?.url });
+    res.json({ shortUrl: req.body?.url || "" });
   }
 });
 

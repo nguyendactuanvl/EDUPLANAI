@@ -11,9 +11,10 @@ import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import { exportHtmlToWord } from '../lib/exportUtils';
 import { fixMath, cleanQuestionStem, parseApiResponse, cleanOptionText, getPublicAppUrl } from '../lib/utils';
+import { saveExamToCloud } from '../lib/cloudExamStore';
 import { SAMPLE_MATH_QUESTIONS, SAMPLE_MATH_EXAM_NAME, SAMPLE_MATH_DURATION } from '../data/sampleMathExam';
 import { parseRawExamText } from '../lib/examParser';
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { FileCheck, Sparkles, Shuffle, Download, Share2, Plus, Trash2, Printer, UploadCloud, FileSpreadsheet, FileText, X, ExternalLink, Smartphone, Copy, Check, Edit3, ListPlus } from "lucide-react";
 
 interface Question {
@@ -602,6 +603,12 @@ ${customPrompt}
     exportHtmlToWord(printContent, `De_kiem_tra_Ma_${code}_LaTeX.doc`, true);
   };
 
+  const handleExportWordImage = (contentId: string, code: string) => {
+    const printContent = document.getElementById(contentId);
+    if (!printContent) return;
+    exportHtmlToWord(printContent, `De_kiem_tra_Ma_${code}_Anh.doc`, 'image');
+  };
+
   const handlePrint = (contentId: string) => {
     const printContent = document.getElementById(contentId);
     if (!printContent) return;
@@ -641,15 +648,25 @@ ${customPrompt}
         codes: shuffledExams 
       };
 
-      setShareLink("Đang tạo link rút gọn...");
+      setShareLink("Đang tạo link thi...");
       setActiveTab("shuffle");
 
-      let examId = '';
+      const publicBase = getPublicAppUrl() || window.location.origin;
+      const compressed = LZString.compressToEncodedURIComponent(JSON.stringify(dataToShare));
+
+      // Generate fallback 6-char PIN in case API is unreachable
+      const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+      let fallbackCode = '';
+      for (let i = 0; i < 6; i++) {
+        fallbackCode += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+
+      let examId = fallbackCode;
       try {
         const shareRes = await apiFetch('/api/exams/share', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(dataToShare)
+          body: JSON.stringify({ ...dataToShare, customId: fallbackCode })
         });
         if (shareRes.ok) {
           const shareJson = await shareRes.json();
@@ -659,26 +676,12 @@ ${customPrompt}
 
       setSharePin(examId);
 
-      const publicBase = getPublicAppUrl() || window.location.origin;
-      const compressed = LZString.compressToEncodedURIComponent(JSON.stringify(dataToShare));
-      const fullUrl = `${publicBase}/?examData=${compressed}`;
-      const baseShortUrl = examId ? `${publicBase}/?examId=${examId}` : fullUrl;
-      
-      try {
-        const res = await apiFetch('/api/shorten', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: baseShortUrl })
-        });
-        if (res.ok) {
-            const data = await res.json();
-            setShareLink(data.shortUrl || baseShortUrl);
-        } else {
-            setShareLink(baseShortUrl);
-        }
-      } catch (e) {
-          setShareLink(baseShortUrl);
-      }
+      // Dual-sync to persistent Cloud KV with hex chunking and local cache
+      await saveExamToCloud(examId, dataToShare);
+
+      // Reliable direct link that NEVER triggers Zalo warnings
+      const finalUrl = `${publicBase}/?pin=${examId}#d=${compressed}`;
+      setShareLink(finalUrl);
     } catch (err: any) {
       alert("Lỗi tạo link: " + err.message);
     }
@@ -1631,6 +1634,30 @@ ${customPrompt}
                           2. Nếu học sinh bấm link trên Zalo mà bị lỗi "Bài thi không tồn tại" hoặc bị chặn: Nhắc học sinh bấm <strong>dấu 3 chấm (···)</strong> ở góc trên bên phải Zalo ➔ chọn <strong>"Mở bằng trình duyệt"</strong> (Chrome/Safari), hoặc mở trình duyệt nhập trực tiếp mã PIN <strong>{sharePin || "phòng thi"}</strong>.
                         </p>
                       </div>
+
+                      <div className="pt-2 border-t border-emerald-200/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs text-slate-600">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-semibold text-slate-700">Tên miền phát hành:</span>
+                          <span className="font-mono bg-white px-2 py-0.5 rounded border border-slate-200 text-slate-800">{getPublicAppUrl()}</span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            const current = localStorage.getItem('custom_public_app_url') || '';
+                            const newUrl = prompt('Nhập tên miền tùy chỉnh (Ví dụ: https://my-exam.vercel.app):\nĐể trống nếu muốn dùng tên miền hiện tại.', current);
+                            if (newUrl !== null) {
+                              if (newUrl.trim()) {
+                                localStorage.setItem('custom_public_app_url', newUrl.trim());
+                              } else {
+                                localStorage.removeItem('custom_public_app_url');
+                              }
+                              handleShare();
+                            }
+                          }}
+                          className="text-emerald-700 hover:text-emerald-800 underline font-medium cursor-pointer"
+                        >
+                          ⚙️ Đổi tên miền / Gắn domain Vercel riêng
+                        </button>
+                      </div>
                     </div>
                   )}
 
@@ -1666,12 +1693,18 @@ ${customPrompt}
                                     const btn = document.getElementById(`share-btn-${exam.code}`);
                                     if (btn) btn.innerHTML = '<span class="animate-spin mr-1">⌛</span> Đang tạo link...';
                                     
-                                    let examId = "";
+                                    const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+                                    let fallbackCode = '';
+                                    for (let i = 0; i < 6; i++) {
+                                      fallbackCode += chars.charAt(Math.floor(Math.random() * chars.length));
+                                    }
+
+                                    let examId = fallbackCode;
                                     try {
                                         const shareRes = await apiFetch("/api/exams/share", {
                                             method: "POST",
                                             headers: { "Content-Type": "application/json" },
-                                            body: JSON.stringify(singleData)
+                                            body: JSON.stringify({ ...singleData, customId: fallbackCode })
                                         });
                                         if (shareRes.ok) {
                                             const sData = await shareRes.json();
@@ -1679,27 +1712,19 @@ ${customPrompt}
                                         }
                                     } catch (e) {}
 
-                                    const baseShortUrl = examId ? `${publicBase}/?examId=${examId}` : url;
-                                    let finalUrl = baseShortUrl;
-
                                     try {
-                                        const res = await apiFetch("/api/shorten", {
-                                            method: "POST",
-                                            headers: { "Content-Type": "application/json" },
-                                            body: JSON.stringify({ url: baseShortUrl })
-                                        });
-                                        if (res.ok) {
-                                            const data = await res.json();
-                                            if (data.shortUrl) finalUrl = data.shortUrl;
-                                        }
+                                        fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/jaku8xjm/${encodeURIComponent(examId.toUpperCase())}/${encodeURIComponent(compressed)}`, { method: 'POST' }).catch(() => {});
+                                        localStorage.setItem(`examCache_${examId}`, JSON.stringify(singleData));
                                     } catch (e) {}
 
+                                    const finalUrl = `${publicBase}/?pin=${examId}#d=${compressed}`;
+
                                     await navigator.clipboard.writeText(finalUrl);
-                                    alert(`Đã copy link thi rút gọn cho Mã đề ${exam.code}!\n${finalUrl}`);
+                                    alert(`Đã copy link thi trực tiếp cho Mã đề ${exam.code} (Mã PIN: ${examId})!\nLink này mở mượt trên mọi thiết bị và Zalo.`);
                                     if (btn) btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-share-2 w-4 h-4"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg> Copy Link Thi';
                                 } catch (e) {
                                     navigator.clipboard.writeText(url);
-                                    alert(`Đã copy link thi gốc cho Mã đề ${exam.code}.`);
+                                    alert(`Đã copy link thi cho Mã đề ${exam.code}.`);
                                     const btn = document.getElementById(`share-btn-${exam.code}`);
                                     if (btn) btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-share-2 w-4 h-4"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg> Copy Link Thi';
                                 }
@@ -1727,14 +1752,19 @@ ${customPrompt}
                                 };
                                 const publicBase = getPublicAppUrl() || window.location.origin;
                                 const compressed = LZString.compressToEncodedURIComponent(JSON.stringify(singleData));
-                                const url = `${publicBase}/?examData=${compressed}`;
                                 
-                                let examId = "";
+                                const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+                                let fallbackCode = '';
+                                for (let i = 0; i < 6; i++) {
+                                  fallbackCode += chars.charAt(Math.floor(Math.random() * chars.length));
+                                }
+
+                                let examId = fallbackCode;
                                 try {
                                     const shareRes = await apiFetch("/api/exams/share", {
                                         method: "POST",
                                         headers: { "Content-Type": "application/json" },
-                                        body: JSON.stringify(singleData)
+                                        body: JSON.stringify({ ...singleData, customId: fallbackCode })
                                     });
                                     if (shareRes.ok) {
                                         const sData = await shareRes.json();
@@ -1742,20 +1772,10 @@ ${customPrompt}
                                     }
                                 } catch (e) {}
 
-                                const baseShortUrl = examId ? `${publicBase}/?examId=${examId}` : url;
-                                let finalUrl = baseShortUrl;
-                                try {
-                                    const res = await apiFetch("/api/shorten", {
-                                        method: "POST",
-                                        headers: { "Content-Type": "application/json" },
-                                        body: JSON.stringify({ url: baseShortUrl })
-                                    });
-                                    if (res.ok) {
-                                        const data = await res.json();
-                                        if (data.shortUrl) finalUrl = data.shortUrl;
-                                    }
-                                } catch (e) {}
+                                // Dual-sync to persistent Cloud KV with hex chunking and local cache
+                                await saveExamToCloud(examId, singleData);
 
+                                const finalUrl = `${publicBase}/?pin=${examId}#d=${compressed}`;
                                 const zaloMsg = getZaloShareMessage(finalUrl, examId, `${examName} (Mã đề ${exam.code})`);
                                 await navigator.clipboard.writeText(zaloMsg);
                                 alert(`Đã copy tin nhắn Zalo kèm Mã PIN & Hướng dẫn cho Mã đề ${exam.code}!`);
@@ -1766,78 +1786,199 @@ ${customPrompt}
 
                               <Printer className="w-4 h-4" /> In / PDF
                             </button>
-                            <button onClick={() => handleExportWord(`print-exam-${exam.code}`, exam.code)} className="px-3 py-1.5 bg-white border border-slate-300 text-slate-700 text-sm font-medium rounded hover:bg-slate-50 flex items-center gap-2">
-                              <Download className="w-4 h-4" /> Xuất Word
+                            <button onClick={() => handleExportWord(`print-exam-${exam.code}`, exam.code)} className="px-3 py-1.5 bg-white border border-slate-300 text-slate-700 text-sm font-medium rounded hover:bg-slate-50 flex items-center gap-2" title="Xuất Word định dạng chuẩn OMML, công thức có thể chỉnh sửa trực tiếp">
+                              <Download className="w-4 h-4" /> Xuất Word (Chuẩn)
                             </button>
                             <button onClick={() => handleExportWordLatex(`print-exam-${exam.code}`, exam.code)} className="px-3 py-1.5 bg-white border border-slate-300 text-slate-700 text-sm font-medium rounded hover:bg-slate-50 flex items-center gap-2" title="Xuất Word giữ nguyên mã LaTeX để dùng chức năng Toggle TeX của MathType">
                               <Download className="w-4 h-4" /> Xuất Word (LaTeX)
                             </button>
+                            <button onClick={() => handleExportWordImage(`print-exam-${exam.code}`, exam.code)} className="px-3 py-1.5 bg-white border border-slate-300 text-slate-700 text-sm font-medium rounded hover:bg-slate-50 flex items-center gap-2" title="Xuất Word với công thức dạng ảnh chất lượng cao (không lo lỗi hiển thị)">
+                              <Download className="w-4 h-4" /> Xuất Word (Ảnh)
+                            </button>
                           </div>
                         </div>
                         <div className="p-6">
-                          <div id={`print-exam-${exam.code}`}>
-                            <h2 style={{textAlign:'center', fontSize: '18px', fontWeight: 'bold'}}>{examName}</h2>
-                            <h3 style={{textAlign:'center', fontSize: '16px', marginBottom: '5px'}}>Thời gian làm bài: {duration} phút</h3>
-                            <h3 style={{textAlign:'center', fontSize: '16px', marginBottom: '20px'}}>Mã đề: {exam.code}</h3>
+                          <div id={`print-exam-${exam.code}`} style={{ fontFamily: '"Times New Roman", Times, serif', color: '#000000', lineHeight: 1.35 }}>
+                            {/* Standard Vietnamese School Exam Header */}
+                            <table style={{ width: '100%', borderCollapse: 'collapse', border: 'none', marginBottom: '8pt', fontFamily: '"Times New Roman", Times, serif' }}>
+                              <tbody>
+                                <tr>
+                                  <td style={{ width: '42%', border: 'none', textAlign: 'center', verticalAlign: 'top', padding: '0 4pt' }}>
+                                    <div style={{ fontSize: '11pt', fontWeight: 'bold', textTransform: 'uppercase' }}>SỞ GD&ĐT ...................................</div>
+                                    <div style={{ fontSize: '11pt', fontWeight: 'bold', textTransform: 'uppercase' }}>TRƯỜNG THPT ...........................</div>
+                                    <div style={{ fontSize: '9.5pt', fontStyle: 'italic', marginTop: '2pt' }}>(Đề thi có {Math.max(1, Math.ceil(exam.questions.length / 8))} trang)</div>
+                                  </td>
+                                  <td style={{ width: '58%', border: 'none', textAlign: 'center', verticalAlign: 'top', padding: '0 4pt' }}>
+                                    <div style={{ fontSize: '11.5pt', fontWeight: 'bold', textTransform: 'uppercase' }}>{examName || 'KIỂM TRA ĐỊNH KỲ'}</div>
+                                    <div style={{ fontSize: '10.5pt', fontWeight: 'bold', marginTop: '1pt' }}>NĂM HỌC 2025 - 2026</div>
+                                    <div style={{ fontSize: '11pt' }}>Môn: <b>{subject || 'Toán học'}</b> {grade ? `- Khối ${grade}` : ''}</div>
+                                    <div style={{ fontSize: '10pt', fontStyle: 'italic', marginTop: '2pt' }}>Thời gian làm bài: <b>{duration} phút</b> (không kể thời gian phát đề)</div>
+                                  </td>
+                                </tr>
+                              </tbody>
+                            </table>
+
+                            {/* Candidate Info and Exam Code Box */}
+                            <table style={{ width: '100%', borderCollapse: 'collapse', border: 'none', marginBottom: '14pt', fontFamily: '"Times New Roman", Times, serif' }}>
+                              <tbody>
+                                <tr>
+                                  <td style={{ border: 'none', verticalAlign: 'middle', fontSize: '11pt', padding: '2pt 0' }}>
+                                    Họ và tên thí sinh: ................................................................ Lớp: ................ SBD: ................
+                                  </td>
+                                  <td style={{ width: '135px', border: '1.5pt solid black', textAlign: 'center', verticalAlign: 'middle', padding: '4pt 8pt', fontWeight: 'bold', fontSize: '11.5pt' }}>
+                                    MÃ ĐỀ: {exam.code}
+                                  </td>
+                                </tr>
+                              </tbody>
+                            </table>
+
+                            {/* Question List */}
                             {exam.questions.map((q, idx) => (
-                              <div key={idx} className="question" style={{marginBottom: '15px'}}>
-                                <div><strong>Câu {idx + 1}:</strong> <MarkdownRenderer className="markdown-body inline-block" content={fixMath(cleanQuestionStem(q.content || (q as any).question || (q as any).text || '', q.options))} /></div>
-                                {q.type === 'mc' && q.options && (
-                                  <div className="options" style={{display: 'grid', gridTemplateColumns: '1fr 1fr', marginTop: '5px'}}>
-                                    {q.options.map((opt, oIdx) => (
-                                      <div key={oIdx} className="option" style={{paddingLeft: '10px', display: 'flex', gap: '4px', alignItems: 'flex-start'}}>
-                                        <span style={{fontWeight: 'bold', flexShrink: 0}}>{String.fromCharCode(65 + oIdx)}.</span>
-                                        <MarkdownRenderer className="markdown-body inline-block" content={fixMath(cleanOptionText(opt))} />
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
+                              <div key={idx} className="question-block" style={{ marginBottom: '12pt', pageBreakInside: 'avoid' }}>
+                                <div style={{ fontSize: '12pt', marginBottom: '3pt' }}>
+                                  <strong>Câu {idx + 1}:</strong> <MarkdownRenderer className="markdown-body inline-block" content={fixMath(cleanQuestionStem(q.content || (q as any).question || (q as any).text || '', q.options))} />
+                                </div>
+                                {q.type === 'mc' && q.options && (() => {
+                                  const cleanedOpts = q.options.map((opt: string) => cleanOptionText(opt));
+                                  const maxLen = Math.max(...cleanedOpts.map((o: string) => (o || '').length));
+                                  const cols = maxLen <= 25 ? 4 : maxLen <= 60 ? 2 : 1;
+
+                                  if (cols === 4) {
+                                    return (
+                                      <table className="options-table borderless" style={{ width: '100%', borderCollapse: 'collapse', border: 'none', marginTop: '3pt', marginBottom: '4pt' }}>
+                                        <tbody>
+                                          <tr>
+                                            {cleanedOpts.map((opt: string, oIdx: number) => (
+                                              <td key={oIdx} style={{ width: '25%', border: 'none', padding: '2pt 4pt', verticalAlign: 'top', fontSize: '12pt' }}>
+                                                <b>{String.fromCharCode(65 + oIdx)}.</b> <MarkdownRenderer className="markdown-body inline-block" content={fixMath(opt)} />
+                                              </td>
+                                            ))}
+                                          </tr>
+                                        </tbody>
+                                      </table>
+                                    );
+                                  }
+
+                                  if (cols === 2) {
+                                    return (
+                                      <table className="options-table borderless" style={{ width: '100%', borderCollapse: 'collapse', border: 'none', marginTop: '3pt', marginBottom: '4pt' }}>
+                                        <tbody>
+                                          <tr>
+                                            <td style={{ width: '50%', border: 'none', padding: '2pt 4pt', verticalAlign: 'top', fontSize: '12pt' }}>
+                                              <b>A.</b> <MarkdownRenderer className="markdown-body inline-block" content={fixMath(cleanedOpts[0] || '')} />
+                                            </td>
+                                            <td style={{ width: '50%', border: 'none', padding: '2pt 4pt', verticalAlign: 'top', fontSize: '12pt' }}>
+                                              <b>B.</b> <MarkdownRenderer className="markdown-body inline-block" content={fixMath(cleanedOpts[1] || '')} />
+                                            </td>
+                                          </tr>
+                                          <tr>
+                                            <td style={{ width: '50%', border: 'none', padding: '2pt 4pt', verticalAlign: 'top', fontSize: '12pt' }}>
+                                              <b>C.</b> <MarkdownRenderer className="markdown-body inline-block" content={fixMath(cleanedOpts[2] || '')} />
+                                            </td>
+                                            <td style={{ width: '50%', border: 'none', padding: '2pt 4pt', verticalAlign: 'top', fontSize: '12pt' }}>
+                                              <b>D.</b> <MarkdownRenderer className="markdown-body inline-block" content={fixMath(cleanedOpts[3] || '')} />
+                                            </td>
+                                          </tr>
+                                        </tbody>
+                                      </table>
+                                    );
+                                  }
+
+                                  return (
+                                    <table className="options-table borderless" style={{ width: '100%', borderCollapse: 'collapse', border: 'none', marginTop: '3pt', marginBottom: '4pt' }}>
+                                      <tbody>
+                                        {cleanedOpts.map((opt: string, oIdx: number) => (
+                                          <tr key={oIdx}>
+                                            <td style={{ width: '100%', border: 'none', padding: '2pt 4pt', verticalAlign: 'top', fontSize: '12pt' }}>
+                                              <b>{String.fromCharCode(65 + oIdx)}.</b> <MarkdownRenderer className="markdown-body inline-block" content={fixMath(opt)} />
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  );
+                                })()}
                                 {q.type === 'tf' && q.tfStatements && (
-                                  <div className="options" style={{display: 'flex', flexDirection: 'column', gap: '5px', marginTop: '5px'}}>
-                                    {q.tfStatements.map((stmt, sIdx) => (
-                                      <div key={sIdx} className="option" style={{paddingLeft: '10px', display: 'flex', gap: '4px', alignItems: 'flex-start'}}>
-                                        <span style={{fontWeight: 'bold', flexShrink: 0}}>{['a)', 'b)', 'c)', 'd)'][sIdx] || String.fromCharCode(97 + sIdx) + ')'}</span>
-                                        <MarkdownRenderer className="markdown-body inline-block" content={fixMath(stmt.statement || '')} />
-                                      </div>
-                                    ))}
-                                  </div>
+                                  <table className="tf-table borderless" style={{ width: '100%', borderCollapse: 'collapse', border: 'none', marginTop: '3pt', marginBottom: '4pt' }}>
+                                    <tbody>
+                                      {q.tfStatements.map((stmt: any, sIdx: number) => (
+                                        <tr key={sIdx}>
+                                          <td style={{ width: '25px', border: 'none', padding: '2pt 2pt', verticalAlign: 'top', fontWeight: 'bold', fontSize: '12pt' }}>
+                                            {['a)', 'b)', 'c)', 'd)'][sIdx] || String.fromCharCode(97 + sIdx) + ')'}
+                                          </td>
+                                          <td style={{ border: 'none', padding: '2pt 4pt', verticalAlign: 'top', fontSize: '12pt' }}>
+                                            <MarkdownRenderer className="markdown-body inline-block" content={fixMath(stmt.statement || '')} />
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
                                 )}
                                 {q.type !== 'mc' && q.type !== 'tf' && (
-                                  <div style={{marginTop: '15px', marginBottom: '30px'}}>
-                                    <em>(Học sinh làm bài vào giấy thi)</em>
+                                  <div style={{ marginTop: '4pt', marginBottom: '12pt', fontStyle: 'italic', color: '#475569', fontSize: '11pt' }}>
+                                    (Học sinh ghi câu trả lời vào phiếu thi)
                                   </div>
                                 )}
                               </div>
                             ))}
-                            <div style={{pageBreakBefore: 'always'}}></div>
+
+                            {/* End of test note */}
+                            <div style={{ textAlign: 'center', marginTop: '20pt', marginBottom: '4pt', fontWeight: 'bold', fontSize: '11.5pt', letterSpacing: '1px' }}>
+                              ----------------------- HẾT -----------------------
+                            </div>
+                            <div style={{ textAlign: 'center', fontStyle: 'italic', fontSize: '10pt', marginBottom: '20pt' }}>
+                              (Cán bộ coi thi không giải thích gì thêm. Thí sinh không được sử dụng tài liệu)
+                            </div>
+                            <div style={{ pageBreakBefore: 'always' }}></div>
                             
-                            <div className="answers-title text-center uppercase mt-8 mb-4">BẢNG ĐÁP ÁN (Mã đề {exam.code})</div>
-                            <table className="w-full border-collapse border border-black mt-2 text-center text-sm" style={{fontFamily: '"Times New Roman", Times, serif'}}>
+                            {/* Answer Key Grid */}
+                            <div className="answers-title text-center font-bold text-base uppercase mt-8 mb-4" style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '13pt', textTransform: 'uppercase', marginBottom: '10pt' }}>
+                              BẢNG ĐÁP ÁN (Mã đề {exam.code})
+                            </div>
+                            <table className="w-full border-collapse border border-black mt-2 text-center text-sm" style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid black', textAlign: 'center', fontSize: '11pt', fontFamily: '"Times New Roman", Times, serif' }}>
                               <tbody>
-                                {Array.from({ length: Math.ceil(exam.questions.length / 10) }).map((_, rowIndex) => (
-                                  <tr key={rowIndex}>
-                                    {exam.questions.slice(rowIndex * 10, rowIndex * 10 + 10).map((q, colIndex) => {
-                                      const ansIndex = rowIndex * 10 + colIndex;
-                                      let ans = "";
-                                      if (q.type === 'mc') {
-                                        ans = String.fromCharCode(65 + (q.correctOptionIndex || 0));
-                                      } else if (q.type === 'tf' && q.tfStatements) {
-                                        ans = q.tfStatements.map(s => s.correct ? 'Đ' : 'S').join('');
-                                      }
-                                      return (
-                                        <td key={colIndex} className="border border-black p-1">
-                                          <strong>{ansIndex + 1}.</strong> {q.type !== 'mc' && q.type !== 'tf' ? (
-                                            <MarkdownRenderer className="markdown-body inline-block" content={fixMath(q.correctAnswer || '')} />
-                                          ) : ans}
-                                        </td>
-                                      )
-                                    })}
-                                    {/* Fill empty cells if the last row has less than 10 columns */}
-                                    {Array.from({ length: 10 - exam.questions.slice(rowIndex * 10, rowIndex * 10 + 10).length }).map((_, emptyColIndex) => (
-                                      <td key={'empty-' + emptyColIndex} className="border border-black p-1"></td>
-                                    ))}
-                                  </tr>
-                                ))}
+                                {Array.from({ length: Math.ceil(exam.questions.length / 10) }).map((_, rowIndex) => {
+                                  const slice = exam.questions.slice(rowIndex * 10, rowIndex * 10 + 10);
+                                  return (
+                                    <React.Fragment key={rowIndex}>
+                                      {/* Header Row: Câu 1, Câu 2, ... */}
+                                      <tr style={{ backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>
+                                        {slice.map((_, colIndex) => {
+                                          const qNum = rowIndex * 10 + colIndex + 1;
+                                          return (
+                                            <td key={'h-' + colIndex} style={{ border: '1px solid black', padding: '4pt 2pt', width: '10%' }}>
+                                              Câu {qNum}
+                                            </td>
+                                          );
+                                        })}
+                                        {Array.from({ length: 10 - slice.length }).map((_, emptyIdx) => (
+                                          <td key={'eh-' + emptyIdx} style={{ border: '1px solid black', padding: '4pt 2pt', width: '10%' }}></td>
+                                        ))}
+                                      </tr>
+                                      {/* Answer Row: A, B, C, ... */}
+                                      <tr>
+                                        {slice.map((q, colIndex) => {
+                                          let ans = "";
+                                          if (q.type === 'mc') {
+                                            ans = String.fromCharCode(65 + (q.correctOptionIndex || 0));
+                                          } else if (q.type === 'tf' && q.tfStatements) {
+                                            ans = q.tfStatements.map(s => s.correct ? 'Đ' : 'S').join('');
+                                          }
+                                          return (
+                                            <td key={'a-' + colIndex} style={{ border: '1px solid black', padding: '5pt 2pt', fontWeight: 'bold' }}>
+                                              {q.type !== 'mc' && q.type !== 'tf' ? (
+                                                <MarkdownRenderer className="markdown-body inline-block" content={fixMath(q.correctAnswer || '')} />
+                                              ) : ans}
+                                            </td>
+                                          );
+                                        })}
+                                        {Array.from({ length: 10 - slice.length }).map((_, emptyIdx) => (
+                                          <td key={'ea-' + emptyIdx} style={{ border: '1px solid black', padding: '5pt 2pt' }}></td>
+                                        ))}
+                                      </tr>
+                                    </React.Fragment>
+                                  );
+                                })}
                               </tbody>
                             </table>
                           </div>

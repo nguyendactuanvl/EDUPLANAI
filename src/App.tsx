@@ -54,18 +54,25 @@ export default function App() {
 
   
   const urlParams = new URLSearchParams(window.location.search);
-  const studentExamId = urlParams.get('examId') || urlParams.get('exam') || urlParams.get('code') || urlParams.get('pin');
-  const studentExamData = urlParams.get('examData');
-  const isStudentMode = urlParams.get('mode') === 'student' || urlParams.get('view') === 'exam';
+  const hashStr = window.location.hash.startsWith('#') ? window.location.hash.substring(1) : window.location.hash;
+  const hashParams = new URLSearchParams(hashStr);
 
-  if (studentExamId) {
-    return <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-100">Đang tải đề thi...</div>}><StudentExamView examId={studentExamId} /></Suspense>;
-  }
-  if (studentExamData) {
-    return <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-100">Đang tải đề thi...</div>}><StudentExamView examRawData={studentExamData} /></Suspense>;
+  const pathMatch = window.location.pathname.match(/^\/(?:exam|p|thi)\/([A-Za-z0-9_-]+)/i);
+  const pathExamId = pathMatch ? pathMatch[1] : null;
+
+  const studentExamId = urlParams.get('examId') || urlParams.get('exam') || urlParams.get('code') || urlParams.get('pin') || urlParams.get('p') || hashParams.get('pin') || hashParams.get('p') || hashParams.get('examId') || pathExamId;
+  const studentExamData = urlParams.get('examData') || urlParams.get('d') || hashParams.get('examData') || hashParams.get('d');
+  const isStudentMode = urlParams.get('mode') === 'student' || urlParams.get('view') === 'exam' || hashParams.get('mode') === 'student';
+
+  if (studentExamData || studentExamId) {
+    return (
+      <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-100 font-sans">Đang tải phòng thi...</div>}>
+        <StudentExamView examId={studentExamId || undefined} examRawData={studentExamData || undefined} />
+      </Suspense>
+    );
   }
   if (isStudentMode) {
-    return <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-100">Đang tải phòng thi...</div>}><StudentExamView /></Suspense>;
+    return <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-100 font-sans">Đang tải phòng thi...</div>}><StudentExamView /></Suspense>;
   }
   
   return (

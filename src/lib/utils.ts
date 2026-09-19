@@ -59,10 +59,14 @@ export function cleanOptionText(opt: any): string {
 
 export function getPublicAppUrl(): string {
   if (typeof window === 'undefined') return '';
+  const custom = localStorage.getItem('custom_public_app_url');
+  if (custom && custom.trim().startsWith('http')) {
+    return custom.trim().replace(/\/+$/, '');
+  }
   let origin = window.location.origin;
-  // In Google AI Studio preview, dev containers run on ais-dev-... which is behind Google authentication.
-  // The public URL accessible to students on external devices/phones is ais-pre-...
-  if (origin.includes("ais-dev-")) {
+  const mode = localStorage.getItem('ai_studio_url_mode');
+  // Only convert to ais-pre- if user explicitly configured 'pre' mode after clicking Share in AI Studio
+  if (mode === 'pre' && origin.includes("ais-dev-")) {
     origin = origin.replace("ais-dev-", "ais-pre-");
   }
   return origin;

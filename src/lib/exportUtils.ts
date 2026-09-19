@@ -1,5 +1,25 @@
 import { saveAs } from 'file-saver';
 import html2canvas from 'html2canvas';
+import katex from 'katex';
+import { mml2omml } from 'mathml2omml-plus';
+
+function convertLatexToOmml(tex: string, isDisplay: boolean = false): string {
+    try {
+        const mathmlHtml = katex.renderToString(tex, {
+            displayMode: isDisplay,
+            output: 'mathml',
+            throwOnError: false
+        });
+        const match = mathmlHtml.match(/<math[\s\S]*?<\/math>/i);
+        if (match) {
+            return mml2omml(match[0]);
+        }
+    } catch (e) {
+        console.warn('OMML conversion error for:', tex, e);
+    }
+    // Fallback if OMML conversion fails
+    return isDisplay ? `<p align="center" style="margin: 6pt 0;"><b>$${tex}$</b></p>` : ` <b>$${tex}$</b> `;
+}
 
 async function svgToPngDataUrl(svgNode: SVGSVGElement): Promise<string> {
     try {
@@ -84,23 +104,25 @@ export async function exportHtmlToWord(element: HTMLElement, filename: string, m
     try {
         const clone = element.cloneNode(true) as HTMLElement;
         
-        // 1. If LaTeX mode requested, convert KaTeX elements directly to LaTeX string
-        if (mathFormat === 'latex') {
-            const katexElements = Array.from(clone.querySelectorAll(".katex"));
-            for (const el of katexElements) {
-                const annotationNode = el.querySelector("annotation[encoding='application/x-tex']");
-                const texString = annotationNode ? annotationNode.textContent || "" : "";
-                if (!texString) continue;
-                
-                const isBlock = el.parentElement?.classList.contains("katex-display") || el.classList.contains("katex-display");
-                if (el.parentNode) {
-                    const textNode = document.createTextNode(isBlock ? "$$\n" + texString + "\n$$" : "$" + texString + "$");
-                    el.parentNode.replaceChild(textNode, el);
-                }
+        // 0. Unwrap markdown-body and child paragraphs so inline content does not break onto separate lines in Word
+        const markdownBodies = Array.from(clone.querySelectorAll('.markdown-body'));
+        markdownBodies.forEach(mb => {
+            const paragraphs = Array.from(mb.querySelectorAll('p'));
+            paragraphs.forEach(p => {
+                const span = document.createElement('span');
+                span.innerHTML = p.innerHTML;
+                p.parentNode?.replaceChild(span, p);
+            });
+            // If inside table cell or preceded by a label (like Câu 1: or A.), unwrap container to span
+            const parent = mb.parentElement;
+            if (mb.classList.contains('inline-block') || parent?.tagName === 'TD' || mb.previousElementSibling?.tagName === 'STRONG' || mb.previousElementSibling?.tagName === 'B') {
+                const span = document.createElement('span');
+                span.innerHTML = mb.innerHTML;
+                mb.parentNode?.replaceChild(span, mb);
             }
-        }
-        
-        // 2. Handle TikZ SVG wrappers - ALWAYS convert to PNG (never raw base64 SVG because docx fails on svg)
+        });
+
+        // 1. Handle TikZ SVG wrappers - convert to high-res PNG
         const origTikzWrappers = Array.from(element.querySelectorAll(".tikz-wrapper")) as HTMLElement[];
         const clonedTikzWrappers = Array.from(clone.querySelectorAll(".tikz-wrapper")) as HTMLElement[];
         
@@ -115,20 +137,66 @@ export async function exportHtmlToWord(element: HTMLElement, filename: string, m
                     const pngDataUrl = await svgToPngDataUrl(svgNode);
                     const img = document.createElement("img");
                     img.src = pngDataUrl;
-                    img.style.maxWidth = "100%";
+                    img.className = "diagram";
+                    img.style.maxWidth = "400px";
                     img.style.height = "auto";
                     img.style.display = "block";
-                    img.style.margin = "15px auto";
+                    img.style.margin = "12pt auto";
                     cloned.parentNode?.replaceChild(img, cloned);
                 } catch (e) {
                     console.error("TikZ conversion error:", e);
                 }
             }
         }
-        
-        // 3. For standard mode (mathFormat !== 'latex'), rasterize ONLY root KaTeX formulas
-        // Avoid duplicate nested conversions which cause extreme slowness
-        if (mathFormat !== 'latex') {
+
+        // 2. Process Math Formulas based on mathFormat
+        const ommlReplacements: Map<string, string> = new Map();
+        let ommlCounter = 0;
+
+        if (mathFormat === 'latex') {
+            // Convert to $ ... $ for MathType (Toggle TeX)
+            const katexElements = Array.from(clone.querySelectorAll(".katex"));
+            for (const el of katexElements) {
+                const annotationNode = el.querySelector("annotation[encoding='application/x-tex']");
+                const texString = annotationNode ? annotationNode.textContent || "" : "";
+                if (!texString) continue;
+                
+                const isBlock = el.parentElement?.classList.contains("katex-display") || el.classList.contains("katex-display");
+                if (el.parentNode) {
+                    const textNode = document.createTextNode(isBlock ? "$$\n" + texString + "\n$$" : " $" + texString + "$ ");
+                    el.parentNode.replaceChild(textNode, el);
+                }
+            }
+        } else if (mathFormat === 'omml') {
+            // NATIVE WORD EQUATION (OMML): Preserves vectors \vec, fractions, square roots, etc.
+            const katexElements = Array.from(clone.querySelectorAll(".katex-display, .katex")) as HTMLElement[];
+            // Filter out nested katex elements so we only process top-level formulas
+            const rootKatex = katexElements.filter(el => {
+                const parentKatex = el.parentElement?.closest('.katex') || (el.classList.contains('katex') && el.parentElement?.closest('.katex-display'));
+                return !parentKatex;
+            });
+
+            for (const el of rootKatex) {
+                const annotationNode = el.querySelector("annotation[encoding='application/x-tex']");
+                const texString = annotationNode ? annotationNode.textContent || "" : "";
+                if (!texString) continue;
+
+                const isBlock = el.classList.contains("katex-display") || el.parentElement?.classList.contains("katex-display");
+                const ommlXml = convertLatexToOmml(texString, isBlock);
+
+                // Use placeholder token so the browser DOM serializer does NOT lowercase XML tag names (<m:oMath>, <m:accPr>, <m:chr>)
+                const token = `___OMML_MATH_TOKEN_${ommlCounter++}___`;
+                ommlReplacements.set(token, ommlXml);
+
+                const span = document.createElement(isBlock ? 'div' : 'span');
+                if (isBlock) {
+                    span.setAttribute('style', 'text-align: center; margin: 6pt 0;');
+                }
+                span.textContent = token;
+                el.parentNode?.replaceChild(span, el);
+            }
+        } else if (mathFormat === 'image') {
+            // Legacy/image fallback with html2canvas
             const allOrigKatex = Array.from(element.querySelectorAll(".katex-display, .katex")) as HTMLElement[];
             const allClonedKatex = Array.from(clone.querySelectorAll(".katex-display, .katex")) as HTMLElement[];
             
@@ -136,7 +204,6 @@ export async function exportHtmlToWord(element: HTMLElement, filename: string, m
             allOrigKatex.forEach((orig, idx) => {
                 const cloned = allClonedKatex[idx];
                 if (!orig || !cloned) return;
-                // Exclude nested katex children
                 const isNested = orig.parentElement?.closest('.katex') || (orig.classList.contains('katex') && orig.parentElement?.closest('.katex-display'));
                 if (!isNested) {
                     const isBlock = orig.classList.contains("katex-display") || orig.parentElement?.classList.contains("katex-display") || false;
@@ -144,14 +211,13 @@ export async function exportHtmlToWord(element: HTMLElement, filename: string, m
                 }
             });
             
-            // Process in concurrent batches of 6 for speed
             const batchSize = 6;
             for (let i = 0; i < rootPairs.length; i += batchSize) {
                 const batch = rootPairs.slice(i, i + batchSize);
                 await Promise.all(batch.map(async ({ orig, cloned, isBlock }) => {
                     try {
                         const canvas = await html2canvas(orig, {
-                            scale: 1.8,
+                            scale: 2.0,
                             logging: false,
                             useCORS: true,
                             backgroundColor: null
@@ -159,11 +225,10 @@ export async function exportHtmlToWord(element: HTMLElement, filename: string, m
                         const dataUrl = canvas.toDataURL("image/png");
                         const img = document.createElement("img");
                         img.src = dataUrl;
-                        img.style.maxWidth = "100%";
-                        img.style.height = "auto";
+                        img.className = "inline-math";
                         if (isBlock) {
                             img.style.display = "block";
-                            img.style.margin = "10px auto";
+                            img.style.margin = "8pt auto";
                         } else {
                             img.style.display = "inline-block";
                             img.style.verticalAlign = "middle";
@@ -172,17 +237,6 @@ export async function exportHtmlToWord(element: HTMLElement, filename: string, m
                         cloned.parentNode?.replaceChild(img, cloned);
                     } catch (e) {
                         console.error("KaTeX rasterize error:", e);
-                        // Fallback: extract LaTeX annotation so it doesn't vanish in Word
-                        try {
-                            const annotationNode = orig.querySelector("annotation[encoding='application/x-tex']");
-                            const tex = annotationNode ? annotationNode.textContent || "" : "";
-                            if (tex && cloned.parentNode) {
-                                const textNode = document.createTextNode(isBlock ? " " + tex + " " : " $" + tex + "$ ");
-                                cloned.parentNode.replaceChild(textNode, cloned);
-                            }
-                        } catch (fallbackErr) {
-                            // ignore
-                        }
                     }
                 }));
             }
@@ -296,59 +350,160 @@ export async function exportHtmlToWord(element: HTMLElement, filename: string, m
         }
 
         
-        // Add borders to regular markdown tables
+        // Polish styling and borders
         const allTables = clone.querySelectorAll('table');
         allTables.forEach(t => {
-            if (!t.getAttribute('style') || !t.getAttribute('style')?.includes('border: none')) {
+            const style = t.getAttribute('style') || '';
+            const className = t.className || '';
+            const isBorderless = style.includes('border: none') || className.includes('borderless') || className.includes('options-table');
+            if (isBorderless) {
+                t.removeAttribute('border');
+                t.style.borderCollapse = 'collapse';
+                t.style.width = '100%';
+                t.style.border = 'none';
+                const cells = t.querySelectorAll('th, td');
+                cells.forEach(c => {
+                    const el = c as HTMLElement;
+                    const cStyle = el.getAttribute('style') || '';
+                    if (!cStyle.includes('border:') || cStyle.includes('border: none')) {
+                        el.style.border = 'none';
+                    }
+                    el.style.padding = '2pt 4pt';
+                });
+            } else {
                 t.setAttribute('border', '1');
                 t.style.borderCollapse = 'collapse';
                 t.style.width = '100%';
-                t.style.marginBottom = '10pt';
-                
+                t.style.marginBottom = '8pt';
                 const cells = t.querySelectorAll('th, td');
                 cells.forEach(c => {
                     (c as HTMLElement).style.border = '1px solid black';
-                    (c as HTMLElement).style.padding = '6pt';
+                    (c as HTMLElement).style.padding = '4pt 6pt';
                 });
             }
         });
 
         let contentHtml = clone.innerHTML;
-        
         contentHtml = contentHtml.replace(/[\u200B-\u200D\uFEFF]/g, "");
         contentHtml = contentHtml.replace(/<\/strong>\s*<strong>/g, "</strong> <strong>");
         contentHtml = contentHtml.replace(/<\/em>\s*<em>/g, "</em> <em>");
         
-        const header = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns:m='http://schemas.microsoft.com/office/2004/12/omml' xmlns:mml='http://www.w3.org/1998/Math/MathML' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Document</title><style>@page Section1 { size: 8.27in 11.69in; margin: 0.8in 0.8in 0.8in 0.8in; mso-header-margin: .5in; mso-footer-margin: .5in; mso-paper-source: 0; }div.Section1 { page: Section1; }body { font-family: 'Times New Roman', Times, serif; font-size: 13pt; line-height: 1.5; }table { border-collapse: collapse; width: 100%; margin: 10pt 0; }th, td { border: 1px solid black; padding: 6pt; }table[style*="border: none"] th, table[style*="border: none"] td { border: none !important; }img { max-width: 100%; height: auto; display: block; margin: 15pt auto; text-align: center; }h1 { font-size: 18pt; text-align: center; margin-bottom: 20px; font-weight: bold; }h2 { font-size: 16pt; margin-top: 15pt; margin-bottom: 5pt; font-weight: bold; }h3 { font-size: 14pt; margin-top: 15px; font-weight: bold; }p { margin: 0 0 6pt 0; }.katex-html { display: none; }.katex-mathml { display: inline; }math { }</style></head><body><div class="Section1">`;
+        // Restore exact case-sensitive OMML XML
+        if (ommlReplacements.size > 0) {
+            ommlReplacements.forEach((ommlXml, token) => {
+                contentHtml = contentHtml.replace(token, ommlXml);
+            });
+        }
+        
+        const header = `<html xmlns:o='urn:schemas-microsoft-com:office:office'
+xmlns:w='urn:schemas-microsoft-com:office:word'
+xmlns:m='http://schemas.openxmlformats.org/officeDocument/2006/math'
+xmlns:mml='http://www.w3.org/1998/Math/MathML'
+xmlns='http://www.w3.org/TR/REC-html40'>
+<head>
+<meta charset='utf-8'>
+<title>Đề thi</title>
+<!--[if gte mso 9]>
+<xml>
+<w:WordDocument>
+<w:View>Print</w:View>
+<w:Zoom>100</w:Zoom>
+<w:DoNotOptimizeForBrowser/>
+</w:WordDocument>
+</xml>
+<![endif]-->
+<style>
+@page Section1 {
+    size: 8.27in 11.69in; /* A4 */
+    margin: 0.79in 0.79in 0.79in 0.79in; /* 2cm */
+    mso-header-margin: .5in;
+    mso-footer-margin: .5in;
+    mso-paper-source: 0;
+}
+div.Section1 { page: Section1; }
+body {
+    font-family: 'Times New Roman', Times, serif;
+    font-size: 12pt;
+    line-height: 1.25;
+    color: #000000;
+}
+p {
+    margin: 0 0 3.5pt 0;
+    line-height: 1.25;
+}
+h1, h2, h3, h4 {
+    font-family: 'Times New Roman', Times, serif;
+    color: #000000;
+    margin-top: 8pt;
+    margin-bottom: 4pt;
+}
+table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 4pt 0;
+    font-family: 'Times New Roman', Times, serif;
+    font-size: 12pt;
+}
+table[border="1"] th, table[border="1"] td {
+    border: 1px solid #000000;
+    padding: 4pt 6pt;
+}
+img.diagram {
+    max-width: 420px;
+    height: auto;
+    display: block;
+    margin: 10pt auto;
+    text-align: center;
+}
+img.inline-math {
+    display: inline-block;
+    vertical-align: middle;
+    margin: 0 1px;
+}
+.page-break {
+    page-break-before: always;
+}
+.question-block {
+    page-break-inside: avoid;
+    margin-bottom: 6pt;
+}
+</style>
+</head>
+<body>
+<div class="Section1">`;
         const footer = "</div></body></html>";
         const sourceHTML = header + contentHtml + footer;
         
         let exported = false;
-        try {
-            // Try server-side .docx generation with an 8-second timeout
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 8000);
-            
-            const response = await fetch('/api/export-docx', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ html: contentHtml }),
-                signal: controller.signal
-            });
-            clearTimeout(timeoutId);
-            
-            if (response.ok) {
-                const docxBlob = await response.blob();
-                const finalFilename = filename.replace(/\.doc$/, '') + '.docx';
-                saveAs(docxBlob, finalFilename);
-                exported = true;
+
+        // If mathFormat is 'image', we can try server-side .docx
+        if (mathFormat === 'image') {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 8000);
+                
+                const response = await fetch('/api/export-docx', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ html: contentHtml }),
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+                
+                if (response.ok) {
+                    const docxBlob = await response.blob();
+                    const finalFilename = filename.replace(/\.doc$/, '') + '.docx';
+                    saveAs(docxBlob, finalFilename);
+                    exported = true;
+                }
+            } catch (docxErr) {
+                console.warn("DOCX server generation unavailable, falling back to Word .doc format:", docxErr);
             }
-        } catch (docxErr) {
-            console.warn("DOCX server generation unavailable, falling back to Word .doc format:", docxErr);
         }
         
         if (!exported) {
-            // Robust client-side fallback: Save as standard Word .doc (HTML document)
+            // For OMML and LaTeX: Save directly as Word .doc (Office HTML with OMML namespaces)
+            // Microsoft Word parses OMML into 100% native, editable Word Equations
             const docBlob = new Blob(['\ufeff' + sourceHTML], { type: 'application/msword;charset=utf-8' });
             const finalFilename = filename.endsWith('.doc') ? filename : filename.replace(/\.docx$/, '') + '.doc';
             saveAs(docBlob, finalFilename);
