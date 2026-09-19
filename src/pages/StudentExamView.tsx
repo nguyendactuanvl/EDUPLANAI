@@ -8,12 +8,13 @@ import rehypeKatex from 'rehype-katex';
 import { apiFetch } from '../lib/apiFetch';
 import LZString from 'lz-string';
 import { Clock, Copy } from 'lucide-react';
-import { fixMath, cleanQuestionStem } from "../lib/utils";
+import { fixMath, cleanQuestionStem, cleanOptionText } from "../lib/utils";
 
 export function StudentExamView({ examId, examRawData }: { examId?: string, examRawData?: string }) {
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(Boolean(examId || examRawData));
   const [error, setError] = useState<string | null>(null);
   const [examData, setExamData] = useState<any>(null);
+  const [inputPin, setInputPin] = useState(examId || '');
   
   const [isStarted, setIsStarted] = useState(false);
   const [studentInfo, setStudentInfo] = useState({ name: '', class: '' });
@@ -25,6 +26,68 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [timeSpent, setTimeSpent] = useState<number>(0);
 
+  const fetchExamById = async (id: string) => {
+    const cleanId = id.trim();
+    if (!cleanId) return;
+    setLoading(true);
+    setError(null);
+    
+    const cached = localStorage.getItem(`examCache_${cleanId}`);
+    
+    try {
+      const res = await apiFetch(`/api/exams/${cleanId}`);
+      if (!res.ok) {
+        if (cached) {
+          try {
+            const data = JSON.parse(cached);
+            setExamData(data);
+            if (data.codes && data.codes.length > 0) {
+              const randomCode = data.codes[Math.floor(Math.random() * data.codes.length)].code;
+              setSelectedCode(randomCode);
+            } else {
+              setSelectedCode("101");
+            }
+            setLoading(false);
+            return;
+          } catch (e) {}
+        }
+        throw new Error(`Không tìm thấy bài thi với mã "${cleanId}". Có thể mã chưa đúng hoặc phòng thi chưa được mở.`);
+      }
+
+      const data = await res.json();
+      if (!data) {
+        throw new Error("Dữ liệu đề thi không hợp lệ hoặc đã hết hạn.");
+      }
+
+      localStorage.setItem(`examCache_${cleanId}`, JSON.stringify(data));
+      setExamData(data);
+      if (data.codes && data.codes.length > 0) {
+        const randomCode = data.codes[Math.floor(Math.random() * data.codes.length)].code;
+        setSelectedCode(randomCode);
+      } else {
+        setSelectedCode("101");
+      }
+    } catch (err: any) {
+      if (cached) {
+        try {
+          const data = JSON.parse(cached);
+          setExamData(data);
+          if (data.codes && data.codes.length > 0) {
+            const randomCode = data.codes[Math.floor(Math.random() * data.codes.length)].code;
+            setSelectedCode(randomCode);
+          } else {
+            setSelectedCode("101");
+          }
+          setLoading(false);
+          return;
+        } catch (e) {}
+      }
+      setError(err.message || "Lỗi kết nối đến phòng thi.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (examRawData) {
       try {
@@ -35,58 +98,25 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
           if (data.codes && data.codes.length > 0) {
             const randomCode = data.codes[Math.floor(Math.random() * data.codes.length)].code;
             setSelectedCode(randomCode);
+          } else {
+            setSelectedCode("101");
           }
           setLoading(false);
           return;
         } else {
           throw new Error("Dữ liệu đề thi không hợp lệ.");
         }
-      } catch (e) {
-        setError("Lỗi tải đề thi: " + e.message);
+      } catch (e: any) {
+        setError("Lỗi tải đề thi: " + (e.message || ""));
         setLoading(false);
         return;
       }
     }
     
     if (examId) {
-      const cached = localStorage.getItem(`examCache_${examId}`);
-      
-      apiFetch(`/api/exams/${examId}`)
-      .then(res => {
-        if (!res.ok) {
-           if (cached) {
-               return JSON.parse(cached);
-           }
-           throw new Error("Không tìm thấy đề thi. Có thể link đã hết hạn.");
-        }
-        return res.json();
-      })
-      .then(data => {
-        if (data.codes) {
-           // Valid data from server, save to cache
-           localStorage.setItem(`examCache_${examId}`, JSON.stringify(data));
-        }
-        setExamData(data);
-        if (data.codes && data.codes.length > 0) {
-          const randomCode = data.codes[Math.floor(Math.random() * data.codes.length)].code;
-          setSelectedCode(randomCode);
-        }
-      })
-      .catch(err => {
-         if (cached) {
-            try {
-               const data = JSON.parse(cached);
-               setExamData(data);
-               if (data.codes && data.codes.length > 0) {
-                  const randomCode = data.codes[Math.floor(Math.random() * data.codes.length)].code;
-                  setSelectedCode(randomCode);
-               }
-               return;
-            } catch(e) {}
-         }
-         setError(err.message);
-      })
-      .finally(() => setLoading(false));
+      fetchExamById(examId);
+    } else {
+      setLoading(false);
     }
   }, [examId, examRawData]);
 
@@ -104,14 +134,82 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
     return () => clearInterval(timer);
   }, [isStarted, isSubmitted, timeLeft]);
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="w-10 h-10 animate-spin text-emerald-600" /></div>;
-  if (error) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><div className="bg-red-50 text-red-700 p-6 rounded-xl max-w-md text-center">{error}</div></div>;
-  if (!examData) return null;
+  const examTitle = examData?.examData?.examName || examData?.examName || "Đề kiểm tra trực tuyến";
+  const examDuration = examData?.examData?.duration || examData?.duration || 45;
 
-  const currentExam = examData.codes.find((c: any) => c.code === selectedCode);
+  const currentExam = React.useMemo(() => {
+    if (!examData) return null;
+    if (Array.isArray(examData.codes) && examData.codes.length > 0) {
+      return examData.codes.find((c: any) => c.code === selectedCode) || examData.codes[0];
+    }
+    if (Array.isArray(examData.questions) && examData.questions.length > 0) {
+      return { code: selectedCode || "101", questions: examData.questions };
+    }
+    return null;
+  }, [examData, selectedCode]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-3">
+        <Loader2 className="w-10 h-10 animate-spin text-emerald-600" />
+        <p className="text-slate-600 text-sm font-medium">Đang tải đề thi...</p>
+      </div>
+    );
+  }
+
+  if (!examData) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+        <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 max-w-md w-full">
+          <div className="flex justify-center mb-4">
+            <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center">
+              <FileText className="w-8 h-8 text-emerald-600" />
+            </div>
+          </div>
+          <h1 className="text-2xl font-bold text-center text-slate-800 mb-2">Vào Phòng Thi Online</h1>
+          <p className="text-center text-slate-500 mb-6 text-sm">Nhập mã đề thi do giáo viên cung cấp để bắt đầu làm bài</p>
+
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
+              <p className="font-semibold mb-1">Thông báo:</p>
+              <p>{error}</p>
+            </div>
+          )}
+
+          <div className="space-y-4 mb-6">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Mã đề / Mã phòng thi</label>
+              <input 
+                type="text" 
+                value={inputPin} 
+                onChange={e => setInputPin(e.target.value.toUpperCase())} 
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 font-mono text-center text-xl font-bold tracking-widest uppercase outline-none" 
+                placeholder="VD: K8F3KD" 
+                autoFocus
+              />
+            </div>
+            <button 
+              disabled={!inputPin.trim()}
+              onClick={() => fetchExamById(inputPin.trim())}
+              className="w-full py-3.5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Vào Phòng Thi
+            </button>
+          </div>
+
+          <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 text-xs space-y-2">
+            <p className="font-bold flex items-center gap-1.5">
+              <span>💡</span> Lưu ý nếu mở qua Zalo:
+            </p>
+            <p>Nếu gặp thông báo link bị chặn hoặc không mở được, em hãy bấm vào biểu tượng <strong>dấu 3 chấm (···)</strong> ở góc trên bên phải màn hình Zalo, rồi chọn <strong>"Mở bằng trình duyệt"</strong> (Chrome hoặc Safari).</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const handleSubmit = () => {
-    if (!currentExam) return;
+    if (!currentExam || !currentExam.questions) return;
     
     // Check if fully answered
     let answeredCount = 0;
@@ -212,32 +310,30 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
               <FileText className="w-8 h-8 text-emerald-600" />
             </div>
           </div>
-          <h1 className="text-2xl font-bold text-center text-slate-800 mb-2">{examData.examData.examName}</h1>
-          <p className="text-center text-slate-500 mb-8">Vui lòng điền thông tin để bắt đầu làm bài</p>
+          <h1 className="text-2xl font-bold text-center text-slate-800 mb-2">{examTitle}</h1>
+          <p className="text-center text-slate-500 mb-6 text-sm">Thời lượng: {examDuration} phút - Vui lòng điền thông tin để bắt đầu</p>
           
-          <div className="space-y-4 mb-8">
+          <div className="space-y-4 mb-6">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Họ và tên</label>
-              <input type="text" value={studentInfo.name} onChange={e => setStudentInfo({...studentInfo, name: e.target.value})} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Nhập họ và tên..." />
+              <label className="block text-sm font-medium text-slate-700 mb-1">Họ và tên học sinh</label>
+              <input type="text" value={studentInfo.name} onChange={e => setStudentInfo({...studentInfo, name: e.target.value})} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Ví dụ: Nguyễn Văn A" />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Lớp</label>
-              <input type="text" value={studentInfo.class} onChange={e => setStudentInfo({...studentInfo, class: e.target.value})} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Nhập tên lớp..." />
+              <input type="text" value={studentInfo.class} onChange={e => setStudentInfo({...studentInfo, class: e.target.value})} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Ví dụ: 12A1" />
             </div>
           </div>
           
           <button 
-            disabled={!studentInfo.name || !studentInfo.class}
+            disabled={!studentInfo.name.trim() || !studentInfo.class.trim()}
             onClick={() => {
               setIsStarted(true);
-              if (examData?.examData?.duration) {
-                const mins = parseInt(examData.examData.duration);
-                if (!isNaN(mins)) setTimeLeft(mins * 60);
-              }
+              const mins = parseInt(String(examDuration));
+              if (!isNaN(mins) && mins > 0) setTimeLeft(mins * 60);
             }}
             className="w-full py-3.5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            Bắt đầu làm bài
+            Bắt đầu làm bài ({examDuration} phút)
           </button>
         </div>
       </div>
@@ -247,25 +343,30 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
   return (
     <div className="min-h-screen bg-slate-50 pb-20">
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center">
+        <div className="max-w-4xl mx-auto px-4 py-3 flex justify-between items-center">
           <div>
-            <h1 className="font-bold text-slate-800 truncate">{examData.examData.examName}</h1>
-            <p className="text-xs text-slate-500">Học sinh: {studentInfo.name} - Lớp: {studentInfo.class}</p>
+            <h1 className="font-bold text-slate-800 truncate max-w-md">{examTitle}</h1>
+            <p className="text-xs text-slate-500">Học sinh: {studentInfo.name} - Lớp: {studentInfo.class} (Mã đề: {currentExam?.code || selectedCode || "101"})</p>
           </div>
           {isStarted && !isSubmitted && timeLeft !== null && (
-            <div className="flex items-center gap-2 bg-amber-50 text-amber-700 px-4 py-2 rounded-lg font-bold border border-amber-200">
-              <Clock className="w-5 h-5" />
+            <div className="flex items-center gap-2 bg-amber-50 text-amber-700 px-3 py-1.5 rounded-lg font-bold border border-amber-200 text-sm">
+              <Clock className="w-4 h-4" />
               <span>{Math.floor(timeLeft / 60).toString().padStart(2, '0')}:{(timeLeft % 60).toString().padStart(2, '0')}</span>
             </div>
           )}
           {!isSubmitted && (
-            <button onClick={handleSubmit} className="px-6 py-2 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700">
+            <button onClick={handleSubmit} className="px-5 py-2 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 text-sm shadow-sm">
               Nộp Bài
             </button>
           )}
         </div>
       </header>
-      <main className="max-w-4xl mx-auto px-4 py-8 space-y-8">
+      <main className="max-w-4xl mx-auto px-4 py-6 space-y-6">
+        {/* Zalo browser recommendation banner */}
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-900 flex items-center justify-between">
+          <span>💡 <strong>Mẹo làm bài trên Zalo:</strong> Để công thức hiển thị mượt mà nhất, bạn có thể bấm <strong>(···)</strong> góc trên và chọn <em>"Mở bằng trình duyệt"</em>.</span>
+        </div>
+
         {isSubmitted && (
           <div className="bg-white p-8 rounded-2xl shadow-sm border border-emerald-200 text-center relative overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-2 bg-emerald-500"></div>
@@ -273,7 +374,7 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
             <h2 className="text-3xl font-bold text-slate-800 mb-2">Điểm của bạn: {score.toFixed(1)}/10</h2>
             <p className="text-slate-600 mb-4">Bạn đã hoàn thành bài kiểm tra. Xem chi tiết đáp án bên dưới.</p>
             <button onClick={() => {
-              const txt = `Học sinh: ${studentInfo.name} - Lớp: ${studentInfo.class}\nĐã hoàn thành Đề: ${examData.examData.examName}\nMã đề: ${currentExam.code}\nĐiểm số: ${score.toFixed(1)}/10\nThời gian làm bài: ${Math.floor(timeSpent/60)} phút ${timeSpent%60} giây`;
+              const txt = `Học sinh: ${studentInfo.name} - Lớp: ${studentInfo.class}\nĐã hoàn thành Đề: ${examTitle}\nMã đề: ${currentExam?.code || selectedCode || "101"}\nĐiểm số: ${score.toFixed(1)}/10\nThời gian làm bài: ${Math.floor(timeSpent/60)} phút ${timeSpent%60} giây`;
               navigator.clipboard.writeText(txt);
               alert("Đã sao chép kết quả! Bạn có thể gửi cho Giáo viên qua Zalo.");
             }} className="px-6 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 inline-flex items-center gap-2">
@@ -349,7 +450,7 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
                       <div className={`w-6 h-6 rounded-full border flex items-center justify-center shrink-0 ${isSelected && !isSubmitted ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-slate-300'}`}>
                         {String.fromCharCode(65 + oIdx)}
                       </div>
-                      <span className="flex-1"><MarkdownRenderer className="markdown-body inline-block" content={fixMath((opt || '').replace(/^[A-D][\.\:\)]\s*/i, ''))} /></span>
+                      <span className="flex-1"><MarkdownRenderer className="markdown-body inline-block" content={fixMath(cleanOptionText(opt))} /></span>
                       {isSubmitted && isCorrect && <CheckCircle2 className="w-5 h-5 text-emerald-600" />}
                       {isSubmitted && isSelected && !isCorrect && <XCircle className="w-5 h-5 text-red-600" />}
                     </button>

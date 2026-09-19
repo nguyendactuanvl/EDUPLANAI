@@ -27,10 +27,54 @@ export function parseApiResponse<T = any>(text: string): T {
   }
 }
 
+export function cleanOptionText(opt: any): string {
+  if (!opt && opt !== 0) return '';
+  let text = String(opt).trim();
+  
+  // 1. Remove leading option prefixes like "A.", "A)", "A:", "a.", "a)"
+  text = text.replace(/^[A-Da-d][\.\:\)]\s*/, '').trim();
+
+  // 2. Remove redundant outer $ or $$ wrapping the entire option (especially if multiline or with spaces)
+  // e.g. "$\n\begin{cases}...\end{cases}\n$" or "$ \begin{cases}... $" or "$$ ... $$"
+  text = text.replace(/^\s*\${1,2}\s*([\s\S]*?)\s*\${1,2}\s*$/, '$1').trim();
+
+  // 3. If there are still stray leading/trailing dollars or newlines around it
+  text = text.replace(/^\s*\$+\s*/, '').replace(/\s*\$+\s*$/, '').trim();
+
+  // 4. If it contains a LaTeX block environment (cases, array, matrix, aligned, etc.)
+  // Wrap it tightly as inline math $...$ so it renders right next to "A." without stray dollars or newlines
+  if (/\\begin\s*\{(?:cases|aligned|array|matrix|pmatrix|bmatrix|vmatrix|Vmatrix|split|gather|align)\*?\}/.test(text)) {
+    return `$${text.trim()}$`;
+  }
+
+  // 5. If it contains standard math symbols (\frac, \sqrt, ^, _, =, <, >, etc.), wrap tightly in $...$
+  if (/(?:[\\^_=><\+\-\*\/]|\d+[a-zA-Z]|[a-zA-Z]\d+)/.test(text) && !/^(đúng|sai|có|không|luôn|tất cả|cả|đáp án|phương án)\b/i.test(text)) {
+    if (!text.startsWith('$') && !text.endsWith('$')) {
+      return `$${text}$`;
+    }
+  }
+
+  return text;
+}
+
+export function getPublicAppUrl(): string {
+  if (typeof window === 'undefined') return '';
+  let origin = window.location.origin;
+  // In Google AI Studio preview, dev containers run on ais-dev-... which is behind Google authentication.
+  // The public URL accessible to students on external devices/phones is ais-pre-...
+  if (origin.includes("ais-dev-")) {
+    origin = origin.replace("ais-dev-", "ais-pre-");
+  }
+  return origin;
+}
+
 export function cleanQuestionStem(content: any, options?: any[]): string {
   if (!content) return '';
   let text = String(content).trim();
   
+  // Strip any leaked preamble packages
+  text = text.replace(/\\(usetikzlibrary|usepackage)\s*\{[^}]*\}\s*/gi, '');
+
   // If the question has separate options array
   if (options && options.length >= 2) {
     // 1. Remove HTML grid of options if present
@@ -177,6 +221,9 @@ export const fixMath = (text: any) => {
     if (typeof text !== 'string') text = String(text);
     let t = text.trim();
     
+    // 0. Remove stray preamble packages that might be generated in math or TikZ
+    t = t.replace(/\\(usetikzlibrary|usepackage)\s*\{[^}]*\}\s*/gi, '');
+
     // 1. Unescape escaped dollar signs (\$)
     t = t.replace(/\\(\$)/g, '$1');
 
@@ -184,17 +231,53 @@ export const fixMath = (text: any) => {
     t = t.replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$');
     t = t.replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$');
 
-    // 2.2. Wrap naked LaTeX environments (cases, aligned, array, matrix, etc.) if not already in $$...$$ or $...$
-    t = t.replace(/(?<!\$)\s*(\\begin\s*\{(cases|aligned|array|matrix|pmatrix|bmatrix|vmatrix|Vmatrix|split|gather|align)\*?\}[\s\S]*?\\end\s*\{\2\*?\})\s*(?!\$)/g, (match, env) => {
-        return `\n$$\n${env.trim()}\n$$\n`;
+    // 2.1. Normalize informal not-equal signs (/ =, /=, !=, =/=) to standard LaTeX \neq
+    t = t.replace(/=\/=/g, ' \\neq ');
+    t = t.replace(/!\s*=\s*/g, ' \\neq ');
+    t = t.replace(/(?<!\/)\/\s*=\s*/g, ' \\neq ');
+
+    // 2.2. Normalize options formatted with environments or multiline expressions:
+    // e.g. "A. $\n\begin{cases}...\end{cases}\n$" or "A. $ \begin{cases}...\end{cases} $" or "<div><strong>A.</strong> $\begin{cases}...</div>"
+    t = t.replace(/(^|\n|<div[^>]*>)\s*([A-D][\.\:\)]|<strong>[A-D][\.\:\)]<\/strong>)\s*\${0,2}\s*(\\begin\s*\{(?:cases|aligned|array|matrix|pmatrix|bmatrix|vmatrix|Vmatrix|split|gather|align)\*?\}[\s\S]*?\\end\s*\{(?:cases|aligned|array|matrix|pmatrix|bmatrix|vmatrix|Vmatrix|split|gather|align)\*?\})\s*\${0,2}\s*(<\/div>|$|\n)/g, (m, prefix, label, env, suffix) => {
+        return `${prefix}${label} $${env.trim()}$ ${suffix}`;
     });
 
-    // 2.5. Normalize spaces and trailing punctuation inside inline $ ... $ so remark-math and KaTeX recognize them
+    // 2.3. Normalize options with multiline expressions e.g. "A. $\n x = 1 \n$" -> "A. $x = 1$"
+    t = t.replace(/(^|\n|<div[^>]*>)\s*([A-D][\.\:\)]|<strong>[A-D][\.\:\)]<\/strong>)\s*\$\s*\n+([\s\S]*?)\n+\s*\$\s*(<\/div>|$|\n)/g, (m, prefix, label, expr, suffix) => {
+        return `${prefix}${label} $${expr.trim()}$ ${suffix}`;
+    });
+
+    // 2.4. Normalize options with simple inline math with extra spaces e.g. "A. $ x = 1 $" -> "A. $x = 1$"
+    t = t.replace(/(^|\n|<div[^>]*>)\s*([A-D][\.\:\)]|<strong>[A-D][\.\:\)]<\/strong>)\s*\$\s*([^\$\n]+?)\s*\$\s*(<\/div>|$|\n)/g, (m, prefix, label, expr, suffix) => {
+        return `${prefix}${label} $${expr.trim()}$ ${suffix}`;
+    });
+
+    // 2.5. Standalone multiline environments wrapped in single/double dollars:
+    // e.g. "$\n\begin{cases}...\end{cases}\n$" -> "\n\n$$\n\begin{cases}...\end{cases}\n$$\n\n"
+    t = t.replace(/(^|\n)\s*\${1,2}\s*(\\begin\s*\{(?:cases|aligned|array|matrix|pmatrix|bmatrix|vmatrix|Vmatrix|split|gather|align)\*?\}[\s\S]*?\\end\s*\{(?:cases|aligned|array|matrix|pmatrix|bmatrix|vmatrix|Vmatrix|split|gather|align)\*?\})\s*\${1,2}\s*($|\n)/g, '$1\n\n$$\n$2\n$$\n\n$3');
+
+    // 2.6. Standalone naked LaTeX environments (cases, aligned, array, matrix, etc.) if not already in $$...$$ or $...$
+    t = t.replace(/(?<!\$)\s*(\\begin\s*\{(?:cases|aligned|array|matrix|pmatrix|bmatrix|vmatrix|Vmatrix|split|gather|align)\*?\}[\s\S]*?\\end\s*\{(?:cases|aligned|array|matrix|pmatrix|bmatrix|vmatrix|Vmatrix|split|gather|align)\*?\})\s*(?!\$)/g, (match, env) => {
+        return `\n\n$$\n${env.trim()}\n$$\n\n`;
+    });
+
+    // 2.7. Clean stray single $ lines before or after $$...$$
+    t = t.replace(/(^|\n)\s*\$\s*\n+(\$\$[\s\S]*?\$\$)/g, '$1$2');
+    t = t.replace(/(\$\$[\s\S]*?\$\$)\n+\s*\$\s*($|\n)/g, '$1$2');
+    t = t.replace(/(?<!\$)\$\s*(\$\$[\s\S]*?\$\$)\s*\$(?!\$)/g, '$1');
+
+    // 2.8. Normalize spaces and trailing punctuation inside inline $ ... $ so remark-math and KaTeX recognize them
     // (e.g. "$ 1 $" -> "$1$", "$-\pi < -2 \Leftrightarrow \pi^2 < 4.$" -> "$-\pi < -2 \Leftrightarrow \pi^2 < 4$.")
     t = t.replace(/(?<!\$)\$(?!\$)\s*([^\$\n]+?)\s*(?<!\$)\$(?!\$)/g, (match, formula) => {
         let trimmed = formula.trim();
         if (!trimmed) return match;
         
+        // Ensure not-equal normalization inside math block as well
+        trimmed = trimmed.replace(/=\/=/g, ' \\neq ')
+                         .replace(/!\s*=\s*/g, ' \\neq ')
+                         .replace(/(?<!\/)\/\s*=\s*/g, ' \\neq ')
+                         .replace(/\s*\\neq\s*/g, ' \\neq ');
+
         let trailingPunct = "";
         const punctMatch = trimmed.match(/([.,;:!?]+)$/);
         if (punctMatch && !/[\\\}]/.test(punctMatch[1])) {
@@ -205,7 +288,7 @@ export const fixMath = (text: any) => {
         return `$${trimmed}$${trailingPunct}`;
     });
 
-    // 2.8. Protect existing math blocks & code blocks while wrapping naked math commands
+    // 2.9. Protect existing math blocks & code blocks while wrapping naked math commands
     const tokenRegex = /(```[\s\S]*?```|\$\$[\s\S]*?\$\$|\$(?:\\\$|[^\$\n])+?\$)/g;
     const parts: { isProtected: boolean; text: string }[] = [];
     let lastIndex = 0;
@@ -287,10 +370,8 @@ export const fixMath = (text: any) => {
         }
     }
 
-    // 5. Ensure matching odd dollar signs
-    if ((t.match(/\$/g) || []).length % 2 !== 0) {
-        if (t.endsWith('$')) t = '$' + t;
-        else if (t.startsWith('$')) t = t + '$';
-    }
+    // 5. Clean stray single $ on isolated lines
+    t = t.replace(/^\s*\$\s*$/gm, '');
+
     return t;
 };

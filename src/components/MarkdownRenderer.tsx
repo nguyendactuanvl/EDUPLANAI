@@ -26,6 +26,13 @@ export const MarkdownRenderer = ({ content, className }: { content: string, clas
   processedContent = processedContent.replace(/(?<!\$)\$(?!\$)\s*([^\$\n]+?)\s*(?<!\$)\$(?!\$)/g, (match, formula) => {
     let trimmed = formula.trim();
     if (!trimmed) return match;
+
+    // Normalize pseudo not-equal symbols inside math block
+    trimmed = trimmed.replace(/=\/=/g, ' \\neq ')
+                     .replace(/!\s*=\s*/g, ' \\neq ')
+                     .replace(/(?<!\/)\/\s*=\s*/g, ' \\neq ')
+                     .replace(/\s*\\neq\s*/g, ' \\neq ');
+
     let trailingPunct = "";
     const punctMatch = trimmed.match(/([.,;:!?]+)$/);
     if (punctMatch && !/[\\\}]/.test(punctMatch[1])) {
@@ -48,15 +55,21 @@ export const MarkdownRenderer = ({ content, className }: { content: string, clas
     }
   });
   
-  // 1. Unwrap any existing code blocks around TikZ to normalize
-  processedContent = processedContent.replace(/```[a-z]*\s*(\\begin\s*\{tikzpicture\}[\s\S]*?\\end\s*\{tikzpicture\})\s*```/gi, '$1');
+  // 1. Remove stray preamble packages that might be generated (e.g. \usetikzlibrary{...})
+  processedContent = processedContent.replace(/\\(usetikzlibrary|usepackage)\s*\{[^}]*\}\s*/gi, '');
+
+  // 1.1 Unwrap any existing code blocks around TikZ to normalize
+  processedContent = processedContent.replace(/```[a-z]*\s*([\s\S]*?\\begin\s*\{tikzpicture\}[\s\S]*?\\end\s*\{tikzpicture\})\s*```/gi, (match, inner) => {
+    return inner.replace(/\\(usetikzlibrary|usepackage)\s*\{[^}]*\}\s*/gi, '');
+  });
   
   // 1.5 Wrap loose tikz code blocks that don't have begin/end environment
   processedContent = processedContent.replace(/```tikz\s*([\s\S]*?)```/gi, (match, inner) => {
-    if (!inner.includes('\\begin{tikzpicture}')) {
-       return `\\begin{tikzpicture}\n${inner}\n\\end{tikzpicture}`;
+    let cleaned = inner.replace(/\\(usetikzlibrary|usepackage)\s*\{[^}]*\}\s*/gi, '').trim();
+    if (!cleaned.includes('\\begin{tikzpicture}')) {
+       return `\\begin{tikzpicture}\n${cleaned}\n\\end{tikzpicture}`;
     }
-    return inner;
+    return cleaned;
   });
   
   // 2. Base64 encode TikZ blocks to prevent Markdown/KaTeX interference

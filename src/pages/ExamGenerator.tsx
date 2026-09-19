@@ -10,16 +10,18 @@ import { Link } from 'lucide-react';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import { exportHtmlToWord } from '../lib/exportUtils';
-import { fixMath, cleanQuestionStem, parseApiResponse } from '../lib/utils';
+import { fixMath, cleanQuestionStem, parseApiResponse, cleanOptionText, getPublicAppUrl } from '../lib/utils';
+import { SAMPLE_MATH_QUESTIONS, SAMPLE_MATH_EXAM_NAME, SAMPLE_MATH_DURATION } from '../data/sampleMathExam';
+import { parseRawExamText } from '../lib/examParser';
 import { useState, useRef, useEffect } from "react";
-import { FileCheck, Sparkles, Shuffle, Download, Share2, Plus, Trash2, Printer, UploadCloud, FileSpreadsheet, FileText, X, ExternalLink } from "lucide-react";
+import { FileCheck, Sparkles, Shuffle, Download, Share2, Plus, Trash2, Printer, UploadCloud, FileSpreadsheet, FileText, X, ExternalLink, Smartphone, Copy, Check, Edit3, ListPlus } from "lucide-react";
 
 interface Question {
   type?: "mc" | "tf" | "sa" | "essay";
   explanation?: string;
   id: number;
   content: string;
-  options: string[];
+  options?: string[];
   correctOptionIndex?: number;
   correctAnswer?: string;
   tfStatements?: { statement: string; correct: boolean }[];
@@ -349,7 +351,110 @@ const [examName, setExamName] = useState("");
   const [shuffledExams, setShuffledExams] = useState<{code: string, questions: Question[]}[]>([]);
   const [numCodes, setNumCodes] = useState(4);
   const [shareLink, setShareLink] = useState("");
+  const [sharePin, setSharePin] = useState("");
   const [showBubbleSheetModal, setShowBubbleSheetModal] = useState(false);
+  const [showAddQuestionModal, setShowAddQuestionModal] = useState(false);
+  const [showImportTextModal, setShowImportTextModal] = useState(false);
+  const [importRawText, setImportRawText] = useState("");
+  const [copiedZalo, setCopiedZalo] = useState(false);
+  const [newQuestionType, setNewQuestionType] = useState<"mc" | "tf" | "sa" | "essay">("mc");
+  const [newQuestionContent, setNewQuestionContent] = useState("");
+  const [newQuestionOptions, setNewQuestionOptions] = useState<string[]>(["", "", "", ""]);
+  const [newQuestionCorrectIndex, setNewQuestionCorrectIndex] = useState(0);
+  const [newQuestionAnswer, setNewQuestionAnswer] = useState("");
+  const [newQuestionExplanation, setNewQuestionExplanation] = useState("");
+  const [newQuestionLevel, setNewQuestionLevel] = useState("Nhận biết");
+  const [newQuestionTopic, setNewQuestionTopic] = useState("");
+
+  const handleLoadSampleExam = () => {
+    setQuestions(SAMPLE_MATH_QUESTIONS as Question[]);
+    setExamName(SAMPLE_MATH_EXAM_NAME);
+    setDuration(SAMPLE_MATH_DURATION);
+    setActiveTab("exam");
+  };
+
+  const handleImportText = () => {
+    if (!importRawText.trim()) return;
+    const parsed = parseRawExamText(importRawText);
+    if (parsed.length === 0) {
+      alert("Không tìm thấy câu hỏi hợp lệ trong đoạn văn bản. Vui lòng định dạng theo mẫu: Câu 1: ... A. ... B. ... C. ... D. ...");
+      return;
+    }
+    const currentMaxId = questions.reduce((max, q) => Math.max(max, q.id || 0), 0);
+    const reindexed = parsed.map((q, idx) => ({ ...q, id: currentMaxId + idx + 1 }));
+    setQuestions(prev => [...prev, ...reindexed]);
+    setShowImportTextModal(false);
+    setImportRawText("");
+    setActiveTab("exam");
+    alert(`Đã nhập thành công ${parsed.length} câu hỏi vào Đề Gốc!`);
+  };
+
+  const handleSaveManualQuestion = () => {
+    if (!newQuestionContent.trim()) {
+      alert("Vui lòng nhập nội dung câu hỏi.");
+      return;
+    }
+
+    const maxId = questions.reduce((max, q) => Math.max(max, q.id || 0), 0);
+    let createdQ: Question;
+
+    if (newQuestionType === "mc") {
+      createdQ = {
+        id: maxId + 1,
+        type: "mc",
+        level: newQuestionLevel,
+        topic: newQuestionTopic || "Chung",
+        content: fixMath(newQuestionContent),
+        options: newQuestionOptions.map(opt => fixMath(cleanOptionText(opt))),
+        correctOptionIndex: newQuestionCorrectIndex,
+        explanation: newQuestionExplanation ? fixMath(newQuestionExplanation) : undefined
+      };
+    } else if (newQuestionType === "tf") {
+      createdQ = {
+        id: maxId + 1,
+        type: "tf",
+        level: newQuestionLevel,
+        topic: newQuestionTopic || "Chung",
+        content: fixMath(newQuestionContent),
+        tfStatements: [
+          { statement: fixMath(newQuestionOptions[0] || "Ý a"), correct: true },
+          { statement: fixMath(newQuestionOptions[1] || "Ý b"), correct: false },
+          { statement: fixMath(newQuestionOptions[2] || "Ý c"), correct: true },
+          { statement: fixMath(newQuestionOptions[3] || "Ý d"), correct: false },
+        ],
+        explanation: newQuestionExplanation ? fixMath(newQuestionExplanation) : undefined
+      };
+    } else {
+      createdQ = {
+        id: maxId + 1,
+        type: newQuestionType,
+        level: newQuestionLevel,
+        topic: newQuestionTopic || "Chung",
+        content: fixMath(newQuestionContent),
+        correctAnswer: fixMath(newQuestionAnswer),
+        explanation: newQuestionExplanation ? fixMath(newQuestionExplanation) : undefined
+      };
+    }
+
+    setQuestions(prev => [...prev, createdQ]);
+    setShowAddQuestionModal(false);
+    setNewQuestionContent("");
+    setNewQuestionOptions(["", "", "", ""]);
+    setNewQuestionAnswer("");
+    setNewQuestionExplanation("");
+    setActiveTab("exam");
+  };
+
+  const getZaloShareMessage = (url: string, pin: string, title?: string) => {
+    const publicBase = getPublicAppUrl() || window.location.origin;
+    return `📢 THÔNG BÁO BÀI THI ONLINE: ${title || examName}
+👉 Link làm bài trực tiếp: ${url}
+${pin ? `🔑 Hoặc vào trang: ${publicBase} và nhập Mã phòng thi: ${pin}\n` : ''}
+📌 LƯU Ý KHI MỞ TRÊN ZALO (Nếu bị màn hình trắng, báo lỗi hoặc bị chặn):
+1. Bấm vào biểu tượng 3 chấm (···) ở góc trên bên phải màn hình Zalo.
+2. Chọn "Mở bằng trình duyệt" (Chrome trên Android hoặc Safari trên iPhone).
+3. Hoặc mở trực tiếp trình duyệt Chrome/Safari, truy cập ${publicBase} và nhập Mã phòng thi: ${pin || 'đã cấp'} để vào thi ngay!`;
+  };
 
   const applyPresetBGD3Phan = () => {
     setQEnabled({ mc: true, tf: true, sa: true, essay: false });
@@ -380,10 +485,6 @@ const [examName, setExamName] = useState("");
     setIsGenerating(true);
     setError(null);
     try {
-      const apiKey = localStorage.getItem("eduplan_gemini_api_key_v2");
-      if (!apiKey) throw new Error("Vui lòng nhập API Key trong phần Nhập mã API key.");
-
-      
       const activeQCounts = {
         mc: qEnabled.mc ? qCounts.mc : 0,
         tf: qEnabled.tf ? qCounts.tf : 0,
@@ -421,7 +522,6 @@ ${customPrompt}
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          
         },
         body: JSON.stringify({ 
           subject, grade, duration, examType, matrix, customPrompt: finalPrompt,
@@ -430,7 +530,6 @@ ${customPrompt}
           selectedTopics
         })
       });
-
 
       if (!response.ok) {
         const text = await response.text();
@@ -441,14 +540,21 @@ ${customPrompt}
         } catch(e: any) {
           errorMsg = e.message || errorMsg;
         }
+        if (errorMsg.includes("UNAUTHENTICATED") || errorMsg.includes("Nhập mã API key") || response.status === 401) {
+          window.dispatchEvent(new CustomEvent('show-api-key-modal'));
+        }
         throw new Error(errorMsg);
       }
 
       const text = await response.text();
       const data = parseApiResponse<any>(text);
-      setExamName(data.examName || "Đề kiểm tra");
-      setQuestions(data.questions || []);
-      setActiveTab("exam");
+      if (data && Array.isArray(data.questions) && data.questions.length > 0) {
+        setExamName(data.examName || "Đề kiểm tra");
+        setQuestions(data.questions);
+        setActiveTab("exam");
+      } else {
+        throw new Error("Không tìm thấy danh sách câu hỏi trong phản hồi của AI. Thầy cô có thể bấm nút Tải đề mẫu hoặc thêm câu hỏi thủ công.");
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -463,7 +569,7 @@ ${customPrompt}
       const code = (101 + i).toString();
       const shuffledQ = [...questions].sort(() => Math.random() - 0.5).map((q, index) => {
         if (q.type === 'mc' && q.options) {
-          const optionObjects = q.options.map((opt, i) => ({ text: opt, isCorrect: i === q.correctOptionIndex }));
+          const optionObjects = q.options.map((opt, i) => ({ text: cleanOptionText(opt), isCorrect: i === q.correctOptionIndex }));
           const shuffledOptions = optionObjects.sort(() => Math.random() - 0.5);
           return {
             ...q,
@@ -551,9 +657,12 @@ ${customPrompt}
         }
       } catch (e) {}
 
+      setSharePin(examId);
+
+      const publicBase = getPublicAppUrl() || window.location.origin;
       const compressed = LZString.compressToEncodedURIComponent(JSON.stringify(dataToShare));
-      const fullUrl = `${window.location.origin}/?examData=${compressed}`;
-      const baseShortUrl = examId ? `${window.location.origin}/?examId=${examId}` : fullUrl;
+      const fullUrl = `${publicBase}/?examData=${compressed}`;
+      const baseShortUrl = examId ? `${publicBase}/?examId=${examId}` : fullUrl;
       
       try {
         const res = await apiFetch('/api/shorten', {
@@ -951,18 +1060,152 @@ ${customPrompt}
           {activeTab === "exam" && (
             <div className="space-y-6">
               {questions.length === 0 ? (
-                <div className="text-center py-12 text-slate-500">Chưa có đề gốc. Vui lòng tạo đề ở bước 1.</div>
+                <div className="bg-white border-2 border-dashed border-emerald-200 rounded-2xl p-8 lg:p-12 text-center max-w-3xl mx-auto shadow-sm">
+                  <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <FileText className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-800 mb-2">Chưa Có Đề Gốc Nào</h3>
+                  <p className="text-slate-600 mb-8 max-w-xl mx-auto text-sm leading-relaxed">
+                    Thầy cô có thể tạo đề tự động bằng AI, nạp ngay bộ đề mẫu chuẩn khung 2025, hoặc tự nhập đề thủ công/dán từ Word vào đây để chỉnh sửa và trộn mã đề.
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-left">
+                    <button
+                      onClick={handleLoadSampleExam}
+                      className="p-5 bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl hover:shadow-md transition-all group"
+                    >
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 bg-emerald-600 text-white rounded-lg">
+                          <Sparkles className="w-5 h-5" />
+                        </div>
+                        <h4 className="font-bold text-emerald-900 group-hover:text-emerald-700">⚡ Nạp Đề Mẫu Chuẩn 2025</h4>
+                      </div>
+                      <p className="text-xs text-slate-600 leading-normal">
+                        Nạp sẵn bộ đề chuẩn Toán học 2025 gồm 20 câu chuẩn 4 phần (Trắc nghiệm, Đúng/Sai, Trả lời ngắn, Tự luận) đầy đủ công thức LaTeX.
+                      </p>
+                    </button>
+
+                    <button
+                      onClick={() => setShowImportTextModal(true)}
+                      className="p-5 bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-xl hover:shadow-md transition-all group"
+                    >
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 bg-blue-600 text-white rounded-lg">
+                          <ListPlus className="w-5 h-5" />
+                        </div>
+                        <h4 className="font-bold text-blue-900 group-hover:text-blue-700">📋 Dán Đề Từ Văn Bản (Word)</h4>
+                      </div>
+                      <p className="text-xs text-slate-600 leading-normal">
+                        Sao chép và dán nhanh văn bản câu hỏi từ Word/PDF vào hệ thống tự động bóc tách thành các câu trắc nghiệm.
+                      </p>
+                    </button>
+
+                    <button
+                      onClick={() => setShowAddQuestionModal(true)}
+                      className="p-5 bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-xl hover:shadow-md transition-all group"
+                    >
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 bg-amber-600 text-white rounded-lg">
+                          <Plus className="w-5 h-5" />
+                        </div>
+                        <h4 className="font-bold text-amber-900 group-hover:text-amber-700">➕ Tự Soạn Câu Hỏi Thủ Công</h4>
+                      </div>
+                      <p className="text-xs text-slate-600 leading-normal">
+                        Thêm từng câu hỏi theo ý muốn, tùy chọn loại câu: Trắc nghiệm 4 lựa chọn, Đúng/Sai 4 ý, Trả lời ngắn hoặc Tự luận.
+                      </p>
+                    </button>
+
+                    <button
+                      onClick={() => setActiveTab("matrix")}
+                      className="p-5 bg-gradient-to-br from-purple-50 to-fuchsia-50 border border-purple-200 rounded-xl hover:shadow-md transition-all group"
+                    >
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 bg-purple-600 text-white rounded-lg">
+                          <Sparkles className="w-5 h-5" />
+                        </div>
+                        <h4 className="font-bold text-purple-900 group-hover:text-purple-700">🚀 Tạo Tự Động Bằng AI</h4>
+                      </div>
+                      <p className="text-xs text-slate-600 leading-normal">
+                        Quay lại Bước 1 để thiết lập ma trận đề, chương trình học và bấm nút tạo đề thông minh bằng Gemini AI.
+                      </p>
+                    </button>
+                  </div>
+                </div>
               ) : (
                 <>
-                  <div className="flex justify-between items-center bg-slate-100 p-4 rounded-lg">
-                    <h3 className="font-bold text-lg text-slate-800">{examName}</h3>
-                    <div className="flex gap-4 items-center">
+                  <div className="bg-slate-100 p-4 rounded-xl border border-slate-200 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                    <div className="flex-1 w-full lg:w-auto">
                       <div className="flex items-center gap-2">
-                        <label className="text-sm font-medium text-slate-700">Số mã đề:</label>
-                        <input type="number" min="1" max="24" value={numCodes} onChange={e => setNumCodes(Number(e.target.value))} className="w-16 px-2 py-1 border border-slate-300 rounded-md" />
+                        <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Tên Đề Gốc:</label>
+                        <span className="text-xs px-2 py-0.5 bg-emerald-100 text-emerald-800 font-semibold rounded-full">
+                          {questions.length} câu hỏi
+                        </span>
                       </div>
-                      <button onClick={handleShuffle} className="px-4 py-2 bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-700 flex items-center gap-2">
-                        <Shuffle className="w-4 h-4" /> Trộn Đề
+                      <input
+                        type="text"
+                        value={examName}
+                        onChange={e => setExamName(e.target.value)}
+                        className="mt-1 w-full text-lg font-bold text-slate-800 bg-white border border-slate-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-emerald-500"
+                        placeholder="Nhập tên đề kiểm tra..."
+                      />
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 items-center w-full lg:w-auto justify-end">
+                      <button
+                        onClick={() => setShowAddQuestionModal(true)}
+                        className="px-3 py-2 bg-white border border-slate-300 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 flex items-center gap-1.5 shadow-sm"
+                        title="Thêm câu hỏi mới vào đề"
+                      >
+                        <Plus className="w-4 h-4 text-emerald-600" /> Thêm câu hỏi
+                      </button>
+
+                      <button
+                        onClick={() => setShowImportTextModal(true)}
+                        className="px-3 py-2 bg-white border border-slate-300 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 flex items-center gap-1.5 shadow-sm"
+                        title="Dán nhanh câu hỏi từ Word"
+                      >
+                        <ListPlus className="w-4 h-4 text-blue-600" /> Nhập từ Word
+                      </button>
+
+                      <button
+                        onClick={handleLoadSampleExam}
+                        className="px-3 py-2 bg-white border border-slate-300 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 flex items-center gap-1.5 shadow-sm"
+                        title="Nạp đề kiểm tra mẫu chuẩn 2025"
+                      >
+                        <Sparkles className="w-4 h-4 text-amber-500" /> Mẫu 2025
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          if (confirm("Thầy cô có chắc muốn xóa toàn bộ câu hỏi trong đề gốc để làm lại?")) {
+                            setQuestions([]);
+                          }
+                        }}
+                        className="px-3 py-2 bg-white border border-red-200 text-red-600 text-sm font-medium rounded-lg hover:bg-red-50 flex items-center gap-1.5 shadow-sm"
+                        title="Xóa hết câu hỏi"
+                      >
+                        <Trash2 className="w-4 h-4" /> Xóa
+                      </button>
+
+                      <div className="h-6 w-[1px] bg-slate-300 mx-1 hidden sm:block"></div>
+
+                      <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-slate-300">
+                        <label className="text-xs font-semibold text-slate-600">Số mã đề:</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="24"
+                          value={numCodes}
+                          onChange={e => setNumCodes(Number(e.target.value))}
+                          className="w-14 px-2 py-0.5 text-center font-bold border border-slate-300 rounded text-slate-800"
+                        />
+                      </div>
+
+                      <button
+                        onClick={handleShuffle}
+                        className="px-4 py-2 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 flex items-center gap-2 shadow-sm transition-all"
+                      >
+                        <Shuffle className="w-4 h-4" /> Trộn Đề (Bước 3)
                       </button>
                     </div>
                   </div>
@@ -1287,7 +1530,7 @@ ${customPrompt}
                             {q.options.map((opt, oIdx) => (
                               <div key={oIdx} className={`flex items-start gap-1 p-2 rounded-md border ${oIdx === q.correctOptionIndex ? 'bg-emerald-50 border-emerald-200 font-medium' : 'border-transparent'}`}>
                                 <span className="shrink-0 font-medium">{String.fromCharCode(65 + oIdx)}.</span>
-                                <MarkdownRenderer className="markdown-body inline-block" content={fixMath((opt || '').replace(/^[A-D][\.\:\)]\s*/i, ''))} />
+                                <MarkdownRenderer className="markdown-body inline-block" content={fixMath(cleanOptionText(opt))} />
                               </div>
                             ))}
                           </div>
@@ -1332,14 +1575,62 @@ ${customPrompt}
                   </div>
 
                   {shareLink && (
-                    <div className="p-4 bg-slate-100 rounded-lg border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
-                      <div className="flex-1 overflow-hidden">
-                        <label className="block text-xs font-semibold text-slate-500 mb-1 uppercase tracking-wider">Link cho học sinh (Copy và gửi)</label>
-                        <input type="text" readOnly value={shareLink} className="w-full bg-white border border-slate-300 rounded px-3 py-2 text-sm text-blue-600 font-medium" />
+                    <div className="p-5 bg-gradient-to-r from-emerald-50 via-teal-50 to-blue-50 rounded-xl border border-emerald-200 shadow-sm space-y-4">
+                      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                        <div className="flex-1 w-full">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-bold text-emerald-800 uppercase tracking-wider">Link bài thi trực tuyến</span>
+                            {sharePin && (
+                              <span className="text-xs bg-emerald-600 text-white px-2 py-0.5 rounded font-mono font-bold">
+                                Mã PIN: {sharePin}
+                              </span>
+                            )}
+                          </div>
+                          <input
+                            type="text"
+                            readOnly
+                            value={shareLink}
+                            className="w-full bg-white border border-emerald-300 rounded-lg px-3 py-2 text-sm text-blue-600 font-semibold focus:outline-none"
+                          />
+                        </div>
+
+                        <div className="flex flex-wrap gap-2 w-full md:w-auto justify-end">
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(shareLink);
+                              alert('Đã copy link bài thi vào clipboard!');
+                            }}
+                            className="px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 flex items-center gap-1.5 shadow-sm"
+                          >
+                            <Copy className="w-4 h-4" /> Copy Link
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              const zaloMsg = getZaloShareMessage(shareLink, sharePin);
+                              navigator.clipboard.writeText(zaloMsg);
+                              setCopiedZalo(true);
+                              setTimeout(() => setCopiedZalo(false), 3000);
+                              alert('Đã copy tin nhắn gửi Zalo kèm Mã PIN & Hướng dẫn mở trình duyệt!\nThầy cô chỉ cần mở Zalo và dán vào nhóm lớp.');
+                            }}
+                            className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 flex items-center gap-1.5 shadow-sm"
+                          >
+                            <Smartphone className="w-4 h-4" /> {copiedZalo ? "✓ Đã copy Zalo!" : "📱 Copy Tin Nhắn Gửi Zalo"}
+                          </button>
+                        </div>
                       </div>
-                      <button onClick={() => {navigator.clipboard.writeText(shareLink); alert('Đã copy!');}} className="px-4 py-2 bg-slate-800 text-white text-sm rounded-lg hover:bg-slate-700 shrink-0 mt-4 sm:mt-0">
-                        Copy Link
-                      </button>
+
+                      <div className="bg-white/80 p-3 rounded-lg border border-emerald-100 text-xs text-slate-700 space-y-1">
+                        <p className="font-bold text-emerald-900 flex items-center gap-1">
+                          💡 Hướng dẫn gửi cho học sinh qua Zalo (Tránh bị chặn / Trắng màn hình):
+                        </p>
+                        <p>
+                          1. Hãy dùng nút <strong>"📱 Copy Tin Nhắn Gửi Zalo"</strong> ở trên để gửi tin nhắn có sẵn mã PIN và hướng dẫn.
+                        </p>
+                        <p>
+                          2. Nếu học sinh bấm link trên Zalo mà bị lỗi "Bài thi không tồn tại" hoặc bị chặn: Nhắc học sinh bấm <strong>dấu 3 chấm (···)</strong> ở góc trên bên phải Zalo ➔ chọn <strong>"Mở bằng trình duyệt"</strong> (Chrome/Safari), hoặc mở trình duyệt nhập trực tiếp mã PIN <strong>{sharePin || "phòng thi"}</strong>.
+                        </p>
+                      </div>
                     </div>
                   )}
 
@@ -1367,11 +1658,11 @@ ${customPrompt}
                                         }
                                     ]
                                 };
+                                const publicBase = getPublicAppUrl() || window.location.origin;
                                 const compressed = LZString.compressToEncodedURIComponent(JSON.stringify(singleData));
-                                const url = `${window.location.origin}/?examData=${compressed}`;
+                                const url = `${publicBase}/?examData=${compressed}`;
                                 
                                 try {
-                                    // Báo hiệu đang tạo link
                                     const btn = document.getElementById(`share-btn-${exam.code}`);
                                     if (btn) btn.innerHTML = '<span class="animate-spin mr-1">⌛</span> Đang tạo link...';
                                     
@@ -1388,7 +1679,7 @@ ${customPrompt}
                                         }
                                     } catch (e) {}
 
-                                    const baseShortUrl = examId ? `${window.location.origin}/?examId=${examId}` : url;
+                                    const baseShortUrl = examId ? `${publicBase}/?examId=${examId}` : url;
                                     let finalUrl = baseShortUrl;
 
                                     try {
@@ -1404,16 +1695,72 @@ ${customPrompt}
                                     } catch (e) {}
 
                                     await navigator.clipboard.writeText(finalUrl);
-                                    alert(`Đã copy link thi rút gọn (${finalUrl}) cho Mã đề ${exam.code}!\nHọc sinh có thể mở link này dễ dàng trên mọi nền tảng.`);
+                                    alert(`Đã copy link thi rút gọn cho Mã đề ${exam.code}!\n${finalUrl}`);
                                     if (btn) btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-share-2 w-4 h-4"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg> Copy Link Thi';
                                 } catch (e) {
                                     navigator.clipboard.writeText(url);
-                                    alert(`Đã copy link thi gốc cho Mã đề ${exam.code}. Không thể rút gọn link.`);
+                                    alert(`Đã copy link thi gốc cho Mã đề ${exam.code}.`);
                                     const btn = document.getElementById(`share-btn-${exam.code}`);
                                     if (btn) btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-share-2 w-4 h-4"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg> Copy Link Thi';
                                 }
                             }} id={`share-btn-${exam.code}`} className="px-3 py-1.5 bg-blue-50 border border-blue-200 text-blue-700 text-sm font-medium rounded hover:bg-blue-100 flex items-center gap-2">
                               <Share2 className="w-4 h-4" /> Copy Link Thi
+                            </button>
+
+                            <button onClick={async () => {
+                                const singleData = {
+                                    examData: { examName, duration },
+                                    codes: [
+                                        {
+                                            code: exam.code,
+                                            questions: exam.questions.map((q: any) => ({
+                                                type: q.type,
+                                                content: q.content,
+                                                options: q.options,
+                                                correctOptionIndex: q.correctOptionIndex,
+                                                correct: q.correct,
+                                                correctAnswer: q.correctAnswer,
+                                                tfStatements: q.tfStatements?.map((tf: any) => ({ statement: tf.statement, correct: tf.correct }))
+                                            }))
+                                        }
+                                    ]
+                                };
+                                const publicBase = getPublicAppUrl() || window.location.origin;
+                                const compressed = LZString.compressToEncodedURIComponent(JSON.stringify(singleData));
+                                const url = `${publicBase}/?examData=${compressed}`;
+                                
+                                let examId = "";
+                                try {
+                                    const shareRes = await apiFetch("/api/exams/share", {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify(singleData)
+                                    });
+                                    if (shareRes.ok) {
+                                        const sData = await shareRes.json();
+                                        if (sData.examId) examId = sData.examId;
+                                    }
+                                } catch (e) {}
+
+                                const baseShortUrl = examId ? `${publicBase}/?examId=${examId}` : url;
+                                let finalUrl = baseShortUrl;
+                                try {
+                                    const res = await apiFetch("/api/shorten", {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ url: baseShortUrl })
+                                    });
+                                    if (res.ok) {
+                                        const data = await res.json();
+                                        if (data.shortUrl) finalUrl = data.shortUrl;
+                                    }
+                                } catch (e) {}
+
+                                const zaloMsg = getZaloShareMessage(finalUrl, examId, `${examName} (Mã đề ${exam.code})`);
+                                await navigator.clipboard.writeText(zaloMsg);
+                                alert(`Đã copy tin nhắn Zalo kèm Mã PIN & Hướng dẫn cho Mã đề ${exam.code}!`);
+                            }} className="px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-medium rounded hover:bg-emerald-100 flex items-center gap-2">
+                              <Smartphone className="w-4 h-4" /> Gửi Zalo
                             </button>
                             <button onClick={() => handlePrint(`print-exam-${exam.code}`)} className="px-3 py-1.5 bg-white border border-slate-300 text-slate-700 text-sm font-medium rounded hover:bg-slate-50 flex items-center gap-2">
 
@@ -1440,7 +1787,7 @@ ${customPrompt}
                                     {q.options.map((opt, oIdx) => (
                                       <div key={oIdx} className="option" style={{paddingLeft: '10px', display: 'flex', gap: '4px', alignItems: 'flex-start'}}>
                                         <span style={{fontWeight: 'bold', flexShrink: 0}}>{String.fromCharCode(65 + oIdx)}.</span>
-                                        <MarkdownRenderer className="markdown-body inline-block" content={fixMath((opt || '').replace(/^[A-D][\.\:\)]\s*/i, ''))} />
+                                        <MarkdownRenderer className="markdown-body inline-block" content={fixMath(cleanOptionText(opt))} />
                                       </div>
                                     ))}
                                   </div>
@@ -1636,6 +1983,248 @@ ${customPrompt}
             </div>
             <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end">
               <button onClick={() => setShowBubbleSheetModal(false)} className="px-4 py-2 bg-slate-200 text-slate-700 font-medium rounded-lg hover:bg-slate-300 transition-colors">Đóng</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal Thêm Câu Hỏi Thủ Công */}
+      {showAddQuestionModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full my-8 overflow-hidden border border-slate-200">
+            <div className="p-6 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+              <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
+                <Plus className="w-5 h-5 text-emerald-600" /> Thêm Câu Hỏi Mới Vào Đề Gốc
+              </h3>
+              <button onClick={() => setShowAddQuestionModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Dạng câu hỏi</label>
+                  <select
+                    value={newQuestionType}
+                    onChange={(e: any) => setNewQuestionType(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white font-medium"
+                  >
+                    <option value="mc">Trắc nghiệm 4 lựa chọn</option>
+                    <option value="tf">Đúng / Sai (4 ý a,b,c,d)</option>
+                    <option value="sa">Trả lời ngắn</option>
+                    <option value="essay">Tự luận</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Mức độ</label>
+                  <select
+                    value={newQuestionLevel}
+                    onChange={e => setNewQuestionLevel(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white font-medium"
+                  >
+                    <option value="Nhận biết">Nhận biết</option>
+                    <option value="Thông hiểu">Thông hiểu</option>
+                    <option value="Vận dụng">Vận dụng</option>
+                    <option value="Vận dụng cao">Vận dụng cao</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Chủ đề (Topic)</label>
+                  <input
+                    type="text"
+                    value={newQuestionTopic}
+                    onChange={e => setNewQuestionTopic(e.target.value)}
+                    placeholder="VD: Hàm số, Tích phân..."
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
+                  Nội dung câu hỏi <span className="text-slate-400 font-normal normal-case">(hỗ trợ LaTeX kẹp trong $...$)</span>
+                </label>
+                <textarea
+                  rows={3}
+                  value={newQuestionContent}
+                  onChange={e => setNewQuestionContent(e.target.value)}
+                  placeholder="Nhập nội dung câu hỏi... Ví dụ: Cho hàm số $y = f(x)$ liên tục trên $\mathbb{R}$..."
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-sans focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              {newQuestionType === "mc" && (
+                <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                  <label className="block text-xs font-bold text-slate-700 uppercase">4 Phương án & Chọn đáp án đúng</label>
+                  {["A", "B", "C", "D"].map((lbl, idx) => (
+                    <div key={lbl} className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="correct-opt"
+                        checked={newQuestionCorrectIndex === idx}
+                        onChange={() => setNewQuestionCorrectIndex(idx)}
+                        className="w-4 h-4 text-emerald-600"
+                        title={`Chọn ${lbl} là đáp án đúng`}
+                      />
+                      <span className="font-bold text-sm text-slate-700 w-6">{lbl}.</span>
+                      <input
+                        type="text"
+                        value={newQuestionOptions[idx]}
+                        onChange={e => {
+                          const updated = [...newQuestionOptions];
+                          updated[idx] = e.target.value;
+                          setNewQuestionOptions(updated);
+                        }}
+                        placeholder={`Nội dung phương án ${lbl}...`}
+                        className="flex-1 px-3 py-1.5 border border-slate-300 rounded-lg text-sm bg-white"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {newQuestionType === "tf" && (
+                <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                  <label className="block text-xs font-bold text-slate-700 uppercase">Nội dung 4 mệnh đề (a, b, c, d)</label>
+                  {["a", "b", "c", "d"].map((lbl, idx) => (
+                    <div key={lbl} className="flex items-center gap-2">
+                      <span className="font-bold text-sm text-slate-700 w-6">{lbl})</span>
+                      <input
+                        type="text"
+                        value={newQuestionOptions[idx]}
+                        onChange={e => {
+                          const updated = [...newQuestionOptions];
+                          updated[idx] = e.target.value;
+                          setNewQuestionOptions(updated);
+                        }}
+                        placeholder={`Mệnh đề ${lbl}...`}
+                        className="flex-1 px-3 py-1.5 border border-slate-300 rounded-lg text-sm bg-white"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {(newQuestionType === "sa" || newQuestionType === "essay") && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
+                    {newQuestionType === "sa" ? "Đáp án số / ngắn gọn" : "Lời giải vắn tắt / Thang điểm"}
+                  </label>
+                  <input
+                    type="text"
+                    value={newQuestionAnswer}
+                    onChange={e => setNewQuestionAnswer(e.target.value)}
+                    placeholder={newQuestionType === "sa" ? "Ví dụ: 2 hoặc -0.5" : "Đáp số và barem điểm..."}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
+                  Lời giải chi tiết <span className="text-slate-400 font-normal normal-case">(Tùy chọn)</span>
+                </label>
+                <textarea
+                  rows={2}
+                  value={newQuestionExplanation}
+                  onChange={e => setNewQuestionExplanation(e.target.value)}
+                  placeholder="Nhập lời giải hoặc hướng dẫn làm bài..."
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                />
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-3">
+              <button
+                onClick={() => setShowAddQuestionModal(false)}
+                className="px-4 py-2 bg-slate-200 text-slate-700 font-medium rounded-lg hover:bg-slate-300 text-sm"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={handleSaveManualQuestion}
+                className="px-5 py-2 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 text-sm flex items-center gap-1.5 shadow-sm"
+              >
+                <Check className="w-4 h-4" /> Lưu Câu Hỏi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Nhập Nhanh Từ Văn Bản (Word / Text) */}
+      {showImportTextModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-xl max-w-3xl w-full my-8 overflow-hidden border border-slate-200">
+            <div className="p-6 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+              <div>
+                <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
+                  <ListPlus className="w-5 h-5 text-blue-600" /> Nhập Nhanh Câu Hỏi Từ Văn Bản / Word
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">Hệ thống tự động nhận diện dạng trắc nghiệm A/B/C/D hoặc Đúng/Sai a/b/c/d</p>
+              </div>
+              <button onClick={() => setShowImportTextModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg text-xs text-blue-800 space-y-1">
+                <p className="font-bold">Định dạng hỗ trợ:</p>
+                <p>• Câu 1: Cho hàm số... A. ... B. ... C. ... D. ... Đáp án: A</p>
+                <p>• Câu 2: Trong không gian Oxyz... a) ... b) ... c) ... d) ...</p>
+                <p>• Có thể dán trực tiếp nhiều câu cùng lúc từ file Word.</p>
+              </div>
+
+              <textarea
+                rows={12}
+                value={importRawText}
+                onChange={e => setImportRawText(e.target.value)}
+                placeholder="Dán nội dung các câu hỏi tại đây...&#10;&#10;Câu 1: Tập xác định của hàm số $y = \log_2(x-1)$ là:&#10;A. $(1; +\infty)$&#10;B. $[1; +\infty)$&#10;C. $(-\infty; 1)$&#10;D. $\mathbb{R} \setminus \{1\}$&#10;Đáp án: A&#10;Lời giải: Điều kiện $x - 1 > 0 \Leftrightarrow x > 1$."
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm font-mono focus:ring-2 focus:ring-blue-500"
+              />
+
+              <div className="flex justify-between items-center">
+                <button
+                  onClick={() => {
+                    setImportRawText(`Câu 1: Đạo hàm của hàm số $y = x^3 - 3x + 1$ là:
+A. $y' = 3x^2 - 3$
+B. $y' = 3x^2 + 3$
+C. $y' = x^2 - 3$
+D. $y' = 3x^2$
+Đáp án: A
+Lời giải: Áp dụng công thức $(x^n)' = n x^{n-1}$.
+
+Câu 2: Cho hàm số $y = \frac{x+1}{x-1}$. Xét tính đúng sai của các khẳng định sau:
+a) Tập xác định của hàm số là $D = \mathbb{R} \setminus \{1\}$.
+b) Đồ thị hàm số có tiệm cận đứng là $x = 1$.
+c) Đồ thị hàm số có tiệm cận ngang là $y = 2$.
+d) Hàm số nghịch biến trên từng khoảng xác định.
+Lời giải: Tiệm cận ngang là $y = 1$ nên ý c sai.`);
+                  }}
+                  className="text-xs text-blue-600 hover:underline font-medium"
+                >
+                  ⚡ Điền văn bản mẫu thử nghiệm
+                </button>
+                <span className="text-xs text-slate-500 font-medium">
+                  {importRawText.split(/\n/).length} dòng
+                </span>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-3">
+              <button
+                onClick={() => setShowImportTextModal(false)}
+                className="px-4 py-2 bg-slate-200 text-slate-700 font-medium rounded-lg hover:bg-slate-300 text-sm"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={handleImportText}
+                className="px-5 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 text-sm flex items-center gap-1.5 shadow-sm"
+              >
+                <Sparkles className="w-4 h-4" /> Bóc Tách & Nạp Vào Đề Gốc
+              </button>
             </div>
           </div>
         </div>

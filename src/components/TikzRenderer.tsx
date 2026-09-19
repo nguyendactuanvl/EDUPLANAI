@@ -3,6 +3,115 @@ import React, { useEffect, useRef, useState, useLayoutEffect } from 'react';
 // Global cache for TikZ SVGs
 const tikzCache = new Map<string, string>();
 
+export function cleanTikzCode(raw: string): string {
+  if (!raw) return '';
+  let code = raw.trim();
+
+  // 1. Remove \usetikzlibrary{...} and \usepackage{...}
+  code = code.replace(/\\(usetikzlibrary|usepackage)\s*\{[^}]*\}\s*/gi, '');
+
+  // 2. Remove document / standalone environments if wrapped
+  code = code.replace(/\\begin\s*\{document\}|\\end\s*\{document\}/gi, '');
+  code = code.replace(/\\documentclass(\[[^\]]*\])?\{[^}]*\}/gi, '');
+
+  // 3. Replace unsupported pattern=... with fill=gray!25
+  code = code.replace(/pattern\s*=\s*(?:north\s*east\s*lines|north\s*west\s*lines|dots|crosshatch|grid|fivepointed\s*stars)[^,\]]*/gi, 'fill=gray!25, fill opacity=0.7');
+  code = code.replace(/pattern\s*=\s*[^,\]]+/gi, 'fill=gray!25, fill opacity=0.7');
+  code = code.replace(/pattern\s+color\s*=\s*[^,\]]+/gi, '');
+
+  // 4. Replace arrows.meta syntax with standard TikZ arrows
+  code = code.replace(/arrows\s*=\s*\{?\s*-?\s*[Ss]tealth\s*\}?/gi, '->');
+  code = code.replace(/-?\{[Ss]tealth\}\s*-?/gi, '->');
+  code = code.replace(/>=\s*\{?[Ss]tealth\}?/gi, '>=stealth');
+  code = code.replace(/>=\s*\{?latex\}?/gi, '>=latex');
+
+  // 5. Clean trailing/duplicate commas in option brackets
+  code = code.replace(/\[\s*,+/g, '[').replace(/,+\s*\]/g, ']').replace(/,\s*,+/g, ',');
+
+  // 6. Ensure wrapped in \begin{tikzpicture}...\end{tikzpicture}
+  if (!code.includes('\\begin{tikzpicture}')) {
+    code = `\\begin{tikzpicture}\n${code}\n\\end{tikzpicture}`;
+  }
+
+  return code.trim();
+}
+
+export function renderTikzFallbackSvg(raw: string): string | null {
+  try {
+    const cleaned = cleanTikzCode(raw);
+    const svgElements: string[] = [];
+    
+    // Scale factor & coordinate center for standard 2D Cartesian diagrams
+    const scale = 36;
+    const originX = 180;
+    const originY = 160;
+    const toSvgX = (x: number) => originX + x * scale;
+    const toSvgY = (y: number) => originY - y * scale;
+
+    svgElements.push(`<defs>
+      <marker id="arrow-head" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 1 L 10 5 L 0 9 z" fill="#334155" />
+      </marker>
+    </defs>`);
+
+    // Extract draw commands
+    const drawRegex = /\\draw(?:\[([^\]]*)\])?\s*([^\;]+);/g;
+    let match;
+    while ((match = drawRegex.exec(cleaned)) !== null) {
+      const opts = match[1] || '';
+      const body = match[2] || '';
+
+      const isArrow = opts.includes('->') || opts.includes('stealth') || opts.includes('latex');
+      const isDashed = opts.includes('dashed');
+      const strokeColor = opts.includes('red') ? '#dc2626' : opts.includes('blue') ? '#2563eb' : '#334155';
+      const fillColor = (opts.includes('fill') || body.includes('fill')) ? 'rgba(148, 163, 184, 0.25)' : 'none';
+
+      // Match coordinates (x, y)
+      const coordRegex = /\(\s*([-\d\.]+)\s*,\s*([-\d\.]+)\s*\)/g;
+      const coords: { x: number; y: number }[] = [];
+      let cMatch;
+      while ((cMatch = coordRegex.exec(body)) !== null) {
+        coords.push({ x: parseFloat(cMatch[1]), y: parseFloat(cMatch[2]) });
+      }
+
+      if (coords.length >= 2) {
+        if (body.includes('-- cycle') || opts.includes('fill')) {
+          const pointsStr = coords.map(c => `${toSvgX(c.x)},${toSvgY(c.y)}`).join(' ');
+          svgElements.push(`<polygon points="${pointsStr}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${opts.includes('thick') ? 2 : 1.5}" ${isDashed ? 'stroke-dasharray="4,4"' : ''} />`);
+        } else {
+          for (let i = 0; i < coords.length - 1; i++) {
+            svgElements.push(`<line x1="${toSvgX(coords[i].x)}" y1="${toSvgY(coords[i].y)}" x2="${toSvgX(coords[i+1].x)}" y2="${toSvgY(coords[i+1].y)}" stroke="${strokeColor}" stroke-width="${opts.includes('thick') ? 2 : 1.5}" ${isDashed ? 'stroke-dasharray="4,4"' : ''} ${isArrow ? 'marker-end="url(#arrow-head)"' : ''} />`);
+          }
+        }
+      }
+    }
+
+    // Extract node labels
+    const nodeRegex = /\\node(?:\[([^\]]*)\])?\s*(?:at\s*\(\s*([-\d\.]+)\s*,\s*([-\d\.]+)\s*\))?\s*\{([^}]*)\}/g;
+    let nMatch;
+    while ((nMatch = nodeRegex.exec(cleaned)) !== null) {
+      const posOpt = nMatch[1] || '';
+      const x = nMatch[2] !== undefined ? parseFloat(nMatch[2]) : 0;
+      const y = nMatch[3] !== undefined ? parseFloat(nMatch[3]) : 0;
+      let text = nMatch[4].replace(/\$/g, '').trim();
+      let dx = 0, dy = 4;
+      if (posOpt.includes('right')) dx = 10;
+      if (posOpt.includes('left')) dx = -10;
+      if (posOpt.includes('above')) dy = -10;
+      if (posOpt.includes('below')) dy = 16;
+      svgElements.push(`<text x="${toSvgX(x) + dx}" y="${toSvgY(y) + dy}" font-family="sans-serif" font-size="13" font-style="italic" fill="#1e293b" text-anchor="middle">${text}</text>`);
+    }
+
+    if (svgElements.length <= 1) return null;
+
+    return `<svg width="360" height="320" viewBox="0 0 360 320" xmlns="http://www.w3.org/2000/svg" class="max-w-full h-auto">
+      ${svgElements.join('\n      ')}
+    </svg>`;
+  } catch (e) {
+    return null;
+  }
+}
+
 const tikzRenderQueue: Array<() => void> = [];
 let isWorkerProcessing = false;
 
@@ -114,11 +223,12 @@ export const TikzRenderer = ({ content }: { content: string }) => {
       
       if (containerRef.current) {
         containerRef.current.innerHTML = '';
+        const cleaned = cleanTikzCode(content);
         
         const div = document.createElement("div");
         const script = document.createElement("script");
         script.type = "text/tikz";
-        script.textContent = content;
+        script.textContent = cleaned;
         scriptRef.current = script;
         
         div.appendChild(script);
@@ -134,6 +244,7 @@ export const TikzRenderer = ({ content }: { content: string }) => {
                           fixSvgLines(svg);
                           const svgContent = svg.outerHTML;
                           tikzCache.set(content, svgContent);
+                          tikzCache.set(cleaned, svgContent);
                           setCachedSvg(svgContent);
                           setIsLoading(false);
                           
@@ -166,18 +277,36 @@ export const TikzRenderer = ({ content }: { content: string }) => {
                       fixSvgLines(svg);
                       const svgContent = svg.outerHTML;
                       tikzCache.set(content, svgContent);
+                      tikzCache.set(cleaned, svgContent);
                       setCachedSvg(svgContent);
+                      setIsLoading(false);
+                  } else {
+                      const fallback = renderTikzFallbackSvg(cleaned);
+                      if (fallback) {
+                          tikzCache.set(content, fallback);
+                          tikzCache.set(cleaned, fallback);
+                          setCachedSvg(fallback);
+                      } else {
+                          setError("Không thể biên dịch hình vẽ TikZ.");
+                      }
+                      setIsLoading(false);
                   }
-                  setIsLoading(false);
                   isWorkerProcessing = false;
                   processQueue();
               }
-          }, 5000);
+          }, 4000);
           
         } catch (err: any) {
           console.error("Error processing TikZ code:", err);
           if (isMounted) {
-            setError(err.message || "Lỗi khi biên dịch hình ảnh TikZ.");
+            const fallback = renderTikzFallbackSvg(cleaned);
+            if (fallback) {
+              tikzCache.set(content, fallback);
+              tikzCache.set(cleaned, fallback);
+              setCachedSvg(fallback);
+            } else {
+              setError(err.message || "Lỗi khi biên dịch hình ảnh TikZ.");
+            }
             setIsLoading(false);
             isWorkerProcessing = false;
             processQueue();

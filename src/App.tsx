@@ -54,13 +54,18 @@ export default function App() {
 
   
   const urlParams = new URLSearchParams(window.location.search);
-  const studentExamId = urlParams.get('examId');
+  const studentExamId = urlParams.get('examId') || urlParams.get('exam') || urlParams.get('code') || urlParams.get('pin');
   const studentExamData = urlParams.get('examData');
+  const isStudentMode = urlParams.get('mode') === 'student' || urlParams.get('view') === 'exam';
+
   if (studentExamId) {
     return <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-100">Đang tải đề thi...</div>}><StudentExamView examId={studentExamId} /></Suspense>;
   }
   if (studentExamData) {
     return <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-100">Đang tải đề thi...</div>}><StudentExamView examRawData={studentExamData} /></Suspense>;
+  }
+  if (isStudentMode) {
+    return <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-100">Đang tải phòng thi...</div>}><StudentExamView /></Suspense>;
   }
   
   return (

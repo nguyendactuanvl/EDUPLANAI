@@ -15,7 +15,7 @@ const MATH_FORMATTING_RULES = `QUY TẮC ĐỊNH DẠNG TOÁN HỌC VÀ VĂN B�
 1. Mọi công thức Toán bắt buộc viết bằng cú pháp chuẩn LaTeX (tuyệt đối không dùng ký tự Unicode như √, ∫).
 2. Công thức nằm cùng dòng văn bản: Luôn kẹp trong cặp dấu $...$ (ví dụ: $y = \dfrac{ax+b}{cx+d}$, $x \in [1; 5]$). LUÔN CÓ KHOẢNG TRẮNG trước và sau dấu $ để không bị dính chữ.
 3. Công thức nằm riêng một dòng độc lập: Luôn kẹp trong cặp dấu $...$.
-4. Ký hiệu bắt buộc: Phân số dùng \dfrac{a}{b}, hệ phương trình dùng \\begin{cases} ... \\end{cases}.
+4. Ký hiệu bắt buộc: Phân số dùng \dfrac{a}{b}, hệ phương trình dùng \\begin{cases} ... \\end{cases}, dấu khác (không bằng) BẮT BUỘC dùng \\neq (tuyệt đối KHÔNG viết dạng "/ =", "/=", "!=" hay "=/=").
 5. Bố cục văn bản dùng định dạng Markdown rõ ràng.
 6. [CỰC KỲ QUAN TRỌNG] BẢNG BIẾN THIÊN VÀ ĐỒ THỊ BẰNG TIKZ:
    - BẮT BUỘC đặt toàn bộ code vẽ bảng biến thiên hoặc đồ thị vào trong khối markdown \`\`\`tikz ... \`\`\`. 
@@ -42,13 +42,13 @@ const MATH_FORMATTING_RULES = `QUY TẮC ĐỊNH DẠNG TOÁN HỌC VÀ VĂN B�
    - KÝ HIỆU TOÁN HỌC: Vẽ đầy đủ góc vuông ở chân đường cao, ký hiệu góc giữa đường và mặt, góc giữa hai mặt phẳng khi có yêu cầu. Các nhãn đỉnh (above, below, left, right) phải hợp lý, không bị đường kẻ cắt ngang chữ.
 8. [CỰC KỲ QUAN TRỌNG] VẼ MIỀN NGHIỆM BẤT PHƯƠNG TRÌNH (BPT) VÀ HỆ BPT BẬC NHẤT HAI ẨN (Chuẩn GDPT 2018):
    - Đặt code vào khối markdown \`\`\`tikz ... \`\`\` và bao bọc bởi \\begin{tikzpicture} và \\end{tikzpicture}.
-   - Dùng thư viện \\usetikzlibrary{patterns, arrows.meta}.
+   - TUYỆT ĐỐI KHÔNG dùng \\usetikzlibrary hay \\usepackage (môi trường Web trình duyệt không hỗ trợ nạp thư viện ngoài). Dùng các tùy chọn chuẩn TikZ như [->] hoặc [>=stealth].
    - QUY ƯỚC ĐƯỜNG BIÊN:
      + Dấu bằng (>= hoặc <=): Đường biên vẽ NÉT LIỀN (thick, solid).
      + Dấu ngặt (> hoặc <): Đường biên vẽ NÉT ĐỨT (dashed, thick).
      + Phải đặt nhãn tên đường thẳng ($d_1, d_2,...$) ở đầu mút.
    - MIỀN NGHIỆM VÀ PHẦN GẠCH BỎ:
-     + Phần KHÔNG thuộc miền nghiệm: Dùng nét gạch sọc (pattern=north east lines hoặc north west lines, pattern color=gray!50). Bắt buộc lồng trong môi trường \\begin{scope} \\clip ... \\end{scope} giới hạn khung hình để nét gạch không bị lem ra ngoài.
+     + Phần KHÔNG thuộc miền nghiệm: Dùng tô màu xám nhẹ [fill=gray!25, fill opacity=0.7] (TUYỆT ĐỐI KHÔNG dùng pattern=... vì trình duyệt không nạp được thư viện patterns).
      + Phần THUỘC miền nghiệm: Giữ trắng hoặc tô nền sáng (ví dụ: fill=cyan!15).
      + Đối với Hệ BPT: Vẽ viền đậm quanh đa giác miền nghiệm (tuân thủ nét liền/đứt tương ứng) và đánh dấu rõ các đỉnh kèm tọa độ chính xác.
    - NGUYÊN TẮC GIẢI TÍCH (CẤM VẼ TỰ DO / CẤM ĐOÁN TỌA ĐỘ):
@@ -62,6 +62,7 @@ const MATH_FORMATTING_RULES = `QUY TẮC ĐỊNH DẠNG TOÁN HỌC VÀ VĂN B�
 9. [CỰC KỲ QUAN TRỌNG] TRÌNH BÀY ĐÁP ÁN TRẮC NGHIỆM:
    - TUYỆT ĐỐI KHÔNG viết các đáp án A, B, C, D dính liền nhau trên cùng một dòng.
    - BẮT BUỘC mỗi đáp án phải nằm trên một dòng riêng biệt.
+   - TUYỆT ĐỐI KHÔNG xuống dòng ngay sau dấu $ hoặc để thừa ký tự $ (ví dụ viết $\begin{cases} ... \end{cases}$ liền mạch, không viết $ \n \begin{cases}...\end{cases} \n $).
    - Khuyến khích sử dụng HTML Grid để trình bày đáp án thẳng hàng đẹp mắt (đặc biệt khi xuất Word sẽ rất chuẩn). BẮT BUỘC dùng cấu trúc:
      <div class="grid grid-cols-2 gap-4">
        <div><strong>A.</strong> $đáp_án_A$</div>
@@ -193,20 +194,30 @@ function resolveSingleFile(reqBody: any) {
 
 
 const EXAMS_CACHE_FILE = path.join(process.cwd(), 'shared_exams.json');
+const EXAMS_TMP_FILE = '/tmp/shared_exams.json';
 const sharedExamsStore = new Map<string, any>();
 
-// Load initially from file if exists
-try {
-  if (fs.existsSync(EXAMS_CACHE_FILE)) {
-    const raw = fs.readFileSync(EXAMS_CACHE_FILE, 'utf8');
-    const obj = JSON.parse(raw);
-    for (const [k, v] of Object.entries(obj)) {
-      sharedExamsStore.set(k, v);
+// Load initially from file if exists (both cwd and /tmp)
+function loadExamsFromDisk() {
+  const tryLoad = (filePath: string) => {
+    try {
+      if (fs.existsSync(filePath)) {
+        const raw = fs.readFileSync(filePath, 'utf8');
+        const obj = JSON.parse(raw);
+        for (const [k, v] of Object.entries(obj)) {
+          if (!sharedExamsStore.has(k)) {
+            sharedExamsStore.set(k, v);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn(`Failed to load exams from ${filePath}:`, e);
     }
-  }
-} catch (e) {
-  console.warn("Failed to load exams cache from disk:", e);
+  };
+  tryLoad(EXAMS_CACHE_FILE);
+  tryLoad(EXAMS_TMP_FILE);
 }
+loadExamsFromDisk();
 
 function saveExamsToDisk() {
   try {
@@ -214,7 +225,9 @@ function saveExamsToDisk() {
     for (const [k, v] of sharedExamsStore.entries()) {
       obj[k] = v;
     }
-    fs.writeFileSync(EXAMS_CACHE_FILE, JSON.stringify(obj), 'utf8');
+    const json = JSON.stringify(obj);
+    try { fs.writeFileSync(EXAMS_CACHE_FILE, json, 'utf8'); } catch (e) {}
+    try { fs.writeFileSync(EXAMS_TMP_FILE, json, 'utf8'); } catch (e) {}
   } catch (e) {
     console.warn("Failed to save exams cache to disk:", e);
   }
@@ -538,69 +551,158 @@ Trả về danh sách các tiết học/lịch công tác.`;
 });
 
 app.all("/api/generate-exam", async (req, res) => {
-
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-gemini-api-key');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  
-
   return keepAliveExecute(req, res, async () => {
+    const { 
+      subject = "Toán", 
+      grade = "12", 
+      duration = "45", 
+      examType = "Định kỳ", 
+      matrix = "", 
+      customPrompt = "", 
+      qCounts = {},
+      matrixFile,
+      selectedTopics = []
+    } = req.body;
 
-      const { lesson, subject, textbook } = req.body;
-      const files = resolveFiles(req.body);
-      const textbookName = textbook || "Kết nối tri thức với cuộc sống";
-      
-      const prompt = `Bạn là một giáo viên xuất sắc và chuyên gia giáo dục. Tôi đã tải lên một tài liệu Kế hoạch giáo dục (KHGD).
-Dựa vào các tài liệu được cung cấp (Sách, Văn bản, KHDH...), hãy soạn chi tiết một Kế hoạch bài dạy (Giáo án) môn ${subject || "chung"} theo chuẩn Công văn 5512/BGDĐT-GDTrH cho bài học: "${lesson}".
-TUYỆT ĐỐI BÁM SÁT VÀ SOẠN CHÍNH XÁC BÀI HỌC CÓ TÊN LÀ: "${lesson}". KHÔNG ĐƯỢC TỰ Ý ĐỔI SANG BÀI KHÁC.
-Đặc biệt lưu ý: Vui lòng sử dụng và bám sát nội dung, thuật ngữ, tiến trình của bộ sách giáo khoa: "${textbookName}".
-Trích xuất các thông tin về:
-- Số tiết (phân bổ thời gian cho bài học này)
-- Yêu cầu cần đạt
-- Năng lực số
-- Năng lực AI
-- Tích hợp STEM/STEAM
-của chính bài học đó. Sau đó, sử dụng các thông tin này để soạn chi tiết một Kế hoạch bài dạy (Giáo án) theo chuẩn Công văn 5512/BGDĐT-GDTrH cho bài học đó.
-
-Yêu cầu định dạng và nội dung (dùng cú pháp Markdown):
-1. **Phân chia tiết học**: BẮT BUỘC dựa vào số tiết trích xuất được để phân bổ rõ ràng tiến trình dạy học. Ví dụ bài có 2 tiết thì phải ghi rõ "Tiết 1: ... (45 phút)", "Tiết 2: ... (45 phút)". Mỗi tiết đảm bảo thời lượng đúng 45 phút.
-2. **Tuyệt đối KHÔNG sử dụng thẻ HTML \`<br>\` hoặc \`<br/>\`**: Hãy sử dụng dấu xuống dòng chuẩn của Markdown (Enter 2 lần) để ngắt đoạn.
-3. **Tô màu Năng lực số (NLS) và Năng lực AI**: Khi nhắc đến phần mềm, công cụ thiết bị số, Năng lực số hoặc công cụ AI trong bài, BẮT BUỘC phải bọc trong thẻ HTML \`<mark style="background-color: #dbeafe; color: #1d4ed8; font-weight: bold; padding: 2px 4px; border-radius: 4px;">Tên phần mềm / NLS</mark>\` để tô màu xanh nổi bật.
-${MATH_FORMATTING_RULES}
-5. **I. MỤC TIÊU**: Trình bày rõ ràng Kiến thức, Năng lực số, Năng lực AI, và Yêu cầu STEM. Các mã chỉ báo (như [3.1.NC1a]) phải được giữ nguyên và giải thích ngắn gọn cách đạt được trong bài.
-7. **II. THIẾT BỊ DẠY HỌC VÀ HỌC LIỆU**: Ghi rõ các thiết bị số, phần mềm, công cụ AI cần thiết.
-8. **III. TIẾN TRÌNH DẠY HỌC**:
-   Trình bày tiến trình giảng dạy rõ ràng theo từng tiết (Tiết 1, Tiết 2...). Phải thiết kế theo 4 hoạt động chuẩn: 
-   - Hoạt động 1: Xác định vấn đề / Nhiệm vụ học tập.
-   - Hoạt động 2: Hình thành kiến thức mới.
-   - Hoạt động 3: Luyện tập.
-   - Hoạt động 4: Vận dụng.
-   Trình bày chi tiết 4 hoạt động chuẩn. Mỗi hoạt động cần trình bày rõ các phần: Mục tiêu, Nội dung, Sản phẩm (cụ thể), Tổ chức thực hiện (gồm 4 bước: Chuyển giao, Thực hiện, Báo cáo, Kết luận). Kèm thời gian dự kiến (phút). Trình bày dưới dạng văn bản rõ ràng, KHÔNG bắt buộc phải kẻ bảng. Đặc biệt, lồng ghép khéo léo việc sử dụng phần mềm, kỹ năng số, hoặc ứng dụng AI vào phần "Tổ chức thực hiện". Tránh nói chung chung.
-   
-Văn phong cần chuyên nghiệp, sư phạm, thực tế. Nếu không tìm thấy bài học trong tài liệu, hãy thông báo lỗi nhẹ nhàng và soạn một giáo án dự kiến.`;;
-
-      const response = await generateWithFallback(req, {
-        contents: [
-          {
-            role: "user",
-            parts: [
-              ...(await processFilesForAI(files || [])),
-              {
-                text: prompt
-              }
-            ]
-          }
-        ],
-        config: {
-          temperature: 0.7,
+    let files = resolveFiles(req.body);
+    if (matrixFile) {
+      let fileData = matrixFile;
+      let fileType = 'application/pdf';
+      if (typeof fileData === 'string' && fileData.startsWith('data:')) {
+        const matches = fileData.match(/^data:(.*?);base64,(.*)$/);
+        if (matches) {
+          fileType = matches[1];
+          fileData = matches[2];
         }
-      });
-      return { result: response.text };
+      }
+      files.push({ data: fileData, type: fileType });
+    }
+
+    const mcCount = Number(qCounts.mc) || 0;
+    const tfCount = Number(qCounts.tf) || 0;
+    const saCount = Number(qCounts.sa) || 0;
+    const essayCount = Number(qCounts.essay) || 0;
+    const totalQuestions = mcCount + tfCount + saCount + essayCount;
+
+    const promptText = `Bạn là một chuyên gia khảo thí và giáo viên giỏi bộ môn ${subject}.
+Nhiệm vụ của bạn là biên soạn một Đề kiểm tra chuẩn chất lượng cao cho học sinh Lớp ${grade}, môn ${subject}, Thời gian làm bài: ${duration} phút.
+Hình thức/Kỳ thi: ${examType}.
+${selectedTopics.length > 0 ? `Các chủ đề/bài học trọng tâm: ${selectedTopics.join(', ')}.` : ''}
+${matrix ? `Yêu cầu ma trận/đặc tả: ${matrix}` : ''}
+${customPrompt ? `Yêu cầu chi tiết của giáo viên:\n${customPrompt}` : ''}
+
+CẤU TRÚC VÀ SỐ LƯỢNG CÂU HỎI BẮT BUỘC:
+${mcCount > 0 ? `- Phần I: ĐÚNG ${mcCount} câu hỏi Trắc nghiệm nhiều lựa chọn (loại "mc") - mỗi câu gồm đúng 4 phương án lựa chọn, chỉ có 1 phương án đúng.` : ''}
+${tfCount > 0 ? `- Phần II: ĐÚNG ${tfCount} câu hỏi Trắc nghiệm Đúng/Sai (loại "tf") - mỗi câu có một đề dẫn chung và ĐÚNG 4 ý a), b), c), d). Học sinh xác định từng ý là Đúng (true) hay Sai (false).` : ''}
+${saCount > 0 ? `- Phần III: ĐÚNG ${saCount} câu hỏi Trả lời ngắn (loại "sa") - kết quả là một số, phân số, hoặc cụm từ ngắn gọn.` : ''}
+${essayCount > 0 ? `- Phần IV: ĐÚNG ${essayCount} câu hỏi Tự luận (loại "essay") - bài toán tự luận có hướng dẫn giải và thang điểm chi tiết.` : ''}
+${totalQuestions === 0 ? 'Nếu không chỉ định số lượng, hãy tạo 12 câu trắc nghiệm nhiều lựa chọn (mc), 2 câu Đúng/Sai (tf), 4 câu Trả lời ngắn (sa) theo đúng cấu trúc đề thi mới của Bộ GD&ĐT.' : ''}
+
+QUY TẮC BẮT BUỘC VỀ TOÁN HỌC VÀ KỸ THUẬT:
+${MATH_FORMATTING_RULES}
+- Mọi công thức, ký hiệu toán, biến số đơn lẻ (như $x, y, z, m, a, b, c, \\alpha, \\beta, \\pi, \\in, \\le, \\ge...$) BẮT BUỘC đặt trong cặp dấu đô la $...$ hoặc $$...$$.
+- TUYỆT ĐỐI KHÔNG lặp lại các chữ A, B, C, D vào nội dung của câu hỏi hoặc phương án (hệ thống sẽ tự động gán nhãn A, B, C, D).
+- Câu trắc nghiệm (mc): mảng "options" phải có ĐÚNG 4 phần tử dạng chuỗi. "correctOptionIndex" là chỉ số đáp án đúng (0, 1, 2, 3).
+- Câu đúng/sai (tf): "tfStatements" phải là mảng ĐÚNG 4 đối tượng [{ "statement": "...", "correct": true/false }].
+- Câu trả lời ngắn (sa): "correctAnswer" là chuỗi kết quả ngắn gọn (ví dụ: "3", "-1/2", "5").
+- BẮT BUỘC kèm lời giải chi tiết (explanation) rõ ràng, chuẩn xác sư phạm cho từng câu hỏi.
+
+BẮT BUỘC TRẢ VỀ DUY NHẤT MỘT ĐỐI TƯỢNG JSON HỢP LỆ VỚI CẤU TRÚC SAU:
+{
+  "examName": "ĐỀ KIỂM TRA MÔN ${subject.toUpperCase()} - LỚP ${grade} (${duration} PHÚT)",
+  "questions": [
+    {
+      "id": 1,
+      "type": "mc",
+      "level": "Nhận biết",
+      "content": "Nội dung câu hỏi...",
+      "options": ["Phương án A", "Phương án B", "Phương án C", "Phương án D"],
+      "correctOptionIndex": 0,
+      "explanation": "Lời giải chi tiết..."
+    },
+    {
+      "id": 2,
+      "type": "tf",
+      "level": "Thông hiểu",
+      "content": "Nội dung câu hỏi Đúng/Sai...",
+      "tfStatements": [
+        { "statement": "Khẳng định a", "correct": true },
+        { "statement": "Khẳng định b", "correct": false },
+        { "statement": "Khẳng định c", "correct": true },
+        { "statement": "Khẳng định d", "correct": false }
+      ],
+      "explanation": "Lời giải chi tiết cho 4 ý..."
+    },
+    {
+      "id": 3,
+      "type": "sa",
+      "level": "Vận dụng",
+      "content": "Nội dung câu trả lời ngắn...",
+      "correctAnswer": "Kết quả đúng",
+      "explanation": "Lời giải chi tiết..."
+    },
+    {
+      "id": 4,
+      "type": "essay",
+      "level": "Vận dụng cao",
+      "content": "Nội dung bài toán tự luận...",
+      "correctAnswer": "Hướng dẫn chấm chi tiết",
+      "explanation": "Lời giải chi tiết..."
+    }
+  ]
+}`;
+
+    const processedFiles = await processFilesForAI(files);
+
+    const response = await generateWithFallback(req, {
+      contents: [
+        {
+          role: "user",
+          parts: [
+            ...processedFiles,
+            { text: promptText }
+          ]
+        }
+      ],
+      config: {
+        responseMimeType: "application/json",
+        temperature: 0.3
+      }
     });
+
+    if (!response || !response.text) {
+      throw new Error("Không nhận được phản hồi từ AI");
+    }
+
+    let parsedData: any = {};
+    const rawText = response.text.trim();
+    try {
+      parsedData = JSON.parse(rawText);
+    } catch (e) {
+      const cleanJson = rawText.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
+      parsedData = JSON.parse(cleanJson);
+    }
+
+    if (!parsedData.questions || !Array.isArray(parsedData.questions)) {
+      parsedData.questions = [];
+    }
+
+    parsedData.questions = parsedData.questions.map((q: any, idx: number) => ({
+      ...q,
+      id: q.id || idx + 1,
+      type: q.type || 'mc',
+      level: q.level || 'Nhận biết'
+    }));
+
+    return parsedData;
+  });
 });
 
 app.all("/api/upgrade-lesson-plan", async (req, res) => {
@@ -1044,8 +1146,17 @@ app.all("/api/exams/share", (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
-    const examId = Math.random().toString(36).substring(2, 10);
+    const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+    let code = '';
+    for (let i = 0; i < 6; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    const examId = req.body?.customId ? String(req.body.customId).trim() : code;
+
     sharedExamsStore.set(examId, req.body);
+    sharedExamsStore.set(examId.toLowerCase(), req.body);
+    sharedExamsStore.set(examId.toUpperCase(), req.body);
+
     saveExamsToDisk();
     res.json({ examId });
   } catch (error) {
@@ -1054,9 +1165,24 @@ app.all("/api/exams/share", (req, res) => {
 });
 
 app.get("/api/exams/:id", (req, res) => {
-  const data = sharedExamsStore.get(req.params.id);
-  if (data) res.json(data);
-  else res.status(404).json({ error: "Exam not found" });
+  const rawId = (req.params.id || '').trim();
+  let data = sharedExamsStore.get(rawId) 
+    || sharedExamsStore.get(rawId.toLowerCase()) 
+    || sharedExamsStore.get(rawId.toUpperCase());
+
+  if (!data) {
+    loadExamsFromDisk();
+    data = sharedExamsStore.get(rawId) 
+      || sharedExamsStore.get(rawId.toLowerCase()) 
+      || sharedExamsStore.get(rawId.toUpperCase());
+  }
+
+  if (data) {
+    res.setHeader('Cache-Control', 'public, max-age=60');
+    res.json(data);
+  } else {
+    res.status(404).json({ error: "Không tìm thấy đề thi. Mã đề có thể không chính xác hoặc đã hết hạn." });
+  }
 });
 
 // URL Shortener using TinyURL with fallback to is.gd / direct link
