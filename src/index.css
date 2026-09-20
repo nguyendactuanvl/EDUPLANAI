@@ -59,9 +59,20 @@
 /* Fix for KaTeX fractions overlapping in Tailwind typography */
 .katex {
   line-height: normal !important;
+  text-rendering: auto;
+  background: transparent !important;
 }
 .katex * {
   line-height: normal !important;
+}
+
+/* KaTeX safe fallback - strictly inherit color, never display red error text */
+.katex-error {
+  color: inherit !important;
+  background-color: transparent !important;
+  font-family: inherit !important;
+  font-style: normal !important;
+  white-space: normal !important;
 }
 
 /* --- TIKZ & TKZ-TAB IMPROVEMENTS --- */
@@ -94,4 +105,58 @@
 .tikzjax-instance svg g {
   /* Prevent vector lines from shifting to sub-pixels which causes blurring */
   transform: translateZ(0); 
+}
+
+/* --- DÀN TRANG ĐỀ THI TOÁN & PHƯƠNG ÁN TRẮC NGHIỆM (CHUẨN GDPT 2018) --- */
+.question-choices {
+  margin-top: 0.75rem !important;
+  margin-bottom: 1.5rem !important; /* mb-6 */
+  width: 100%;
+}
+
+.question-choices.grid-cols-4,
+.question-choices.lg\:grid-cols-4 {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 1024px) {
+  .question-choices.lg\:grid-cols-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .question-choices.grid-cols-2,
+  .question-choices.sm\:grid-cols-2,
+  .question-choices.lg\:grid-cols-4 {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+}
+
+.choice-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.choice-label {
+  font-weight: 600;
+  color: #0f172a;
+  min-width: 1.5rem;
+  flex-shrink: 0;
+}
+
+.choice-text {
+  flex: 1;
+}
+
+/* Ensure math formulas inside choices align horizontally with the label */
+.choice-text .katex-display {
+  display: inline-block !important;
+  margin: 0 !important;
+}
+
+.choice-text .katex {
+  vertical-align: baseline;
 }

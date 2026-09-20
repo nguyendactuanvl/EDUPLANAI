@@ -388,7 +388,7 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
           return (
             <div key={idx} className={`bg-white p-6 rounded-xl shadow-sm border ${isSubmitted && showRedBorder ? 'border-red-200' : isSubmitted ? 'border-emerald-200' : 'border-slate-200'}`}>
               <h3 className="font-medium text-slate-800 mb-4 leading-relaxed">
-                <span className="font-bold">Câu {idx + 1}:</span> <MarkdownRenderer className="markdown-body inline-block" content={fixMath(cleanQuestionStem(q.content || q.question || q.text || '', q.options))} />
+                <span className="font-bold">Câu {idx + 1}:</span> <MarkdownRenderer className="markdown-body inline-block" content={fixMath(cleanQuestionStem(q.content || q.question || q.text || '', q.options, q.tfStatements))} />
               </h3>
               
               <div className="space-y-3">
@@ -423,17 +423,25 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
                   );
                 })}
 
-                {/* TRUE / FALSE (4 Statements format) */}
+                {/* TRUE / FALSE (4 Statements format - GDPT 2018) */}
                 {q.type === 'tf' && q.tfStatements && q.tfStatements.length > 0 && (
                   <div className="space-y-4">
                     {q.tfStatements.map((stmt: any, sIdx: number) => {
                       const ansMap = answers[idx] || {};
                       const studentAns = ansMap[sIdx];
                       const isTrue = stmt.correct === true || String(stmt.correct).toLowerCase() === 'true';
+                      const subLabel = ['a)', 'b)', 'c)', 'd)'][sIdx] || `${String.fromCharCode(97 + sIdx)})`;
+                      let cleanStmt = (stmt.statement || '').trim();
+                      cleanStmt = cleanStmt.replace(/^[a-d][\.\:\)]\s*/i, '');
                       
                       return (
                         <div key={sIdx} className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-xl border border-slate-200 bg-slate-50">
-                          <div className="flex-1"><MarkdownRenderer className="markdown-body inline-block" content={fixMath(stmt.statement || '')} /></div>
+                          <div className="flex-1 flex items-start gap-2.5">
+                            <span className="font-bold text-emerald-800 shrink-0 mt-0.5">{subLabel}</span>
+                            <div className="flex-1">
+                              <MarkdownRenderer className="markdown-body inline-block" content={fixMath(cleanStmt)} />
+                            </div>
+                          </div>
                           <div className="flex items-center gap-2 shrink-0">
                             <button 
                               disabled={isSubmitted}
@@ -453,7 +461,7 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
                             {isSubmitted && studentAns !== undefined && studentAns !== isTrue && <XCircle className="w-5 h-5 text-red-600 ml-2" />}
                           </div>
                         </div>
-                      )
+                      );
                     })}
                   </div>
                 )}

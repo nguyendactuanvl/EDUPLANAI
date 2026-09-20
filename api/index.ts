@@ -14,23 +14,29 @@ export const maxDuration = 60; // 1 minute max duration on Vercel Hobby
 
 const MATH_FORMATTING_RULES = `QUY TẮC ĐỊNH DẠNG TOÁN HỌC VÀ VĂN BẢN (BẮT BUỘC TUÂN THỦ NGHIÊM NGẶT):
 1. Mọi công thức Toán bắt buộc viết bằng cú pháp chuẩn LaTeX (tuyệt đối không dùng ký tự Unicode như √, ∫).
-2. Công thức nằm cùng dòng văn bản: Luôn kẹp trong cặp dấu $...$ (ví dụ: $y = \dfrac{ax+b}{cx+d}$, $x \in [1; 5]$). LUÔN CÓ KHOẢNG TRẮNG trước và sau dấu $ để không bị dính chữ.
-3. Công thức nằm riêng một dòng độc lập: Luôn kẹp trong cặp dấu $...$.
-4. Ký hiệu bắt buộc: Phân số dùng \dfrac{a}{b}, hệ phương trình dùng \\begin{cases} ... \\end{cases}, dấu khác (không bằng) BẮT BUỘC dùng \\neq (tuyệt đối KHÔNG viết dạng "/ =", "/=", "!=" hay "=/=").
+2. Công thức nằm cùng dòng văn bản: Luôn kẹp trong cặp dấu $...$ (ví dụ: $y = \\dfrac{ax+b}{cx+d}$, $x \\in [1; 5]$). LUÔN CÓ KHOẢNG TRẮNG trước và sau dấu $ để không bị dính chữ.
+3. Công thức nằm riêng một dòng độc lập: Luôn kẹp trong cặp dấu $$...$$.
+4. Ký hiệu bắt buộc: Phân số dùng \\dfrac{a}{b}, hệ phương trình dùng \\begin{cases} ... \\end{cases}, dấu khác (không bằng) BẮT BUỘC dùng \\neq (tuyệt đối KHÔNG viết dạng "/ =", "/=", "!=" hay "=/=").
+   Ký hiệu vô cực (vô cùng) BẮT BUỘC dùng \\infty: $-\\infty, +\\infty$. Tuyệt đối KHÔNG viết thiếu dấu gạch chéo thành -infty, +infty hay in fty. Các khoảng như $(-\\infty; -1)$, $(-1; +\\infty)$ BẮT BUỘC có \\ trước infty.
 5. Bố cục văn bản dùng định dạng Markdown rõ ràng.
 6. [CỰC KỲ QUAN TRỌNG] BẢNG BIẾN THIÊN VÀ ĐỒ THỊ BẰNG TIKZ:
    - BẮT BUỘC đặt toàn bộ code vẽ bảng biến thiên hoặc đồ thị vào trong khối markdown \`\`\`tikz ... \`\`\`. 
    - BẮT BUỘC phải bao bọc mã bên trong \\begin{tikzpicture} và \\end{tikzpicture}. KHÔNG DÙNG pgfplots (axis).
    - VỚI BẢNG BIẾN THIÊN: Dùng gói tkz-tab chuẩn mực. KHÔNG dùng môi trường ma trận array.
-     + Cấu hình bắt buộc: \tkzTabInit[lgt=1.5, espcl=3]...
+     + Cấu hình bắt buộc: \\tkzTabInit[lgt=1.5, espcl=3]...
      + Điểm gián đoạn (không xác định) bắt buộc dùng 2 vạch song song: ký hiệu d, -d/, +d/ trong tkz-tab.
-     + Ký hiệu tổng quát: x_1, x_2, y_{CĐ}, y_{CT}, -\infty, +\infty.
-   - VỚI ĐỒ THỊ: 
+     + Ký hiệu tổng quát: x_1, x_2, y_{CĐ}, y_{CT}, -\\infty, +\\infty.
+   - VỚI ĐỒ THỊ (ĐẶC BIỆT LÀ HÀM PHÂN THỨC BẬC 1/1 VÀ BẬC 2/1): 
      + Tuyệt đối KHÔNG dùng đường cong Bezier (.. controls ..) kéo tự do làm sai tiếp tuyến đồ thị hàm số.
-     + Phải dùng hàm giải tích chuẩn (ví dụ: \draw[domain=..., samples=100] plot (\\x, \{hàm_số\})).
-     + Điểm cực trị phải có tiếp tuyến ngang chính xác. 
-     + Đường tiệm cận đứng, ngang, xiên phải vẽ nét đứt (dashed).
-     + Phải gióng tọa độ đầy đủ nhãn tổng quát. Ký hiệu hệ trục Oxy (có mũi tên, nhãn x, y, O).
+     + Phải dùng hàm giải tích chuẩn (ví dụ: \\draw[domain=..., samples=100] plot (\\x, {hàm_số})).
+     + Với hàm phân thức có tiệm cận đứng tại $x = x_0$, BẮT BUỘC vẽ 2 nhánh riêng biệt ở 2 miền $x < x_0$ và $x > x_0$ (tuyệt đối không để domain chạy qua điểm gián đoạn $x_0$).
+     + BẮT BUỘC vẽ các đường tiệm cận đứng, tiệm cận ngang, tiệm cận xiên bằng NÉT ĐỨT (dashed):
+       Ví dụ tiệm cận đứng $x = 1$: \\draw[dashed, red, thick] (1, -4) -- (1, 4) node[above] {$x = 1$};
+       Ví dụ tiệm cận ngang $y = 2$: \\draw[dashed, blue, thick] (-4, 2) -- (4, 2) node[right] {$y = 2$};
+     + BẮT BUỘC có hệ trục tọa độ Oxy với mũi tên (->, >=stealth), nhãn $x$, $y$, gốc $O$ và chia vạch hoặc lưới tọa độ rõ ràng:
+       \\draw[->, >=stealth, thick] (-4.5,0) -- (4.5,0) node[right] {$x$};
+       \\draw[->, >=stealth, thick] (0,-4.5) -- (0,4.5) node[above] {$y$};
+       \\node[below left] at (0,0) {$O$};
 7. [CỰC KỲ QUAN TRỌNG] HÌNH VẼ HÌNH HỌC KHÔNG GIAN BẰNG TIKZ (Chuẩn GDPT 2018):
    - BẮT BUỘC đặt code vào khối markdown \`\`\`tikz ... \`\`\` và bao bọc bởi \\begin{tikzpicture} và \\end{tikzpicture}.
    - QUY ƯỚC NÉT VẼ:
@@ -55,28 +61,28 @@ const MATH_FORMATTING_RULES = `QUY TẮC ĐỊNH DẠNG TOÁN HỌC VÀ VĂN B�
    - NGUYÊN TẮC GIẢI TÍCH (CẤM VẼ TỰ DO / CẤM ĐOÁN TỌA ĐỘ):
      + Trước khi vẽ bất kỳ đường thẳng ax + by = c nào, BẮT BUỘC phải tính chính xác: Giao điểm với Ox (Cho y = 0 -> x = c/a) và Giao điểm với Oy (Cho x = 0 -> y = c/b).
      + Tọa độ các đỉnh đa giác miền nghiệm phải là nghiệm giải tích thực sự của hệ 2 phương trình đường thẳng giao nhau (Ví dụ: x + y = 4 và y = 3 thì giao điểm BẮT BUỘC là (1; 3), không được vẽ giao điểm nằm ngoài đường thẳng).
-   - KỸ THUẬT VẼ TRÊN TIKZ:
-     + Miền nghiệm đa giác: Định nghĩa các đỉnh bằng \\coordinate chuẩn số liệu giải tích, tô màu bằng \\fill[màu] (A) -- (B) -- (C) -- cycle.
-     + Lệnh vẽ đường thẳng: Dùng đúng hàm plot (\\x, {(-a*\\x + c)/b}) với domain rộng hơn miền nghiệm một chút để thấy rõ giao cắt.
-     + Không để xảy ra lỗi sai trực quan (như đường x+y=4 mà lại cắt Oy tại 3, hoặc điểm thuộc đường thẳng mà lại vẽ lệch ra ngoài).
-
 9. [CỰC KỲ QUAN TRỌNG] TRÌNH BÀY ĐÁP ÁN TRẮC NGHIỆM:
    - TUYỆT ĐỐI KHÔNG viết các đáp án A, B, C, D dính liền nhau trên cùng một dòng.
    - BẮT BUỘC mỗi đáp án phải nằm trên một dòng riêng biệt.
-   - TUYỆT ĐỐI KHÔNG xuống dòng ngay sau dấu $ hoặc để thừa ký tự $ (ví dụ viết $\begin{cases} ... \end{cases}$ liền mạch, không viết $ \n \begin{cases}...\end{cases} \n $).
-   - Khuyến khích sử dụng HTML Grid để trình bày đáp án thẳng hàng đẹp mắt (đặc biệt khi xuất Word sẽ rất chuẩn). BẮT BUỘC dùng cấu trúc:
-     <div class="grid grid-cols-2 gap-4">
-       <div><strong>A.</strong> $đáp_án_A$</div>
-       <div><strong>B.</strong> $đáp_án_B$</div>
-       <div><strong>C.</strong> $đáp_án_C$</div>
-       <div><strong>D.</strong> $đáp_án_D$</div>
-     </div>
-   - CHÚ Ý: Nếu đáp án là CÔNG THỨC TOÁN DÀI (ví dụ: Hệ bất phương trình, ma trận, tích phân lớn), BẮT BUỘC dùng grid-cols-1 để mỗi đáp án chiếm trọn 1 dòng rộng rãi:
-     <div class="grid grid-cols-1 gap-4">
-       <div><strong>A.</strong> $\begin{cases} ... \end{cases}$</div>
-       ...
-     </div>
-   - Trục tọa độ Oxy có mũi tên (>=stealth), đánh dấu đầy đủ gốc O và các giao điểm trên trục Ox, Oy. Dùng fill=white, inner sep=1pt cho nhãn text để không bị đường kẻ cắt ngang chữ.`;
+   - TUYỆT ĐỐI KHÔNG xuống dòng ngay sau dấu $ hoặc để thừa ký tự $ (ví dụ viết $\\begin{cases} ... \\end{cases}$ liền mạch, không viết $ \n \\begin{cases}...\\end{cases} \n $).
+10. [QUY CHUẨN CẤU TRÚC ĐỀ THI / PHIẾU HỌC TẬP CHUẨN GDPT 2018 - TUYỆT ĐỐI TUÂN THỦ]:
+    - TUYỆT ĐỐI KHÔNG ĐƯỢC tóm tắt, không được bỏ qua bất kỳ câu nào, TUYỆT ĐỐI KHÔNG ĐƯỢC sinh placeholder như "(Các câu tương tự...)", "(Tương tự cho các câu sau...)", "(Các câu 5 đến 12 tương tự...)", "... (tiếp tục)" hoặc viết tắt câu.
+    - Yêu cầu N câu thì hệ thống BẮT BUỘC PHẢI SINH ĐỦ 100% ĐÚNG N CÂU HOÀN CHỈNH từ câu 1 đến câu N. Mỗi câu phải có đề bài chi tiết, số liệu cụ thể và lời giải/đáp án rõ ràng.
+    - PHẦN TRẮC NGHIỆM ĐÚNG/SAI (loại "tf"): Mỗi câu BẮT BUỘC phải gồm ĐÚNG 4 mệnh đề con:
+      a) [Mệnh đề 1]
+      b) [Mệnh đề 2]
+      c) [Mệnh đề 3]
+      d) [Mệnh đề 4]
+      (Mỗi ý trên 1 dòng riêng biệt, rõ ràng, không gộp dòng với đề bài, không được thiếu ý nào).
+      Trong mảng "tfStatements": BẮT BUỘC có ĐỦ ĐÚNG 4 phần tử:
+      [
+        { "statement": "Nội dung ý a", "correct": true/false },
+        { "statement": "Nội dung ý b", "correct": true/false },
+        { "statement": "Nội dung ý c", "correct": true/false },
+        { "statement": "Nội dung ý d", "correct": true/false }
+      ]
+    - PHẦN TRẮC NGHIỆM 4 LỰA CHỌN (loại "mc"): BẮT BUỘC đủ 4 phương án A, B, C, D hoàn chỉnh trong mảng "options".
+    - PHẦN TRẢ LỜI NGẮN (loại "sa"): Đưa ra câu hỏi định lượng và giá trị số/kết quả chính xác trong "correctAnswer".`;
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
@@ -351,22 +357,19 @@ async function generateWithFallback(req: any, payloadOptions: any) {
           config: {
             maxOutputTokens: 8192,
             ...config,
-            systemInstruction: `Bạn là chuyên gia Toán học. BẮT BUỘC dùng cú pháp LaTeX chuẩn kẹp trong cặp dấu $...$ (nội dòng) hoặc $...$ (khối dòng) cho TẤT CẢ các thành phần toán:
+            systemInstruction: `Bạn là chuyên gia Toán học và Khảo thí GDPT 2018. BẮT BUỘC dùng cú pháp LaTeX chuẩn kẹp trong cặp dấu $...$ (nội dòng) hoặc $$...$$ (khối dòng) cho TẤT CẢ các thành phần toán:
 - Chỉ số dưới BẮT BUỘC dùng dấu gạch dưới: $u_1$, $u_6$, $S_{10}$, $N_0$, $N_t$.
 - Số mũ / lũy thừa BẮT BUỘC dùng dấu mũ: $q^5$, $2^9$, $2^{10}$, $a^2 + b^2$.
 - Phân số BẮT BUỘC dùng \\frac{tử}{mẫu}: $\\frac{1 - (-2)^{10}}{1 - (-2)}$, $\\frac{108}{54}$.
 - Phép nhân dùng \\cdot, dấu suy ra/tương đương dùng \\Rightarrow, \\Leftrightarrow.
-- Hệ phương trình BẮT BUỘC dùng \\\begin{cases} ... \\\end{cases} kèm xuống dòng \\\\ rõ ràng.
-Tuyệt đối KHÔNG viết công thức dưới dạng text thường như u1, q5, 2^9 viết thành 29.
-Khi bài toán yêu cầu có hình vẽ minh họa (đặc biệt là hình học không gian), TUYỆT ĐỐI KHÔNG xuất mã vẽ TikZ/PGF/Asymptote. BẮT BUỘC phải sinh mã vector <svg> thuần (inline SVG) nhúng trực tiếp vào nội dung:
-- TUYỆT ĐỐI KHÔNG bọc mã <svg> trong block code (\`\`\`xml hay \`\`\`svg). Phải viết mã <svg> trực tiếp vào văn bản.
-- Dùng các thẻ chuẩn: <line>, <polyline>, <polygon>, <text>, <circle>.
-- Nét khuất / nét đứt BẮT BUỘC dùng thuộc tính: stroke-dasharray="4 3" hoặc "5 5".
-- Nét liền BẮT BUỘC dùng nét rõ: stroke="black" stroke-width="1.5".
-- Các đỉnh (S, A, B, C, D...) gắn nhãn bằng thẻ <text font-family="Times New Roman" font-size="14">...</text> đặt đúng tọa độ điểm tương ứng.
-- Khi tính toán tọa độ vẽ hình SVG, BẮT BUỘC TÍNH CHÍNH XÁC tọa độ hình học thực tế. Ví dụ: Đường trung tuyến từ B đến AC thì điểm M phải nằm chính giữa đoạn AC (tọa độ M = trung bình cộng tọa độ A và C).
-- Gắn nhãn các điểm (text) phải lệch ra ngoài hình một chút (khoảng 10-15px) so với tọa độ đỉnh để không bị đường thẳng đè lên.
-- Kích thước khung vẽ gọn gàng (width="300" height="250" viewBox="...").`
+- Hệ phương trình BẮT BUỘC dùng \\begin{cases} ... \\end{cases} kèm xuống dòng \\\\ rõ ràng.
+- Tuyệt đối KHÔNG viết công thức dưới dạng text thường như u1, q5, 2^9 viết thành 29.
+- [QUY CHUẨN CẤU TRÚC ĐỀ THI / PHIẾU HỌC TẬP GDPT 2018]:
+  + TUYỆT ĐỐI KHÔNG ĐƯỢC tóm tắt, không được bỏ qua bất kỳ câu nào, TUYỆT ĐỐI KHÔNG ĐƯỢC sinh placeholder như "(Các câu tương tự...)", "(Tương tự cho các câu sau...)", "(Các câu 5 đến 12 tương tự...)", "... (tiếp tục)" hoặc viết tắt câu.
+  + Nếu yêu cầu N câu thì hệ thống BẮT BUỘC PHẢI SINH ĐỦ 100% ĐÚNG N CÂU HOÀN CHỈNH từ câu 1 đến câu N.
+  + Mỗi câu Đúng/Sai (loại "tf") BẮT BUỘC gồm ĐÚNG 4 mệnh đề con a), b), c), d) trên các dòng riêng biệt (mảng "tfStatements" có đúng 4 phần tử).
+  + Mỗi câu trắc nghiệm (loại "mc") BẮT BUỘC có ĐÚNG 4 lựa chọn (mảng "options" có đúng 4 phần tử).
+  + Khi vẽ đồ thị hàm phân thức (bậc 1/1, bậc 2/1): BẮT BUỘC vẽ tiệm cận đứng và ngang/xiên bằng nét đứt (dashed), vẽ 2 nhánh riêng biệt ở 2 phía của tiệm cận đứng, có trục tọa độ Oxy với mũi tên và chia lưới/vạch rõ ràng.`
           } 
         };
         return await client.models.generateContent(updatedPayload);
@@ -607,15 +610,17 @@ ${matrix ? `Yêu cầu ma trận/đặc tả: ${matrix}` : ''}
 ${customPrompt ? `Yêu cầu chi tiết của giáo viên:\n${customPrompt}` : ''}
 
 CẤU TRÚC VÀ SỐ LƯỢNG CÂU HỎI BẮT BUỘC:
-${mcCount > 0 ? `- Phần I: ĐÚNG ${mcCount} câu hỏi Trắc nghiệm nhiều lựa chọn (loại "mc") - mỗi câu gồm đúng 4 phương án lựa chọn, chỉ có 1 phương án đúng.` : ''}
-${tfCount > 0 ? `- Phần II: ĐÚNG ${tfCount} câu hỏi Trắc nghiệm Đúng/Sai (loại "tf") - mỗi câu có một đề dẫn chung và ĐÚNG 4 ý a), b), c), d). Học sinh xác định từng ý là Đúng (true) hay Sai (false).` : ''}
-${saCount > 0 ? `- Phần III: ĐÚNG ${saCount} câu hỏi Trả lời ngắn (loại "sa") - kết quả là một số, phân số, hoặc cụm từ ngắn gọn.` : ''}
+TUYỆT ĐỐI KHÔNG ĐƯỢC tóm tắt, không được bỏ qua bất kỳ câu nào, TUYỆT ĐỐI KHÔNG ĐƯỢC sinh placeholder như "(Các câu tương tự...)" hay viết tắt câu. Phải sinh ĐỦ 100% các câu hỏi theo đúng số lượng yêu cầu:
+${mcCount > 0 ? `- Phần I: ĐÚNG ${mcCount} câu hỏi Trắc nghiệm nhiều lựa chọn (loại "mc") - mỗi câu gồm đúng 4 phương án lựa chọn trong mảng "options", chỉ có 1 phương án đúng.` : ''}
+${tfCount > 0 ? `- Phần II: ĐÚNG ${tfCount} câu hỏi Trắc nghiệm Đúng/Sai (loại "tf") - mỗi câu BẮT BUỘC có đề dẫn chung và ĐÚNG 4 ý a), b), c), d) trong mảng "tfStatements" (4 phần tử). Học sinh xác định từng ý là Đúng (true) hay Sai (false).` : ''}
+${saCount > 0 ? `- Phần III: ĐÚNG ${saCount} câu hỏi Trả lời ngắn (loại "sa") - kết quả là một số, phân số, hoặc cụm từ ngắn gọn trong "correctAnswer".` : ''}
 ${essayCount > 0 ? `- Phần IV: ĐÚNG ${essayCount} câu hỏi Tự luận (loại "essay") - bài toán tự luận có hướng dẫn giải và thang điểm chi tiết.` : ''}
 ${totalQuestions === 0 ? 'Nếu không chỉ định số lượng, hãy tạo 12 câu trắc nghiệm nhiều lựa chọn (mc), 2 câu Đúng/Sai (tf), 4 câu Trả lời ngắn (sa) theo đúng cấu trúc đề thi mới của Bộ GD&ĐT.' : ''}
 
 QUY TẮC BẮT BUỘC VỀ TOÁN HỌC VÀ KỸ THUẬT:
 ${MATH_FORMATTING_RULES}
-- Mọi công thức, ký hiệu toán, biến số đơn lẻ (như $x, y, z, m, a, b, c, \\alpha, \\beta, \\pi, \\in, \\le, \\ge...$) BẮT BUỘC đặt trong cặp dấu đô la $...$ hoặc $$...$$.
+- Mọi công thức, ký hiệu toán, biến số đơn lẻ (như $x, y, z, m, a, b, c, \\alpha, \\beta, \\pi, \\in, \\le, \\ge, -\\infty, +\\infty...$) BẮT BUỘC đặt trong cặp dấu đô la $...$ hoặc $$...$$.
+- Ký hiệu vô cùng/vô cực BẮT BUỘC viết chuẩn LaTeX là \\infty (ví dụ: $(-\\infty; -1)$, $(-1; +\\infty)$, $[0; +\\infty)$, $(-\\infty; +\\infty)$). Tuyệt đối KHÔNG viết thiếu dấu gạch chéo ngược thành -infty, +infty, in fty.
 - TUYỆT ĐỐI KHÔNG lặp lại các chữ A, B, C, D vào nội dung của câu hỏi hoặc phương án (hệ thống sẽ tự động gán nhãn A, B, C, D).
 - Câu trắc nghiệm (mc): mảng "options" phải có ĐÚNG 4 phần tử dạng chuỗi. "correctOptionIndex" là chỉ số đáp án đúng (0, 1, 2, 3).
 - Câu đúng/sai (tf): "tfStatements" phải là mảng ĐÚNG 4 đối tượng [{ "statement": "...", "correct": true/false }].
@@ -927,12 +932,12 @@ app.all("/api/generate-interactive-worksheet", async (req, res) => {
     const promptText = `Bạn là một giáo viên xuất sắc môn ${subject || "chung"}. Hãy tạo một Phiếu bài tập (Worksheet) tương tác thật chuyên nghiệp cho học sinh lớp ${grade}, bài học/chủ đề: "${lesson}". Hình thức: ${type || "Kết hợp trắc nghiệm, đúng/sai, trả lời ngắn, tự luận"}.
        
     YÊU CẦU:
-    1. Đưa ra khoảng 5-10 câu hỏi phân hóa từ cơ bản đến vận dụng.
+    1. Đưa ra khoảng 5-10 câu hỏi phân hóa từ cơ bản đến vận dụng. TUYỆT ĐỐI KHÔNG ĐƯỢC tóm tắt hoặc sinh placeholder như "(Các câu tương tự...)". Bắt buộc sinh đủ 100% các câu hỏi hoàn chỉnh.
     2. Các câu hỏi có thể thuộc 4 loại hình:
        - mc: Trắc nghiệm 4 lựa chọn (chỉ viết nội dung câu hỏi vào "content", 4 phương án vào mảng "options", TUYỆT ĐỐI KHÔNG lặp lại các phương án A, B, C, D trong "content").
-       - tf: Trắc nghiệm Đúng/Sai (Mỗi câu gồm 4 ý a, b, c, d - học sinh phải chọn Đúng hoặc Sai cho TỪNG ý)
-       - sa: Trả lời ngắn (kết quả là 1 số hoặc 1 từ/cụm từ ngắn gọn)
-       - essay: Tự luận
+       - tf: Trắc nghiệm Đúng/Sai (Mỗi câu BẮT BUỘC gồm ĐÚNG 4 ý a, b, c, d trên các dòng riêng biệt, mảng "tfStatements" BẮT BUỘC có đúng 4 phần tử có thuộc tính statement và correct).
+       - sa: Trả lời ngắn (kết quả là 1 số hoặc 1 từ/cụm từ ngắn gọn trong "correctAnswer")
+       - essay: Tự luận (nội dung đề bài và hướng dẫn chấm cụ thể)
     ${MATH_FORMATTING_RULES}
     3. BẮT BUỘC SỬA LỖI CHÍNH TẢ tiếng Việt thật cẩn thận.
     4. BẮT BUỘC TRẢ VỀ DUY NHẤT MỘT ĐỐI TƯỢNG JSON VỚI CẤU TRÚC SAU:

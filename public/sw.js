@@ -14,6 +14,5 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 self.addEventListener('fetch', (event) => {
-  // Do nothing, just fetch from network
-  event.respondWith(fetch(event.request));
+  // Pass through to native browser network
 });

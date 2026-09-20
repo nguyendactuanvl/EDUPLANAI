@@ -1556,7 +1556,7 @@ ${customPrompt}
                       <div key={idx} className="pb-4 border-b border-slate-100 last:border-0">
                         <div className="font-medium text-slate-800 mb-3 flex items-start gap-2">
                           <span className="font-bold whitespace-nowrap mt-1">Câu {idx + 1}:</span> 
-                          <MarkdownRenderer className="markdown-body inline-block" content={fixMath(cleanQuestionStem(q.content || (q as any).question || (q as any).text || '', q.options))} /> 
+                          <MarkdownRenderer className="markdown-body inline-block" content={fixMath(cleanQuestionStem(q.content || (q as any).question || (q as any).text || '', q.options, q.tfStatements))} /> 
                           <span className="text-xs text-emerald-600 font-normal mt-1 shrink-0">[{q.level}]</span>
                           <button onClick={() => saveToBank(q)} className="text-xs px-2 py-1 bg-blue-50 text-blue-600 rounded border border-blue-200 hover:bg-blue-100 shrink-0 no-print" title="Lưu vào Ngân hàng CH">+ Lưu NH</button>
                           <button onClick={() => {
@@ -1580,16 +1580,21 @@ ${customPrompt}
                             ))}
                           </div>
                         )}
-                        {q.type === 'mc' && q.options && (
-                          <div className="flex flex-col gap-3 pl-4">
-                            {q.options.map((opt, oIdx) => (
-                              <div key={oIdx} className={`flex items-start gap-1 p-2 rounded-md border ${oIdx === q.correctOptionIndex ? 'bg-emerald-50 border-emerald-200 font-medium' : 'border-transparent'}`}>
-                                <span className="shrink-0 font-medium">{String.fromCharCode(65 + oIdx)}.</span>
-                                <MarkdownRenderer className="markdown-body inline-block" content={fixMath(cleanOptionText(opt))} />
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                        {q.type === 'mc' && q.options && (() => {
+                          const cleanedOpts = q.options.map((opt: string) => cleanOptionText(opt));
+                          const maxLen = Math.max(...cleanedOpts.map((o: string) => (o || '').length));
+                          const cols = maxLen <= 25 ? 'grid-cols-2 lg:grid-cols-4' : maxLen <= 60 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1';
+                          return (
+                            <div className={`grid ${cols} gap-2.5 pl-2 mt-2 mb-3`}>
+                              {cleanedOpts.map((opt, oIdx) => (
+                                <div key={oIdx} className={`flex items-baseline gap-2 p-2 rounded-lg border transition-colors ${oIdx === q.correctOptionIndex ? 'bg-emerald-50 border-emerald-300 font-medium text-emerald-950' : 'bg-slate-50/50 border-slate-200/80 text-slate-800'}`}>
+                                  <span className="shrink-0 font-semibold select-none min-w-[1.5rem]">{String.fromCharCode(65 + oIdx)}.</span>
+                                  <span className="flex-1"><MarkdownRenderer className="markdown-body inline-block" content={fixMath(opt)} /></span>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })()}
                         
                         {q.type !== 'mc' && q.correctAnswer && (
                           <div className="mt-2 pl-4 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
@@ -1888,7 +1893,7 @@ ${customPrompt}
                             {exam.questions.map((q, idx) => (
                               <div key={idx} className="question-block" style={{ marginBottom: '12pt', pageBreakInside: 'avoid' }}>
                                 <div style={{ fontSize: '12pt', marginBottom: '3pt' }}>
-                                  <strong>Câu {idx + 1}:</strong> <MarkdownRenderer className="markdown-body inline-block" content={fixMath(cleanQuestionStem(q.content || (q as any).question || (q as any).text || '', q.options))} />
+                                  <strong>Câu {idx + 1}:</strong> <MarkdownRenderer className="markdown-body inline-block" content={fixMath(cleanQuestionStem(q.content || (q as any).question || (q as any).text || '', q.options, q.tfStatements))} />
                                 </div>
                                 {q.type === 'mc' && q.options && (() => {
                                   const cleanedOpts = q.options.map((opt: string) => cleanOptionText(opt));

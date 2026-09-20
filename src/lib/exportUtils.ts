@@ -2,518 +2,1303 @@ import { saveAs } from 'file-saver';
 import html2canvas from 'html2canvas';
 import katex from 'katex';
 import { mml2omml } from 'mathml2omml-plus';
+import {
+  Document,
+  Paragraph,
+  TextRun,
+  Table,
+  TableRow,
+  TableCell,
+  WidthType,
+  BorderStyle,
+  AlignmentType,
+  convertMillimetersToTwip,
+  Packer,
+  ImportedXmlComponent,
+  ImageRun,
+  type ParagraphChild,
+  type FileChild,
+} from 'docx';
 
-function convertLatexToOmml(tex: string, isDisplay: boolean = false): string {
-    try {
-        const mathmlHtml = katex.renderToString(tex, {
-            displayMode: isDisplay,
-            output: 'mathml',
-            throwOnError: false
-        });
-        const match = mathmlHtml.match(/<math[\s\S]*?<\/math>/i);
-        if (match) {
-            return mml2omml(match[0]);
-        }
-    } catch (e) {
-        console.warn('OMML conversion error for:', tex, e);
-    }
-    // Fallback if OMML conversion fails
-    return isDisplay ? `<p align="center" style="margin: 6pt 0;"><b>$${tex}$</b></p>` : ` <b>$${tex}$</b> `;
+interface RunStyle {
+  bold?: boolean;
+  italics?: boolean;
+  color?: string;
+  size?: number;
+  font?: string;
+  superScript?: boolean;
+  subScript?: boolean;
 }
 
+interface ExportOptions {
+  mathFormat: 'omml' | 'latex' | 'image';
+}
+
+/**
+ * Converts a LaTeX formula into a native Word OMML equation component.
+ * Uses KaTeX (generating MathML) + mathml2omml-plus (generating OMML <m:oMath>)
+ * + docx ImportedXmlComponent to embed a real Word Equation.
+ */
+function latexToOmmlComponent(rawTex: string, isBlock: boolean = false): any {
+  if (!rawTex || !rawTex.trim()) {
+    return new TextRun({ text: '' });
+  }
+
+  const cleanTex = rawTex.trim()
+    .replace(/^\\\[|\\\]$/g, '')
+    .replace(/^\\\(|\\\)$/g, '')
+    .replace(/\\dotfill\b/g, '')
+    .trim();
+
+  try {
+    const mathmlHtml = katex.renderToString(cleanTex, {
+      displayMode: isBlock,
+      output: 'mathml',
+      throwOnError: false,
+    });
+
+    const match = mathmlHtml.match(/<math[\s\S]*?<\/math>/i);
+    if (match) {
+      const convertFn = typeof mml2omml === 'function' ? mml2omml : ((mml2omml as any)?.mml2omml || (mml2omml as any)?.default || mml2omml);
+      const omml = convertFn(match[0]);
+      if (omml && omml.includes('m:oMath')) {
+        const comp = ImportedXmlComponent.fromXmlString(omml);
+        const root = comp && (comp as any).root && (comp as any).root[0] ? (comp as any).root[0] : comp;
+        return root;
+      }
+    }
+  } catch (err) {
+    console.warn('OMML equation conversion error for LaTeX:', rawTex, err);
+  }
+
+  // Fallback: styled italic text in Cambria Math (native Word mathematical typography)
+  return new TextRun({
+    text: cleanTex,
+    italics: true,
+    font: 'Cambria Math',
+    size: 24,
+  });
+}
+
+/**
+ * Converts an SVG element (e.g. from TikZ / geometry diagram) into a high-res PNG data URL.
+ */
 async function svgToPngDataUrl(svgNode: SVGSVGElement): Promise<string> {
-    try {
-        const svgClone = svgNode.cloneNode(true) as SVGSVGElement;
-        if (!svgClone.getAttribute('xmlns')) {
-            svgClone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-        }
-        const rect = svgNode.getBoundingClientRect();
-        const width = Math.max(Math.round(rect.width), parseInt(svgNode.getAttribute('width') || '400', 10) || 400);
-        const height = Math.max(Math.round(rect.height), parseInt(svgNode.getAttribute('height') || '300', 10) || 300);
-        
-        svgClone.setAttribute('width', String(width));
-        svgClone.setAttribute('height', String(height));
-        
-        const svgHtml = new XMLSerializer().serializeToString(svgClone);
-        const svgBlob = new Blob([svgHtml], { type: 'image/svg+xml;charset=utf-8' });
-        const blobUrl = URL.createObjectURL(svgBlob);
-        
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        
-        await new Promise<void>((resolve, reject) => {
-            img.onload = () => resolve();
-            img.onerror = (e) => reject(e);
-            img.src = blobUrl;
-        });
-        
-        const canvas = document.createElement('canvas');
-        const scale = 2;
-        canvas.width = width * scale;
-        canvas.height = height * scale;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) throw new Error('No canvas context');
-        
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        URL.revokeObjectURL(blobUrl);
-        return canvas.toDataURL('image/png');
-    } catch (err) {
-        console.warn('Direct SVG to PNG failed, falling back to html2canvas:', err);
-        const canvas = await html2canvas(svgNode.parentElement || (svgNode as any), {
-            scale: 2,
-            backgroundColor: '#ffffff',
-            logging: false,
-            useCORS: true
-        });
-        return canvas.toDataURL('image/png');
+  try {
+    const svgClone = svgNode.cloneNode(true) as SVGSVGElement;
+    if (!svgClone.getAttribute('xmlns')) {
+      svgClone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
     }
+    const rect = svgNode.getBoundingClientRect();
+    const width = Math.max(Math.round(rect.width), parseInt(svgNode.getAttribute('width') || '400', 10) || 400);
+    const height = Math.max(Math.round(rect.height), parseInt(svgNode.getAttribute('height') || '300', 10) || 300);
+
+    svgClone.setAttribute('width', String(width));
+    svgClone.setAttribute('height', String(height));
+
+    const svgHtml = new XMLSerializer().serializeToString(svgClone);
+    const svgBlob = new Blob([svgHtml], { type: 'image/svg+xml;charset=utf-8' });
+    const blobUrl = URL.createObjectURL(svgBlob);
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = (e) => reject(e);
+      img.src = blobUrl;
+    });
+
+    const canvas = document.createElement('canvas');
+    const scale = 2;
+    canvas.width = width * scale;
+    canvas.height = height * scale;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('No canvas context');
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    URL.revokeObjectURL(blobUrl);
+    return canvas.toDataURL('image/png');
+  } catch (err) {
+    console.warn('Direct SVG to PNG failed, falling back to html2canvas:', err);
+    const canvas = await html2canvas(svgNode.parentElement || (svgNode as any), {
+      scale: 2,
+      backgroundColor: '#ffffff',
+      logging: false,
+      useCORS: true,
+    });
+    return canvas.toDataURL('image/png');
+  }
 }
 
-export async function exportHtmlToWord(element: HTMLElement, filename: string, mathFormat: 'omml' | 'mathml' | 'latex' | 'image' | boolean = 'omml') {
-    if (mathFormat === true) mathFormat = 'latex';
-    if (mathFormat === false) mathFormat = 'omml';
-    
-    let loadingOverlay = document.getElementById('word-export-loading');
-    if (!loadingOverlay) {
-        loadingOverlay = document.createElement('div');
-        loadingOverlay.id = 'word-export-loading';
-        loadingOverlay.style.position = 'fixed';
-        loadingOverlay.style.top = '0';
-        loadingOverlay.style.left = '0';
-        loadingOverlay.style.width = '100vw';
-        loadingOverlay.style.height = '100vh';
-        loadingOverlay.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
-        loadingOverlay.style.zIndex = '999999';
-        loadingOverlay.style.display = 'flex';
-        loadingOverlay.style.flexDirection = 'column';
-        loadingOverlay.style.alignItems = 'center';
-        loadingOverlay.style.justifyContent = 'center';
-        loadingOverlay.innerHTML = `
-            <div style="width: 50px; height: 50px; border: 4px solid #10b981; border-bottom-color: transparent; border-radius: 50%; display: inline-block; box-sizing: border-box; animation: rotation 1s linear infinite;"></div>
-            <style>@keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
-            <h2 style="margin-top: 20px; color: #0f172a; font-family: sans-serif;">Đang xử lý xuất file Word...</h2>
-            <p style="color: #64748b; font-family: sans-serif; margin-top: 8px;">Đang chuẩn bị nội dung và hình vẽ...</p>
-        `;
-        document.body.appendChild(loadingOverlay);
+/**
+ * Converts a base64 / data URL string to a Uint8Array buffer for docx ImageRun.
+ */
+function dataUrlToUint8Array(dataUrl: string): Uint8Array {
+  const parts = dataUrl.split(',');
+  const b64 = parts.length > 1 ? parts[1] : parts[0];
+  const binaryString = atob(b64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
+}
+
+/**
+ * Extracts plain text from a node, preserving LaTeX formulas.
+ */
+function getNodeLatexOrText(node: Node): string {
+  if (node.nodeType === Node.TEXT_NODE) {
+    return node.textContent || '';
+  }
+  if (node.nodeType === Node.ELEMENT_NODE) {
+    const el = node as HTMLElement;
+    const tagName = el.tagName.toUpperCase();
+
+    // Check for preprocessed OMML math token
+    if (el.classList.contains('omml-math-node')) {
+      const tex = decodeURIComponent(el.getAttribute('data-latex') || '');
+      return `$${tex}$`;
+    }
+
+    // Check for KaTeX element
+    if (el.classList.contains('katex') || el.classList.contains('katex-display')) {
+      const ann = el.querySelector("annotation[encoding='application/x-tex']") || el.querySelector("annotation");
+      if (ann && ann.textContent) {
+        return `$${ann.textContent.trim()}$`;
+      }
+      const texAttr = el.getAttribute('data-tex') || el.getAttribute('data-latex');
+      if (texAttr) return `$${texAttr}$`;
+    }
+
+    // Guard: ignore internal KaTeX structures so they never leak raw text
+    if (
+      el.classList.contains('katex-mathml') ||
+      el.classList.contains('katex-html') ||
+      tagName === 'MATH' ||
+      tagName === 'ANNOTATION' ||
+      tagName === 'SEMANTICS'
+    ) {
+      return '';
+    }
+
+    let text = '';
+    for (let i = 0; i < el.childNodes.length; i++) {
+      text += getNodeLatexOrText(el.childNodes[i]);
+    }
+    return text;
+  }
+  return '';
+}
+
+/**
+ * Strips internal system type tags like (Loại tf), (Loại mcq), [Loại: tf], (Loại Đúng/Sai), etc.
+ */
+function stripInternalTags(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/(Câu\s*\d+)\s*[:\.]?\s*[\(\[]\s*Loại(?:\s*trắc\s*nghiệm|\s*đúng\s*sai|\s*trả\s*lời\s*ngắn|\s*tự\s*luận|[:\s]+[a-z0-9_\-]+)?\s*[\)\]]\s*[:\.]?/gi, '$1:')
+    .replace(/[\(\[]\s*Loại(?:\s*trắc\s*nghiệm|\s*đúng\s*sai|\s*trả\s*lời\s*ngắn|\s*tự\s*luận|[:\s]+[a-z0-9_\-]+)?\s*[\)\]]\s*:?/gi, '')
+    .replace(/(Câu\s*\d+[:\.])\s*/gi, '$1 ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+interface TextOrMathToken {
+  type: 'text' | 'math';
+  content: string;
+  isBlock?: boolean;
+}
+
+/**
+ * Robust tokenizer that splits a string into alternating plain text and LaTeX math tokens.
+ * Accurately parses $...$, $$...$$, \(...\), \[...\] without stripping or losing any math content or punctuation.
+ */
+function tokenizeTextAndMath(rawText: string): TextOrMathToken[] {
+  if (!rawText) return [];
+  const tokens: TextOrMathToken[] = [];
+  const mathRegex = /(\$\$[\s\S]*?\$\$|\$[^$\n]+?\$|\\\[[\s\S]*?\\\]|\\\(.*?\\\))/g;
+  let lastIdx = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = mathRegex.exec(rawText)) !== null) {
+    if (match.index > lastIdx) {
+      const textPart = rawText.slice(lastIdx, match.index);
+      if (textPart) {
+        tokens.push({ type: 'text', content: textPart });
+      }
+    }
+
+    const fullMath = match[0];
+    let isBlock = false;
+    let cleanMath = fullMath;
+
+    if (fullMath.startsWith('$$') && fullMath.endsWith('$$')) {
+      cleanMath = fullMath.slice(2, -2).trim();
+      isBlock = true;
+    } else if (fullMath.startsWith('$') && fullMath.endsWith('$')) {
+      cleanMath = fullMath.slice(1, -1).trim();
+    } else if (fullMath.startsWith('\\[') && fullMath.endsWith('\\]')) {
+      cleanMath = fullMath.slice(2, -2).trim();
+      isBlock = true;
+    } else if (fullMath.startsWith('\\(') && fullMath.endsWith('\\)')) {
+      cleanMath = fullMath.slice(2, -2).trim();
+    }
+
+    tokens.push({
+      type: 'math',
+      content: cleanMath,
+      isBlock,
+    });
+
+    lastIdx = match.index + fullMath.length;
+  }
+
+  if (lastIdx < rawText.length) {
+    const trailingPart = rawText.slice(lastIdx);
+    if (trailingPart) {
+      tokens.push({ type: 'text', content: trailingPart });
+    }
+  }
+
+  return tokens;
+}
+
+/**
+ * Converts an array of TextOrMathTokens into Word ParagraphChild runs (TextRun and OMML equations).
+ */
+function tokensToRuns(
+  tokens: TextOrMathToken[],
+  style: RunStyle = {},
+  options: ExportOptions
+): ParagraphChild[] {
+  const runs: ParagraphChild[] = [];
+
+  for (const token of tokens) {
+    if (token.type === 'text') {
+      const qMatch = token.content.match(/^(\s*(?:\*\*)?(?:Câu|Bài)\s*\d+[:\.]?(?:\*\*)?)([\s\S]*)$/i);
+      if (qMatch && !style.bold) {
+        const cleanLabel = qMatch[1].replace(/\*\*/g, '').trim();
+        runs.push(
+          new TextRun({
+            text: `${cleanLabel} `,
+            bold: true,
+            font: style.font || 'Times New Roman',
+            size: style.size || 24,
+          })
+        );
+        const rest = qMatch[2].replace(/^\s+/, '');
+        if (rest) {
+          runs.push(
+            new TextRun({
+              text: rest,
+              font: style.font || 'Times New Roman',
+              size: style.size || 24,
+              bold: style.bold,
+              italics: style.italics,
+              superScript: style.superScript,
+              subScript: style.subScript,
+            })
+          );
+        }
+      } else {
+        runs.push(
+          new TextRun({
+            text: token.content,
+            font: style.font || 'Times New Roman',
+            size: style.size || 24,
+            bold: style.bold,
+            italics: style.italics,
+            superScript: style.superScript,
+            subScript: style.subScript,
+          })
+        );
+      }
     } else {
-        loadingOverlay.style.display = 'flex';
+      // Math token
+      if (options.mathFormat === 'latex') {
+        runs.push(
+          new TextRun({
+            text: token.isBlock ? `\n$$${token.content}$$\n` : ` $${token.content}$ `,
+            italics: true,
+            font: 'Times New Roman',
+            size: style.size || 24,
+          })
+        );
+      } else {
+        runs.push(latexToOmmlComponent(token.content, token.isBlock));
+      }
+    }
+  }
+
+  return runs;
+}
+
+/**
+ * Parses plain text that may contain $...$, $$...$$, \(...\), \[...\] into TextRuns and OMML math components.
+ */
+function parseTextWithMath(
+  text: string,
+  style: RunStyle,
+  options: ExportOptions
+): ParagraphChild[] {
+  if (!text) return [];
+  // Clean \dotfill in raw text
+  let safeText = text.replace(/\\dotfill\b/g, '. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .');
+  safeText = stripInternalTags(safeText);
+
+  const tokens = tokenizeTextAndMath(safeText);
+  return tokensToRuns(tokens, style, options);
+}
+
+/**
+ * Parses inline HTML nodes (spans, bold, italic, katex, img, breaks) into ParagraphChild items.
+ */
+function parseInlineContent(
+  node: Node,
+  style: RunStyle = {},
+  options: ExportOptions
+): ParagraphChild[] {
+  const runs: ParagraphChild[] = [];
+
+  if (node.nodeType === Node.TEXT_NODE) {
+    const text = node.textContent || '';
+    return parseTextWithMath(text, style, options);
+  }
+
+  if (node.nodeType === Node.ELEMENT_NODE) {
+    const el = node as HTMLElement;
+    const tagName = el.tagName.toUpperCase();
+
+    // Check if it's an OMML math token (preprocessed KaTeX)
+    if (el.classList.contains('omml-math-node')) {
+      const tex = decodeURIComponent(el.getAttribute('data-latex') || '');
+      const isBlock = el.getAttribute('data-block') === '1';
+
+      if (options.mathFormat === 'latex') {
+        return [
+          new TextRun({
+            text: isBlock ? `\n$$${tex}$$\n` : ` $${tex}$ `,
+            italics: true,
+            font: 'Times New Roman',
+            size: style.size || 24,
+          }),
+        ];
+      }
+      return [latexToOmmlComponent(tex, isBlock)];
     }
 
-    try {
-        const clone = element.cloneNode(true) as HTMLElement;
-        
-        // 0. Unwrap markdown-body and child paragraphs so inline content does not break onto separate lines in Word
-        const markdownBodies = Array.from(clone.querySelectorAll('.markdown-body'));
-        markdownBodies.forEach(mb => {
-            const paragraphs = Array.from(mb.querySelectorAll('p'));
-            paragraphs.forEach(p => {
-                const span = document.createElement('span');
-                span.innerHTML = p.innerHTML;
-                p.parentNode?.replaceChild(span, p);
-            });
-            // If inside table cell or preceded by a label (like Câu 1: or A.), unwrap container to span
-            const parent = mb.parentElement;
-            if (mb.classList.contains('inline-block') || parent?.tagName === 'TD' || mb.previousElementSibling?.tagName === 'STRONG' || mb.previousElementSibling?.tagName === 'B') {
-                const span = document.createElement('span');
-                span.innerHTML = mb.innerHTML;
-                mb.parentNode?.replaceChild(span, mb);
-            }
-        });
+    // Check if it's a KaTeX math element directly
+    if (el.classList.contains('katex') || el.classList.contains('katex-display')) {
+      const ann = el.querySelector("annotation[encoding='application/x-tex']") || el.querySelector("annotation");
+      const tex = ann ? ann.textContent || '' : el.getAttribute('data-tex') || el.getAttribute('data-latex') || '';
+      const isBlock = el.classList.contains('katex-display') || !!el.closest('.katex-display');
 
-        // 1. Handle TikZ SVG wrappers - convert to high-res PNG
-        const origTikzWrappers = Array.from(element.querySelectorAll(".tikz-wrapper")) as HTMLElement[];
-        const clonedTikzWrappers = Array.from(clone.querySelectorAll(".tikz-wrapper")) as HTMLElement[];
-        
-        for (let i = 0; i < origTikzWrappers.length; i++) {
-            const orig = origTikzWrappers[i];
-            const cloned = clonedTikzWrappers[i];
-            if (!orig || !cloned) continue;
-            
-            const svgNode = orig.querySelector('svg');
-            if (svgNode) {
-                try {
-                    const pngDataUrl = await svgToPngDataUrl(svgNode);
-                    const img = document.createElement("img");
-                    img.src = pngDataUrl;
-                    img.className = "diagram";
-                    img.style.maxWidth = "400px";
-                    img.style.height = "auto";
-                    img.style.display = "block";
-                    img.style.margin = "12pt auto";
-                    cloned.parentNode?.replaceChild(img, cloned);
-                } catch (e) {
-                    console.error("TikZ conversion error:", e);
-                }
-            }
-        }
-
-        // 2. Process Math Formulas based on mathFormat
-        const ommlReplacements: Map<string, string> = new Map();
-        let ommlCounter = 0;
-
-        if (mathFormat === 'latex') {
-            // Convert to $ ... $ for MathType (Toggle TeX)
-            const katexElements = Array.from(clone.querySelectorAll(".katex"));
-            for (const el of katexElements) {
-                const annotationNode = el.querySelector("annotation[encoding='application/x-tex']");
-                const texString = annotationNode ? annotationNode.textContent || "" : "";
-                if (!texString) continue;
-                
-                const isBlock = el.parentElement?.classList.contains("katex-display") || el.classList.contains("katex-display");
-                if (el.parentNode) {
-                    const textNode = document.createTextNode(isBlock ? "$$\n" + texString + "\n$$" : " $" + texString + "$ ");
-                    el.parentNode.replaceChild(textNode, el);
-                }
-            }
-        } else if (mathFormat === 'omml') {
-            // NATIVE WORD EQUATION (OMML): Preserves vectors \vec, fractions, square roots, etc.
-            const katexElements = Array.from(clone.querySelectorAll(".katex-display, .katex")) as HTMLElement[];
-            // Filter out nested katex elements so we only process top-level formulas
-            const rootKatex = katexElements.filter(el => {
-                const parentKatex = el.parentElement?.closest('.katex') || (el.classList.contains('katex') && el.parentElement?.closest('.katex-display'));
-                return !parentKatex;
-            });
-
-            for (const el of rootKatex) {
-                const annotationNode = el.querySelector("annotation[encoding='application/x-tex']");
-                const texString = annotationNode ? annotationNode.textContent || "" : "";
-                if (!texString) continue;
-
-                const isBlock = el.classList.contains("katex-display") || el.parentElement?.classList.contains("katex-display");
-                const ommlXml = convertLatexToOmml(texString, isBlock);
-
-                // Use placeholder token so the browser DOM serializer does NOT lowercase XML tag names (<m:oMath>, <m:accPr>, <m:chr>)
-                const token = `___OMML_MATH_TOKEN_${ommlCounter++}___`;
-                ommlReplacements.set(token, ommlXml);
-
-                const span = document.createElement(isBlock ? 'div' : 'span');
-                if (isBlock) {
-                    span.setAttribute('style', 'text-align: center; margin: 6pt 0;');
-                }
-                span.textContent = token;
-                el.parentNode?.replaceChild(span, el);
-            }
-        } else if (mathFormat === 'image') {
-            // Legacy/image fallback with html2canvas
-            const allOrigKatex = Array.from(element.querySelectorAll(".katex-display, .katex")) as HTMLElement[];
-            const allClonedKatex = Array.from(clone.querySelectorAll(".katex-display, .katex")) as HTMLElement[];
-            
-            const rootPairs: { orig: HTMLElement; cloned: HTMLElement; isBlock: boolean }[] = [];
-            allOrigKatex.forEach((orig, idx) => {
-                const cloned = allClonedKatex[idx];
-                if (!orig || !cloned) return;
-                const isNested = orig.parentElement?.closest('.katex') || (orig.classList.contains('katex') && orig.parentElement?.closest('.katex-display'));
-                if (!isNested) {
-                    const isBlock = orig.classList.contains("katex-display") || orig.parentElement?.classList.contains("katex-display") || false;
-                    rootPairs.push({ orig, cloned, isBlock });
-                }
-            });
-            
-            const batchSize = 6;
-            for (let i = 0; i < rootPairs.length; i += batchSize) {
-                const batch = rootPairs.slice(i, i + batchSize);
-                await Promise.all(batch.map(async ({ orig, cloned, isBlock }) => {
-                    try {
-                        const canvas = await html2canvas(orig, {
-                            scale: 2.0,
-                            logging: false,
-                            useCORS: true,
-                            backgroundColor: null
-                        });
-                        const dataUrl = canvas.toDataURL("image/png");
-                        const img = document.createElement("img");
-                        img.src = dataUrl;
-                        img.className = "inline-math";
-                        if (isBlock) {
-                            img.style.display = "block";
-                            img.style.margin = "8pt auto";
-                        } else {
-                            img.style.display = "inline-block";
-                            img.style.verticalAlign = "middle";
-                            img.style.margin = "0 2px";
-                        }
-                        cloned.parentNode?.replaceChild(img, cloned);
-                    } catch (e) {
-                        console.error("KaTeX rasterize error:", e);
-                    }
-                }));
-            }
-        }
-
-        const grids = clone.querySelectorAll('.grid, [style*="display: grid"], .options, .answers-grid');
-        grids.forEach(grid => {
-            if (grid.children.length === 0 || grid.tagName === 'TABLE') return;
-            
-            let cols = 1;
-            const className = grid.className || '';
-            const style = grid.getAttribute('style') || '';
-            
-            if (className.includes('grid-cols-2') || className.includes('sm:grid-cols-2') || className.includes('md:grid-cols-2') || style.includes('1fr 1fr') || className.includes('options')) {
-                cols = 2;
-            } else if (className.includes('grid-cols-3') || className.includes('md:grid-cols-3')) {
-                cols = 3;
-            } else if (className.includes('grid-cols-4') || className.includes('md:grid-cols-4') || className.includes('lg:grid-cols-4')) {
-                cols = 4;
-            } else if (className.includes('grid-cols-5') || style.includes('repeat(5')) {
-                cols = 5;
-            } else if (className.includes('grid-cols-12')) {
-                cols = 12;
-            }
-            
-            const children = Array.from(grid.children);
-            const table = document.createElement('table');
-            table.setAttribute('style', 'width: 100%; border: none; margin-bottom: 10pt; table-layout: fixed; border-collapse: collapse;');
-            
-            let tr: HTMLTableRowElement | null = null;
-            children.forEach((child, index) => {
-                if (index % cols === 0) {
-                    tr = document.createElement('tr');
-                    tr.setAttribute('style', 'border: none;');
-                    table.appendChild(tr);
-                }
-                const td = document.createElement('td');
-                td.setAttribute('style', "width: " + (100/cols) + "%; border: none; padding: 4pt; vertical-align: top;");
-                td.innerHTML = child.innerHTML;
-                if (tr) tr.appendChild(td);
-            });
-            
-            if (tr && children.length % cols !== 0) {
-                const remaining = cols - (children.length % cols);
-                for (let i = 0; i < remaining; i++) {
-                    const td = document.createElement('td');
-                    td.setAttribute('style', 'border: none; padding: 4pt;');
-                    tr.appendChild(td);
-                }
-            }
-            
-            if (grid.parentNode) {
-                grid.parentNode.replaceChild(table, grid);
-            }
-        });
-        
-        const flexOpts = clone.querySelectorAll('.flex.items-start.gap-1');
-        flexOpts.forEach(flex => {
-            if (flex.children.length >= 2 && flex.children[0].tagName === 'SPAN' && flex.children[1].classList.contains('markdown-body')) {
-                const table = document.createElement('table');
-                table.setAttribute('style', 'width: 100%; border: none; border-collapse: collapse; margin: 0; padding: 0;');
-                const tr = document.createElement('tr');
-                tr.setAttribute('style', 'border: none;');
-                
-                const td1 = document.createElement('td');
-                td1.setAttribute('style', 'width: 25px; border: none; padding: 0; vertical-align: top; font-weight: bold;');
-                td1.innerHTML = flex.children[0].innerHTML;
-                
-                const td2 = document.createElement('td');
-                td2.setAttribute('style', 'border: none; padding: 0; vertical-align: top;');
-                td2.innerHTML = flex.children[1].innerHTML;
-                
-                tr.appendChild(td1);
-                tr.appendChild(td2);
-                table.appendChild(tr);
-                
-                if (flex.parentNode) {
-                    flex.parentNode.replaceChild(table, flex);
-                }
-            }
-        });
-
-        const standardImgs = Array.from(clone.querySelectorAll('img'));
-        for (let i = 0; i < standardImgs.length; i++) {
-            const img = standardImgs[i];
-            if (img.src.startsWith('data:')) continue;
-            
-            try {
-                const canvas = document.createElement("canvas");
-                const ctx = canvas.getContext("2d");
-                if (!ctx) continue;
-                
-                const originalImg = new Image();
-                originalImg.crossOrigin = "Anonymous";
-                
-                const base64Data = await new Promise<string>((resolve, reject) => {
-                    originalImg.onload = () => {
-                        canvas.width = originalImg.naturalWidth || originalImg.width || 300;
-                        canvas.height = originalImg.naturalHeight || originalImg.height || 150;
-                        ctx.drawImage(originalImg, 0, 0);
-                        resolve(canvas.toDataURL("image/png"));
-                    };
-                    originalImg.onerror = () => reject(new Error("Failed to load image"));
-                    originalImg.src = img.src;
-                });
-                
-                img.src = base64Data;
-            } catch (e) {
-                console.error("Image export error:", e);
-            }
-        }
-
-        
-        // Polish styling and borders
-        const allTables = clone.querySelectorAll('table');
-        allTables.forEach(t => {
-            const style = t.getAttribute('style') || '';
-            const className = t.className || '';
-            const isBorderless = style.includes('border: none') || className.includes('borderless') || className.includes('options-table');
-            if (isBorderless) {
-                t.removeAttribute('border');
-                t.style.borderCollapse = 'collapse';
-                t.style.width = '100%';
-                t.style.border = 'none';
-                const cells = t.querySelectorAll('th, td');
-                cells.forEach(c => {
-                    const el = c as HTMLElement;
-                    const cStyle = el.getAttribute('style') || '';
-                    if (!cStyle.includes('border:') || cStyle.includes('border: none')) {
-                        el.style.border = 'none';
-                    }
-                    el.style.padding = '2pt 4pt';
-                });
-            } else {
-                t.setAttribute('border', '1');
-                t.style.borderCollapse = 'collapse';
-                t.style.width = '100%';
-                t.style.marginBottom = '8pt';
-                const cells = t.querySelectorAll('th, td');
-                cells.forEach(c => {
-                    (c as HTMLElement).style.border = '1px solid black';
-                    (c as HTMLElement).style.padding = '4pt 6pt';
-                });
-            }
-        });
-
-        let contentHtml = clone.innerHTML;
-        contentHtml = contentHtml.replace(/[\u200B-\u200D\uFEFF]/g, "");
-        contentHtml = contentHtml.replace(/<\/strong>\s*<strong>/g, "</strong> <strong>");
-        contentHtml = contentHtml.replace(/<\/em>\s*<em>/g, "</em> <em>");
-        
-        // Restore exact case-sensitive OMML XML
-        if (ommlReplacements.size > 0) {
-            ommlReplacements.forEach((ommlXml, token) => {
-                contentHtml = contentHtml.replace(token, ommlXml);
-            });
-        }
-        
-        const header = `<html xmlns:o='urn:schemas-microsoft-com:office:office'
-xmlns:w='urn:schemas-microsoft-com:office:word'
-xmlns:m='http://schemas.openxmlformats.org/officeDocument/2006/math'
-xmlns:mml='http://www.w3.org/1998/Math/MathML'
-xmlns='http://www.w3.org/TR/REC-html40'>
-<head>
-<meta charset='utf-8'>
-<title>Đề thi</title>
-<!--[if gte mso 9]>
-<xml>
-<w:WordDocument>
-<w:View>Print</w:View>
-<w:Zoom>100</w:Zoom>
-<w:DoNotOptimizeForBrowser/>
-</w:WordDocument>
-</xml>
-<![endif]-->
-<style>
-@page Section1 {
-    size: 8.27in 11.69in; /* A4 */
-    margin: 0.79in 0.79in 0.79in 0.79in; /* 2cm */
-    mso-header-margin: .5in;
-    mso-footer-margin: .5in;
-    mso-paper-source: 0;
-}
-div.Section1 { page: Section1; }
-body {
-    font-family: 'Times New Roman', Times, serif;
-    font-size: 12pt;
-    line-height: 1.25;
-    color: #000000;
-}
-p {
-    margin: 0 0 3.5pt 0;
-    line-height: 1.25;
-}
-h1, h2, h3, h4 {
-    font-family: 'Times New Roman', Times, serif;
-    color: #000000;
-    margin-top: 8pt;
-    margin-bottom: 4pt;
-}
-table {
-    border-collapse: collapse;
-    width: 100%;
-    margin: 4pt 0;
-    font-family: 'Times New Roman', Times, serif;
-    font-size: 12pt;
-}
-table[border="1"] th, table[border="1"] td {
-    border: 1px solid #000000;
-    padding: 4pt 6pt;
-}
-img.diagram {
-    max-width: 420px;
-    height: auto;
-    display: block;
-    margin: 10pt auto;
-    text-align: center;
-}
-img.inline-math {
-    display: inline-block;
-    vertical-align: middle;
-    margin: 0 1px;
-}
-.page-break {
-    page-break-before: always;
-}
-.question-block {
-    page-break-inside: avoid;
-    margin-bottom: 6pt;
-}
-</style>
-</head>
-<body>
-<div class="Section1">`;
-        const footer = "</div></body></html>";
-        const sourceHTML = header + contentHtml + footer;
-        
-        let exported = false;
-
-        // If mathFormat is 'image', we can try server-side .docx
-        if (mathFormat === 'image') {
-            try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 8000);
-                
-                const response = await fetch('/api/export-docx', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ html: contentHtml }),
-                    signal: controller.signal
-                });
-                clearTimeout(timeoutId);
-                
-                if (response.ok) {
-                    const docxBlob = await response.blob();
-                    const finalFilename = filename.replace(/\.doc$/, '') + '.docx';
-                    saveAs(docxBlob, finalFilename);
-                    exported = true;
-                }
-            } catch (docxErr) {
-                console.warn("DOCX server generation unavailable, falling back to Word .doc format:", docxErr);
-            }
-        }
-        
-        if (!exported) {
-            // For OMML and LaTeX: Save directly as Word .doc (Office HTML with OMML namespaces)
-            // Microsoft Word parses OMML into 100% native, editable Word Equations
-            const docBlob = new Blob(['\ufeff' + sourceHTML], { type: 'application/msword;charset=utf-8' });
-            const finalFilename = filename.endsWith('.doc') ? filename : filename.replace(/\.docx$/, '') + '.doc';
-            saveAs(docBlob, finalFilename);
-        }
-    } catch (err) {
-        console.error("Export failed:", err);
-        alert("Có lỗi xảy ra khi xuất file Word. Vui lòng thử lại.");
-    } finally {
-        if (loadingOverlay) {
-            loadingOverlay.style.display = 'none';
-        }
+      if (options.mathFormat === 'latex') {
+        return [
+          new TextRun({
+            text: isBlock ? `\n$$${tex}$$\n` : ` $${tex}$ `,
+            italics: true,
+            font: 'Times New Roman',
+            size: style.size || 24,
+          }),
+        ];
+      }
+      return [latexToOmmlComponent(tex, isBlock)];
     }
+
+    // Guard: ignore internal KaTeX structures so they never leak raw text
+    if (
+      el.classList.contains('katex-mathml') ||
+      el.classList.contains('katex-html') ||
+      tagName === 'MATH' ||
+      tagName === 'ANNOTATION' ||
+      tagName === 'SEMANTICS'
+    ) {
+      return [];
+    }
+
+    if (tagName === 'STRONG' || tagName === 'B') {
+      for (let i = 0; i < el.childNodes.length; i++) {
+        runs.push(...parseInlineContent(el.childNodes[i], { ...style, bold: true }, options));
+      }
+      return runs;
+    }
+
+    if (tagName === 'EM' || tagName === 'I') {
+      for (let i = 0; i < el.childNodes.length; i++) {
+        runs.push(...parseInlineContent(el.childNodes[i], { ...style, italics: true }, options));
+      }
+      return runs;
+    }
+
+    if (tagName === 'SUP') {
+      for (let i = 0; i < el.childNodes.length; i++) {
+        runs.push(...parseInlineContent(el.childNodes[i], { ...style, superScript: true }, options));
+      }
+      return runs;
+    }
+
+    if (tagName === 'SUB') {
+      for (let i = 0; i < el.childNodes.length; i++) {
+        runs.push(...parseInlineContent(el.childNodes[i], { ...style, subScript: true }, options));
+      }
+      return runs;
+    }
+
+    if (tagName === 'BR') {
+      return [new TextRun({ break: 1 })];
+    }
+
+    if (tagName === 'IMG') {
+      const img = el as HTMLImageElement;
+      if (img.src && img.src.startsWith('data:image/')) {
+        try {
+          const bytes = dataUrlToUint8Array(img.src);
+          const origW = img.naturalWidth || parseInt(img.getAttribute('width') || '360', 10) || 360;
+          const origH = img.naturalHeight || parseInt(img.getAttribute('height') || '240', 10) || 240;
+          const maxW = 460;
+          const scale = origW > maxW ? maxW / origW : 1;
+          const finalW = Math.round(origW * scale);
+          const finalH = Math.round(origH * scale);
+
+          return [
+            new ImageRun({
+              type: 'png',
+              data: bytes,
+              transformation: {
+                width: finalW,
+                height: finalH,
+              },
+            }),
+          ];
+        } catch (e) {
+          console.warn('Failed to embed image in run:', e);
+        }
+      }
+      return [];
+    }
+
+    // Default container (SPAN, DIV, etc.)
+    for (let i = 0; i < el.childNodes.length; i++) {
+      runs.push(...parseInlineContent(el.childNodes[i], style, options));
+    }
+  }
+
+  return runs;
+}
+
+/**
+ * Strips leading choice letters (A., B., C., D., A), B), C), D)) so labels are not duplicated.
+ */
+function cleanOptionText(text: string): string {
+  return text
+    .replace(/^\s*(?:[-*]\s*)?(?:\*{0,2})[A-D][\.\:\)]?(?:\*{0,2})[\.\:\)]?\s*/i, '')
+    .replace(/^[\s\.\:\)]+/, '')
+    .trim();
+}
+
+/**
+ * Strips leading true/false statement letters (a), b), c), d)) so labels are not duplicated.
+ */
+function cleanTfText(text: string): string {
+  return text
+    .replace(/^\s*(?:[-*]\s*)?(?:\*{0,2})[a-d][\.\:\)]?(?:\*{0,2})[\.\:\)]?\s*/i, '')
+    .replace(/^[\s\.\:\)]+/, '')
+    .trim();
+}
+
+const INVISIBLE_BORDER = {
+  top: { style: BorderStyle.NONE, size: 0, color: 'auto' },
+  bottom: { style: BorderStyle.NONE, size: 0, color: 'auto' },
+  left: { style: BorderStyle.NONE, size: 0, color: 'auto' },
+  right: { style: BorderStyle.NONE, size: 0, color: 'auto' },
+};
+
+/**
+ * Builds a borderless Word Table for 4 multiple choice options.
+ * Rule: 1 row x 4 cols (25% width each) if short, or 2 rows x 2 cols (50% width each) if long.
+ */
+function buildInvisibleChoiceTable(
+  optionsList: { label: string; node?: Node; text?: string }[],
+  options: ExportOptions
+): Table {
+  // Ensure we have up to 4 options
+  const cleanOpts = optionsList.slice(0, 4);
+
+  // Measure content lengths
+  const texts = cleanOpts.map((opt) => {
+    if (opt.text) return cleanOptionText(opt.text);
+    if (opt.node) return cleanOptionText(getNodeLatexOrText(opt.node));
+    return '';
+  });
+
+  const maxLen = Math.max(...texts.map((t) => t.length), 0);
+  const use4Cols = maxLen <= 32;
+
+  const createCell = (opt: { label: string; node?: Node; text?: string }, colPct: number) => {
+    let childRuns: ParagraphChild[] = [];
+
+    if (opt.node) {
+      const hasImg = opt.node instanceof HTMLElement && !!opt.node.querySelector('img');
+      if (hasImg) {
+        const cloned = opt.node.cloneNode(true) as HTMLElement;
+        const bolds = Array.from(cloned.querySelectorAll('b, strong'));
+        for (const b of bolds) {
+          if (/^\s*(?:[-*]\s*)?(?:\*{0,2})[A-D][\.\:\)]?(?:\*{0,2})\s*$/i.test(b.textContent || '')) {
+            b.remove();
+          }
+        }
+        childRuns = parseInlineContent(cloned, {}, options);
+      } else {
+        const rawContent = getNodeLatexOrText(opt.node);
+        childRuns = parseTextWithMath(cleanOptionText(rawContent), {}, options);
+      }
+    } else if (opt.text) {
+      childRuns = parseTextWithMath(cleanOptionText(opt.text), {}, options);
+    }
+
+    return new TableCell({
+      width: { size: colPct, type: WidthType.PERCENTAGE },
+      borders: INVISIBLE_BORDER,
+      margins: { top: 60, bottom: 60, left: 80, right: 80 },
+      children: [
+        new Paragraph({
+          spacing: { line: 288, after: 40 },
+          children: [
+            new TextRun({
+              text: `${opt.label} `,
+              bold: true,
+              font: 'Times New Roman',
+              size: 24,
+            }),
+            ...childRuns,
+          ],
+        }),
+      ],
+    });
+  };
+
+  const rows: TableRow[] = [];
+
+  if (use4Cols) {
+    const cells = cleanOpts.map((opt) => createCell(opt, 25));
+    // Pad to 4 cells if needed
+    while (cells.length < 4) {
+      cells.push(
+        new TableCell({
+          width: { size: 25, type: WidthType.PERCENTAGE },
+          borders: INVISIBLE_BORDER,
+          children: [new Paragraph({ children: [] })],
+        })
+      );
+    }
+    rows.push(new TableRow({ children: cells }));
+  } else {
+    // 2 rows x 2 cols
+    const cellA = cleanOpts[0] ? createCell(cleanOpts[0], 50) : new TableCell({ width: { size: 50, type: WidthType.PERCENTAGE }, borders: INVISIBLE_BORDER, children: [new Paragraph({})] });
+    const cellB = cleanOpts[1] ? createCell(cleanOpts[1], 50) : new TableCell({ width: { size: 50, type: WidthType.PERCENTAGE }, borders: INVISIBLE_BORDER, children: [new Paragraph({})] });
+    const cellC = cleanOpts[2] ? createCell(cleanOpts[2], 50) : new TableCell({ width: { size: 50, type: WidthType.PERCENTAGE }, borders: INVISIBLE_BORDER, children: [new Paragraph({})] });
+    const cellD = cleanOpts[3] ? createCell(cleanOpts[3], 50) : new TableCell({ width: { size: 50, type: WidthType.PERCENTAGE }, borders: INVISIBLE_BORDER, children: [new Paragraph({})] });
+
+    rows.push(new TableRow({ children: [cellA, cellB] }));
+    rows.push(new TableRow({ children: [cellC, cellD] }));
+  }
+
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    columnWidths: use4Cols ? [2338, 2339, 2339, 2339] : [4677, 4678],
+    borders: {
+      top: { style: BorderStyle.NONE, size: 0, color: 'auto' },
+      bottom: { style: BorderStyle.NONE, size: 0, color: 'auto' },
+      left: { style: BorderStyle.NONE, size: 0, color: 'auto' },
+      right: { style: BorderStyle.NONE, size: 0, color: 'auto' },
+      insideHorizontal: { style: BorderStyle.NONE, size: 0, color: 'auto' },
+      insideVertical: { style: BorderStyle.NONE, size: 0, color: 'auto' },
+    },
+    rows,
+  });
+}
+
+/**
+ * Parses a single statement line text into ParagraphChild items (TextRuns and OMML math components),
+ * guaranteeing that 100% of formulas inside $...$ or $$...$$ are preserved with no lost characters,
+ * and trailing punctuation (e.g. ".") is never truncated.
+ */
+function parseStatementRuns(
+  statementText: string,
+  options: ExportOptions
+): ParagraphChild[] {
+  // 1. Remove only the leading statement label prefix (e.g. "a)", "a.", "(a)", "a:", "- a)")
+  let cleanText = statementText.trim();
+  cleanText = cleanText.replace(/^\s*(?:[-*]\s*)?(?:\*{0,2})[a-d][\.\:\)]?(?:\*{0,2})[\.\:\)]?\s*/i, '');
+  cleanText = cleanText.replace(/^[\.\:\)]+\s*/, '');
+  cleanText = cleanText.trim();
+
+  // If text is empty after stripping label, return empty run
+  if (!cleanText) {
+    return [new TextRun({ text: '', font: 'Times New Roman', size: 24 })];
+  }
+
+  // 2. Tokenize and convert to runs using the centralized robust tokenizer
+  const tokens = tokenizeTextAndMath(cleanText);
+  const runs = tokensToRuns(tokens, {}, options);
+
+  return runs.length > 0
+    ? runs
+    : [new TextRun({ text: cleanText, font: 'Times New Roman', size: 24 })];
+}
+
+/**
+ * Builds separate Paragraphs for True/False statements a), b), c), d) indented by 0.5 cm.
+ * Guarantees that every statement has its label, text, and formula seamlessly rendered in a single paragraph.
+ */
+function buildTrueFalseParagraphs(
+  statements: { label: string; node?: Node; text?: string }[],
+  options: ExportOptions
+): Paragraph[] {
+  return statements.map((stmt) => {
+    let childRuns: ParagraphChild[] = [];
+
+    if (stmt.node) {
+      // Check if node contains an image (e.g. geometric figure)
+      const hasImg = stmt.node instanceof HTMLElement && !!stmt.node.querySelector('img');
+      if (hasImg) {
+        const cloned = stmt.node.cloneNode(true) as HTMLElement;
+        const bolds = Array.from(cloned.querySelectorAll('b, strong'));
+        for (const b of bolds) {
+          if (/^\s*(?:[-*]\s*)?(?:\*{0,2})[a-d][\.\:\)]?(?:\*{0,2})\s*$/i.test(b.textContent || '')) {
+            b.remove();
+          }
+        }
+        childRuns = parseInlineContent(cloned, {}, options);
+      } else {
+        // Extract complete text + math intact, preserving every formula and trailing punctuation
+        const fullContent = getNodeLatexOrText(stmt.node);
+        childRuns = parseStatementRuns(fullContent, options);
+      }
+    } else if (stmt.text) {
+      childRuns = parseStatementRuns(stmt.text, options);
+    }
+
+    return new Paragraph({
+      indent: { left: convertMillimetersToTwip(5) }, // 0.5 cm
+      spacing: { line: 288, after: 80 }, // 1.2 lines, 4pt after
+      children: [
+        new TextRun({
+          text: `${stmt.label} `,
+          bold: true,
+          font: 'Times New Roman',
+          size: 24,
+        }),
+        ...childRuns,
+      ],
+    });
+  });
+}
+
+/**
+ * Recursively converts a DOM node or tree into an array of docx FileChild (Paragraph | Table).
+ */
+async function parseDomToDocxChildren(
+  root: HTMLElement,
+  options: ExportOptions
+): Promise<FileChild[]> {
+  const result: FileChild[] = [];
+
+  // Helper to process child nodes of an element
+  async function processNode(node: Node): Promise<void> {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const txt = (node.textContent || '').trim();
+      if (txt) {
+        result.push(
+          new Paragraph({
+            spacing: { line: 288, after: 80 },
+            children: parseTextWithMath(txt, {}, options),
+          })
+        );
+      }
+      return;
+    }
+
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+
+    const el = node as HTMLElement;
+    const tagName = el.tagName.toUpperCase();
+
+    // 1. Headings
+    if (/^H[1-6]$/.test(tagName)) {
+      const level = parseInt(tagName[1], 10);
+      const isH1 = level === 1;
+      const isH2 = level === 2;
+      const size = isH1 ? 28 : isH2 ? 26 : 24;
+      const runs = parseInlineContent(el, { bold: true, size }, options);
+
+      result.push(
+        new Paragraph({
+          spacing: { line: 288, before: isH1 ? 180 : 120, after: 80 },
+          alignment: isH1 ? AlignmentType.CENTER : AlignmentType.LEFT,
+          children: runs,
+        })
+      );
+      return;
+    }
+
+    // 2. Question blocks (.question-block)
+    if (el.classList.contains('question-block')) {
+      // Find question prompt and any options/tf inside
+      const children = Array.from(el.children);
+      for (const child of children) {
+        await processNode(child);
+      }
+      return;
+    }
+
+    // 3. Tables
+    if (tagName === 'TABLE') {
+      const className = el.className || '';
+      const style = el.getAttribute('style') || '';
+
+      // Check if it's an options table
+      if (className.includes('options-table')) {
+        const cells = Array.from(el.querySelectorAll('td'));
+        if (cells.length >= 2) {
+          const optsList = cells.map((td, idx) => {
+            const label = ['A.', 'B.', 'C.', 'D.'][idx] || `${String.fromCharCode(65 + idx)}.`;
+            return { label, node: td };
+          });
+          result.push(buildInvisibleChoiceTable(optsList, options));
+          return;
+        }
+      }
+
+      // Check if it's a True/False table
+      if (className.includes('tf-table')) {
+        const rows = Array.from(el.querySelectorAll('tr'));
+        const stmts: { label: string; node?: Node }[] = [];
+        rows.forEach((tr, idx) => {
+          const tds = Array.from(tr.querySelectorAll('td'));
+          const label = ['a)', 'b)', 'c)', 'd)'][idx] || `${String.fromCharCode(97 + idx)})`;
+          if (tds.length >= 2) {
+            stmts.push({ label, node: tds[1] });
+          } else if (tds.length === 1) {
+            stmts.push({ label, node: tds[0] });
+          }
+        });
+        if (stmts.length > 0) {
+          result.push(...buildTrueFalseParagraphs(stmts, options));
+          return;
+        }
+      }
+
+      // General Tables (Header table, Matrix, Candidate box, etc.)
+      const isBorderless =
+        className.includes('borderless') ||
+        style.includes('border: none') ||
+        style.includes('border:none');
+
+      const borderConfig = isBorderless
+        ? INVISIBLE_BORDER
+        : {
+            top: { style: BorderStyle.SINGLE, size: 4, color: '000000' },
+            bottom: { style: BorderStyle.SINGLE, size: 4, color: '000000' },
+            left: { style: BorderStyle.SINGLE, size: 4, color: '000000' },
+            right: { style: BorderStyle.SINGLE, size: 4, color: '000000' },
+          };
+
+      const rows: TableRow[] = [];
+      const trElements = Array.from(el.querySelectorAll('tr'));
+
+      for (const tr of trElements) {
+        const cellElements = Array.from(tr.querySelectorAll('th, td'));
+        const rowCells: TableCell[] = [];
+
+        for (const cell of cellElements) {
+          const cellEl = cell as HTMLElement;
+          const cellStyle = cellEl.getAttribute('style') || '';
+          const widthMatch = cellStyle.match(/width:\s*([0-9.]+)%/);
+          const widthPct = widthMatch
+            ? Math.round(parseFloat(widthMatch[1]))
+            : Math.round(100 / Math.max(1, cellElements.length));
+
+          // Cell content paragraphs
+          const cellParagraphs: Paragraph[] = [];
+          const cellChildren = Array.from(cellEl.children);
+
+          if (cellChildren.length > 0 && cellChildren.some((c) => /^(DIV|P|H[1-6])$/.test(c.tagName))) {
+            for (const child of cellChildren) {
+              const runs = parseInlineContent(child, {}, options);
+              cellParagraphs.push(
+                new Paragraph({
+                  spacing: { line: 288, after: 40 },
+                  alignment: cellStyle.includes('text-align: center')
+                    ? AlignmentType.CENTER
+                    : AlignmentType.LEFT,
+                  children: runs,
+                })
+              );
+            }
+          } else {
+            const runs = parseInlineContent(cellEl, {}, options);
+            cellParagraphs.push(
+              new Paragraph({
+                spacing: { line: 288, after: 40 },
+                alignment: cellStyle.includes('text-align: center')
+                  ? AlignmentType.CENTER
+                  : AlignmentType.LEFT,
+                children: runs,
+              })
+            );
+          }
+
+          rowCells.push(
+            new TableCell({
+              width: { size: widthPct, type: WidthType.PERCENTAGE },
+              borders: borderConfig,
+              margins: { top: 80, bottom: 80, left: 100, right: 100 },
+              children: cellParagraphs.length > 0 ? cellParagraphs : [new Paragraph({})],
+            })
+          );
+        }
+
+        if (rowCells.length > 0) {
+          rows.push(new TableRow({ children: rowCells }));
+        }
+      }
+
+      if (rows.length > 0) {
+        result.push(
+          new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            borders: isBorderless
+              ? {
+                  top: { style: BorderStyle.NONE, size: 0, color: 'auto' },
+                  bottom: { style: BorderStyle.NONE, size: 0, color: 'auto' },
+                  left: { style: BorderStyle.NONE, size: 0, color: 'auto' },
+                  right: { style: BorderStyle.NONE, size: 0, color: 'auto' },
+                  insideHorizontal: { style: BorderStyle.NONE, size: 0, color: 'auto' },
+                  insideVertical: { style: BorderStyle.NONE, size: 0, color: 'auto' },
+                }
+              : {
+                  top: { style: BorderStyle.SINGLE, size: 4, color: '000000' },
+                  bottom: { style: BorderStyle.SINGLE, size: 4, color: '000000' },
+                  left: { style: BorderStyle.SINGLE, size: 4, color: '000000' },
+                  right: { style: BorderStyle.SINGLE, size: 4, color: '000000' },
+                  insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: '000000' },
+                  insideVertical: { style: BorderStyle.SINGLE, size: 4, color: '000000' },
+                },
+            rows,
+          })
+        );
+      }
+      return;
+    }
+
+    // 4. Lists (UL / OL)
+    if (tagName === 'UL' || tagName === 'OL') {
+      const items = Array.from(el.querySelectorAll(':scope > li'));
+      const itemTexts = items.map((li) => (li.textContent || '').trim());
+
+      // Check if this UL represents multiple choice options A, B, C, D
+      const isChoiceList =
+        items.length >= 2 &&
+        items.length <= 4 &&
+        itemTexts.every((t) => /^\s*(?:\*\*)?[A-D][\.\)]/i.test(t));
+
+      if (isChoiceList) {
+        const optsList = items.map((li, idx) => {
+          const label = ['A.', 'B.', 'C.', 'D.'][idx] || `${String.fromCharCode(65 + idx)}.`;
+          return { label, node: li };
+        });
+        result.push(buildInvisibleChoiceTable(optsList, options));
+        return;
+      }
+
+      // Check if this UL represents True/False statements a), b), c), d)
+      const isTfList =
+        items.length >= 2 &&
+        items.length <= 4 &&
+        itemTexts.every((t) => /^\s*(?:\*\*)?[a-d][\.\)]/i.test(t));
+
+      if (isTfList) {
+        const stmts = items.map((li, idx) => {
+          const label = ['a)', 'b)', 'c)', 'd)'][idx] || `${String.fromCharCode(97 + idx)})`;
+          return { label, node: li };
+        });
+        result.push(...buildTrueFalseParagraphs(stmts, options));
+        return;
+      }
+
+      // Standard list items
+      for (const li of items) {
+        const runs = parseInlineContent(li, {}, options);
+        result.push(
+          new Paragraph({
+            bullet: { level: 0 },
+            spacing: { line: 288, after: 60 },
+            children: runs,
+          })
+        );
+      }
+      return;
+    }
+
+    // 5. Paragraphs (<P>) or Question stem containers
+    if (tagName === 'P' || (tagName === 'DIV' && el.querySelector('strong, b') && !el.querySelector('table, ul, ol'))) {
+      const rawText = stripInternalTags(getNodeLatexOrText(el));
+
+      // Check if paragraph contains embedded multiple choice options A. ... B. ... C. ... D. ...
+      const mcRegex = /^(.*?)\s*(?:[-*]\s*)?(?:\*{0,2})A[\.\)](?:\*{0,2})\s+([\s\S]*?)(?:[-*]\s*)?(?:\*{0,2})B[\.\)](?:\*{0,2})\s+([\s\S]*?)(?:[-*]\s*)?(?:\*{0,2})C[\.\)](?:\*{0,2})\s+([\s\S]*?)(?:[-*]\s*)?(?:\*{0,2})D[\.\)](?:\*{0,2})\s+([\s\S]*)$/i;
+      const mcMatch = rawText.match(mcRegex);
+
+      if (mcMatch) {
+        const stemText = stripInternalTags(mcMatch[1].trim());
+        const optA = mcMatch[2].trim();
+        const optB = mcMatch[3].trim();
+        const optC = mcMatch[4].trim();
+        const optD = mcMatch[5].trim();
+
+        if (stemText) {
+          result.push(
+            new Paragraph({
+              spacing: { line: 288, after: 80 },
+              children: parseTextWithMath(stemText, {}, options),
+            })
+          );
+        }
+
+        // Check if next sibling is already a choice container (to prevent duplicate table)
+        let nextSib = el.nextElementSibling;
+        while (nextSib && nextSib.tagName === 'P' && !nextSib.textContent?.trim()) {
+          nextSib = nextSib.nextElementSibling;
+        }
+        const nextIsChoiceContainer =
+          nextSib &&
+          (nextSib.tagName === 'UL' ||
+            nextSib.tagName === 'OL' ||
+            nextSib.classList.contains('question-choices') ||
+            nextSib.classList.contains('choices-grid') ||
+            nextSib.classList.contains('options-table'));
+
+        if (!nextIsChoiceContainer) {
+          result.push(
+            buildInvisibleChoiceTable(
+              [
+                { label: 'A.', text: optA },
+                { label: 'B.', text: optB },
+                { label: 'C.', text: optC },
+                { label: 'D.', text: optD },
+              ],
+              options
+            )
+          );
+        }
+        return;
+      }
+
+      // Check if paragraph contains embedded True/False statements a) ... b) ... c) ... d) ...
+      const tfRegex = /^(.*?)\s*(?:[-*]\s*)?(?:\*{0,2})a[\.\)](?:\*{0,2})\s+([\s\S]*?)(?:[-*]\s*)?(?:\*{0,2})b[\.\)](?:\*{0,2})\s+([\s\S]*?)(?:[-*]\s*)?(?:\*{0,2})c[\.\)](?:\*{0,2})\s+([\s\S]*?)(?:[-*]\s*)?(?:\*{0,2})d[\.\)](?:\*{0,2})\s+([\s\S]*)$/i;
+      const tfMatch = rawText.match(tfRegex);
+
+      if (tfMatch) {
+        const stemText = stripInternalTags(tfMatch[1].trim());
+        const stmtA = tfMatch[2].trim();
+        const stmtB = tfMatch[3].trim();
+        const stmtC = tfMatch[4].trim();
+        const stmtD = tfMatch[5].trim();
+
+        if (stemText) {
+          result.push(
+            new Paragraph({
+              spacing: { line: 288, after: 80 },
+              children: parseTextWithMath(stemText, {}, options),
+            })
+          );
+        }
+
+        let nextSib = el.nextElementSibling;
+        while (nextSib && nextSib.tagName === 'P' && !nextSib.textContent?.trim()) {
+          nextSib = nextSib.nextElementSibling;
+        }
+        const nextIsTfContainer =
+          nextSib &&
+          (nextSib.tagName === 'UL' ||
+            nextSib.tagName === 'OL' ||
+            nextSib.classList.contains('tf-statements') ||
+            nextSib.classList.contains('tf-container') ||
+            nextSib.classList.contains('tf-table'));
+
+        if (!nextIsTfContainer) {
+          result.push(
+            ...buildTrueFalseParagraphs(
+              [
+                { label: 'a)', text: stmtA },
+                { label: 'b)', text: stmtB },
+                { label: 'c)', text: stmtC },
+                { label: 'd)', text: stmtD },
+              ],
+              options
+            )
+          );
+        }
+        return;
+      }
+
+      // Check if paragraph is an individual True/False statement (starts with a), b), c), d))
+      const singleTfMatch = rawText.match(/^\s*(?:\*\*)?([a-d])[\.\)](?:\*\*)?\s*([\s\S]*)$/i);
+      if (singleTfMatch) {
+        const label = `${singleTfMatch[1].toLowerCase()})`;
+        const stmtText = singleTfMatch[2];
+        result.push(
+          ...buildTrueFalseParagraphs([{ label, text: stmtText }], options)
+        );
+        return;
+      }
+
+      // Question stem or standard paragraph without images:
+      // Parse directly from rawText to group ALL runs (lead text and formulas) into ONE single Paragraph.
+      if (!el.querySelector('img')) {
+        const runs = parseTextWithMath(rawText, {}, options);
+        if (runs.length > 0) {
+          result.push(
+            new Paragraph({
+              spacing: { line: 288, after: 80 },
+              children: runs,
+            })
+          );
+        }
+        return;
+      }
+
+      // Standard Paragraph with embedded images
+      const runs = parseInlineContent(el, {}, options);
+      if (runs.length > 0) {
+        result.push(
+          new Paragraph({
+            spacing: { line: 288, after: 80 },
+            children: runs,
+          })
+        );
+      }
+      return;
+    }
+
+    // 6. Diagrams / Images
+    if (tagName === 'IMG') {
+      const runs = parseInlineContent(el, {}, options);
+      if (runs.length > 0) {
+        result.push(
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { line: 288, before: 120, after: 120 },
+            children: runs,
+          })
+        );
+      }
+      return;
+    }
+
+    // 7. General DIV or CONTAINER
+    const childNodes = Array.from(el.childNodes);
+    for (const child of childNodes) {
+      await processNode(child);
+    }
+  }
+
+  for (const child of Array.from(root.childNodes)) {
+    await processNode(child);
+  }
+
+  return result;
+}
+
+/**
+ * Main export function for converting rendered DOM content to high-fidelity Word .docx files.
+ */
+export async function exportHtmlToWord(
+  element: HTMLElement,
+  filename: string,
+  mathFormat: 'omml' | 'mathml' | 'latex' | 'image' | boolean = 'omml'
+) {
+  let resolvedMathFormat: 'omml' | 'latex' | 'image' = 'omml';
+  if (mathFormat === true || mathFormat === 'latex') resolvedMathFormat = 'latex';
+  else if (mathFormat === 'image') resolvedMathFormat = 'image';
+
+  let loadingOverlay = document.getElementById('word-export-loading');
+  if (!loadingOverlay) {
+    loadingOverlay = document.createElement('div');
+    loadingOverlay.id = 'word-export-loading';
+    loadingOverlay.style.position = 'fixed';
+    loadingOverlay.style.top = '0';
+    loadingOverlay.style.left = '0';
+    loadingOverlay.style.width = '100vw';
+    loadingOverlay.style.height = '100vh';
+    loadingOverlay.style.backgroundColor = 'rgba(255, 255, 255, 0.85)';
+    loadingOverlay.style.zIndex = '999999';
+    loadingOverlay.style.display = 'flex';
+    loadingOverlay.style.flexDirection = 'column';
+    loadingOverlay.style.alignItems = 'center';
+    loadingOverlay.style.justifyContent = 'center';
+    loadingOverlay.innerHTML = `
+      <div style="width: 52px; height: 52px; border: 4px solid #10b981; border-bottom-color: transparent; border-radius: 50%; display: inline-block; box-sizing: border-box; animation: rotation 1s linear infinite;"></div>
+      <style>@keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
+      <h2 style="margin-top: 20px; color: #0f172a; font-family: 'Times New Roman', serif; font-size: 18px; font-weight: bold;">Đang xử lý xuất file Word (.docx)...</h2>
+      <p style="color: #475569; font-family: sans-serif; font-size: 14px; margin-top: 6px;">Đang biên dịch công thức toán sang chuẩn Equation (OMML) và dàn trang...</p>
+    `;
+    document.body.appendChild(loadingOverlay);
+  } else {
+    loadingOverlay.style.display = 'flex';
+  }
+
+  try {
+    const clone = element.cloneNode(true) as HTMLElement;
+
+    // 1. Pre-process TikZ SVGs into high-res PNGs
+    const origTikzWrappers = Array.from(element.querySelectorAll('.tikz-wrapper, .svg-wrapper, svg')) as HTMLElement[];
+    const clonedTikzWrappers = Array.from(clone.querySelectorAll('.tikz-wrapper, .svg-wrapper, svg')) as HTMLElement[];
+
+    for (let i = 0; i < origTikzWrappers.length; i++) {
+      const orig = origTikzWrappers[i];
+      const cloned = clonedTikzWrappers[i];
+      if (!orig || !cloned) continue;
+
+      const svgNode = orig.tagName.toUpperCase() === 'SVG' ? (orig as unknown as SVGSVGElement) : orig.querySelector('svg');
+      if (svgNode) {
+        try {
+          const pngDataUrl = await svgToPngDataUrl(svgNode);
+          const img = document.createElement('img');
+          img.src = pngDataUrl;
+          img.className = 'diagram';
+          img.style.maxWidth = '420px';
+          img.style.height = 'auto';
+          cloned.parentNode?.replaceChild(img, cloned);
+        } catch (e) {
+          console.error('TikZ SVG to PNG conversion error:', e);
+        }
+      }
+    }
+
+    // 2. Pre-process standard remote/relative images to data URLs
+    const standardImgs = Array.from(clone.querySelectorAll('img'));
+    for (let i = 0; i < standardImgs.length; i++) {
+      const img = standardImgs[i];
+      if (img.src.startsWith('data:')) continue;
+
+      try {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) continue;
+
+        const originalImg = new Image();
+        originalImg.crossOrigin = 'Anonymous';
+
+        const base64Data = await new Promise<string>((resolve, reject) => {
+          originalImg.onload = () => {
+            canvas.width = originalImg.naturalWidth || originalImg.width || 300;
+            canvas.height = originalImg.naturalHeight || originalImg.height || 150;
+            ctx.drawImage(originalImg, 0, 0);
+            resolve(canvas.toDataURL('image/png'));
+          };
+          originalImg.onerror = () => reject(new Error('Failed to load image'));
+          originalImg.src = img.src;
+        });
+
+        img.src = base64Data;
+      } catch (e) {
+        console.error('Image rasterization error:', e);
+      }
+    }
+
+    // 2.5 Pre-process KaTeX elements in clone into lightweight OMML tokens
+    // This extracts the TeX annotation and replaces the rendered KaTeX HTML/MathML tree
+    // with a single <span class="omml-math-node" data-latex="..." data-block="...">
+    // so no fallback text or duplicated formulas can EVER be generated!
+    const katexNodes = Array.from(clone.querySelectorAll('.katex, .katex-display'));
+    for (const kn of katexNodes) {
+      const ann = kn.querySelector("annotation[encoding='application/x-tex']") || kn.querySelector("annotation");
+      let latex = ann?.textContent || kn.getAttribute('data-tex') || kn.getAttribute('data-latex') || '';
+      if (!latex) {
+        const mathEl = kn.querySelector('math');
+        if (mathEl) {
+          const subAnn = mathEl.querySelector('annotation');
+          if (subAnn?.textContent) latex = subAnn.textContent;
+        }
+      }
+      if (!latex) continue;
+
+      const isBlock = kn.classList.contains('katex-display') || !!kn.closest('.katex-display');
+
+      const token = document.createElement('span');
+      token.className = 'omml-math-node';
+      token.setAttribute('data-latex', encodeURIComponent(latex));
+      token.setAttribute('data-block', isBlock ? '1' : '0');
+
+      kn.parentNode?.replaceChild(token, kn);
+    }
+
+    // Also strip any residual MathML / KaTeX artifacts
+    const strayKatex = Array.from(clone.querySelectorAll('.katex-mathml, .katex-html, math, semantics'));
+    for (const sk of strayKatex) {
+      sk.remove();
+    }
+
+    // 3. Build docx children from the DOM tree
+    const docxChildren = await parseDomToDocxChildren(clone, { mathFormat: resolvedMathFormat });
+
+    // 4. Create Word Document with exact A4 page layout & typography specs
+    const doc = new Document({
+      styles: {
+        default: {
+          document: {
+            run: {
+              font: 'Times New Roman',
+              size: 24, // 12pt
+              color: '000000',
+            },
+            paragraph: {
+              spacing: {
+                line: 288, // 1.2 lines
+                after: 80, // 4pt
+              },
+            },
+          },
+        },
+      },
+      sections: [
+        {
+          properties: {
+            page: {
+              size: {
+                width: 11906, // A4 width 210mm
+                height: 16838, // A4 height 297mm
+              },
+              margin: {
+                top: convertMillimetersToTwip(20), // 2cm
+                bottom: convertMillimetersToTwip(20), // 2cm
+                left: convertMillimetersToTwip(25), // 2.5cm
+                right: convertMillimetersToTwip(20), // 2cm
+              },
+            },
+          },
+          children: docxChildren.length > 0 ? docxChildren : [new Paragraph({ text: '' })],
+        },
+      ],
+    });
+
+    // 5. Generate and download genuine .docx file
+    const docBlob = await Packer.toBlob(doc);
+    const finalFilename = filename.replace(/\.doc$/i, '') + '.docx';
+    saveAs(docBlob, finalFilename);
+  } catch (err) {
+    console.error('DOCX Export failed:', err);
+    alert('Có lỗi xảy ra khi tạo file Word .docx. Vui lòng thử lại.');
+  } finally {
+    if (loadingOverlay) {
+      loadingOverlay.style.display = 'none';
+    }
+  }
 }
