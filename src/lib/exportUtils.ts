@@ -221,7 +221,7 @@ interface TextOrMathToken {
 function tokenizeTextAndMath(rawText: string): TextOrMathToken[] {
   if (!rawText) return [];
   const tokens: TextOrMathToken[] = [];
-  const mathRegex = /(\$\$[\s\S]*?\$\$|\$[^$\n]+?\$|\\\[[\s\S]*?\\\]|\\\(.*?\\\))/g;
+  const mathRegex = /(\$\$[\s\S]*?\$\$|\$(?!\$)(?:[^\$\n]+|\\begin\{[a-zA-Z*]+\}[\s\S]*?\\end\{[a-zA-Z*]+\})(?<!\$)\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\))/g;
   let lastIdx = 0;
   let match: RegExpExecArray | null;
 
@@ -628,34 +628,30 @@ function buildInvisibleChoiceTable(
  * Parses a single statement line text into ParagraphChild items (TextRuns and OMML math components),
  * guaranteeing that 100% of formulas inside $...$ or $$...$$ are preserved with no lost characters,
  * and trailing punctuation (e.g. ".") is never truncated.
+ * Sử dụng trực tiếp hàm parseTextWithMath của hệ thống để xử lý nguyên vẹn toàn bộ chuỗi.
  */
 function parseStatementRuns(
   statementText: string,
   options: ExportOptions
 ): ParagraphChild[] {
-  // 1. Remove only the leading statement label prefix (e.g. "a)", "a.", "(a)", "a:", "- a)")
-  let cleanText = statementText.trim();
-  cleanText = cleanText.replace(/^\s*(?:[-*]\s*)?(?:\*{0,2})[a-d][\.\:\)]?(?:\*{0,2})[\.\:\)]?\s*/i, '');
-  cleanText = cleanText.replace(/^[\.\:\)]+\s*/, '');
-  cleanText = cleanText.trim();
+  let cleanText = (statementText || '').trim();
+  // Xóa bỏ nhãn tiền tố của ý (a), b), c), d) nếu có ở đầu chuỗi)
+  cleanText = cleanText.replace(/^\s*(?:[-*]\s*)?(?:\*{0,2})\(?[a-d]\)?[\.\:\)]?(?:\*{0,2})[\.\:\)]?\s*/i, '').trim();
 
-  // If text is empty after stripping label, return empty run
   if (!cleanText) {
-    return [new TextRun({ text: '', font: 'Times New Roman', size: 24 })];
+    return [];
   }
 
-  // 2. Tokenize and convert to runs using the centralized robust tokenizer
-  const tokens = tokenizeTextAndMath(cleanText);
-  const runs = tokensToRuns(tokens, {}, options);
-
-  return runs.length > 0
-    ? runs
-    : [new TextRun({ text: cleanText, font: 'Times New Roman', size: 24 })];
+  // Tận dụng chính hàm bóc tách văn bản kèm công thức đang dùng cho đề bài (parseTextWithMath)
+  // để xử lý NGUYÊN VẸN toàn bộ chuỗi của từng ý a), b), c), d), bảo toàn công thức toán và dấu chấm kết thúc.
+  return parseTextWithMath(cleanText, {}, options);
 }
 
 /**
  * Builds separate Paragraphs for True/False statements a), b), c), d) indented by 0.5 cm.
  * Guarantees that every statement has its label, text, and formula seamlessly rendered in a single paragraph.
+ * Ghép toàn bộ nhãn a), phần chữ, phần công thức toán (MathRun/OMML) và dấu chấm kết thúc vào CÙNG MỘT ĐỐI TƯỢNG new Paragraph.
+ * Tuyệt đối không tạo Paragraph riêng cho dấu chấm . hay ký tự rác.
  */
 function buildTrueFalseParagraphs(
   statements: { label: string; node?: Node; text?: string }[],
@@ -671,7 +667,7 @@ function buildTrueFalseParagraphs(
         const cloned = stmt.node.cloneNode(true) as HTMLElement;
         const bolds = Array.from(cloned.querySelectorAll('b, strong'));
         for (const b of bolds) {
-          if (/^\s*(?:[-*]\s*)?(?:\*{0,2})[a-d][\.\:\)]?(?:\*{0,2})\s*$/i.test(b.textContent || '')) {
+          if (/^\s*(?:[-*]\s*)?(?:\*{0,2})\(?[a-d]\)?[\.\:\)]?(?:\*{0,2})\s*$/i.test(b.textContent || '')) {
             b.remove();
           }
         }
@@ -685,6 +681,7 @@ function buildTrueFalseParagraphs(
       childRuns = parseStatementRuns(stmt.text, options);
     }
 
+    // Ghép toàn bộ nhãn a), phần chữ, phần công thức toán (MathRun/OMML) và dấu chấm kết thúc vào CÙNG MỘT ĐỐI TƯỢNG new Paragraph
     return new Paragraph({
       indent: { left: convertMillimetersToTwip(5) }, // 0.5 cm
       spacing: { line: 288, after: 80 }, // 1.2 lines, 4pt after
@@ -714,7 +711,8 @@ async function parseDomToDocxChildren(
   async function processNode(node: Node): Promise<void> {
     if (node.nodeType === Node.TEXT_NODE) {
       const txt = (node.textContent || '').trim();
-      if (txt) {
+      // Không tạo Paragraph riêng cho dấu chấm . hay ký tự rác
+      if (txt && !/^[.,:;?!]+$/.test(txt)) {
         result.push(
           new Paragraph({
             spacing: { line: 288, after: 80 },
@@ -1054,7 +1052,7 @@ async function parseDomToDocxChildren(
         const label = `${singleTfMatch[1].toLowerCase()})`;
         const stmtText = singleTfMatch[2];
         result.push(
-          ...buildTrueFalseParagraphs([{ label, text: stmtText }], options)
+          ...buildTrueFalseParagraphs([{ label, node: el, text: stmtText }], options)
         );
         return;
       }
@@ -1103,6 +1101,52 @@ async function parseDomToDocxChildren(
     }
 
     // 7. General DIV or CONTAINER
+    // If the element contains no block-level children, treat it as a single paragraph block
+    const hasBlockChildren = Array.from(el.children).some((c) =>
+      /^(DIV|P|TABLE|UL|OL|H[1-6]|HR)$/i.test(c.tagName)
+    );
+
+    if (!hasBlockChildren) {
+      const rawText = stripInternalTags(getNodeLatexOrText(el)).trim();
+      if (rawText && !/^[.,:;?!]+$/.test(rawText)) {
+        // Check if container is an individual True/False statement
+        const singleTfMatch = rawText.match(/^\s*(?:\*\*)?([a-d])[\.\)](?:\*\*)?\s*([\s\S]*)$/i);
+        if (singleTfMatch) {
+          const label = `${singleTfMatch[1].toLowerCase()})`;
+          const stmtText = singleTfMatch[2];
+          result.push(
+            ...buildTrueFalseParagraphs([{ label, node: el, text: stmtText }], options)
+          );
+          return;
+        }
+
+        if (!el.querySelector('img')) {
+          const runs = parseTextWithMath(rawText, {}, options);
+          if (runs.length > 0) {
+            result.push(
+              new Paragraph({
+                spacing: { line: 288, after: 80 },
+                children: runs,
+              })
+            );
+          }
+          return;
+        } else {
+          const runs = parseInlineContent(el, {}, options);
+          if (runs.length > 0) {
+            result.push(
+              new Paragraph({
+                spacing: { line: 288, after: 80 },
+                children: runs,
+              })
+            );
+          }
+          return;
+        }
+      }
+      return;
+    }
+
     const childNodes = Array.from(el.childNodes);
     for (const child of childNodes) {
       await processNode(child);
@@ -1302,3 +1346,4 @@ export async function exportHtmlToWord(
     }
   }
 }
+
