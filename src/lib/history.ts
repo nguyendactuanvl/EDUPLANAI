@@ -32,15 +32,27 @@ export const getHistory = (): HistoryItem[] => {
 };
 
 export const saveToHistory = (item: Omit<HistoryItem, "id" | "createdAt">) => {
-  const history = getHistory();
-  const newItem: HistoryItem = {
-    ...item,
-    id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
-    createdAt: Date.now()
-  };
-  history.unshift(newItem);
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
-  return newItem;
+  try {
+    const history = getHistory();
+    const newItem: HistoryItem = {
+      ...item,
+      id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
+      createdAt: Date.now()
+    };
+    history.unshift(newItem);
+    // Keep max 25 items to prevent localStorage QuotaExceededError
+    const trimmed = history.slice(0, 25);
+    try {
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(trimmed));
+    } catch (quotaError) {
+      // If still quota exceeded, keep only top 10
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(trimmed.slice(0, 10)));
+    }
+    return newItem;
+  } catch (e) {
+    console.warn("Could not save to history:", e);
+    return null;
+  }
 };
 
 export const deleteFromHistory = (id: string) => {

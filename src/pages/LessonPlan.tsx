@@ -23,6 +23,7 @@ export function LessonPlan() {
   const [selectedLessonId, setSelectedLessonId] = useState<string>("");
   
   const [customLessonName, setCustomLessonName] = useState("");
+  const [customPeriods, setCustomPeriods] = useState<number>(2);
   const [subject, setSubject] = useState("Toán");
   const [uploadedFiles, setUploadedFiles] = useState<{data: string, type: string, name: string}[]>([]);
   
@@ -41,16 +42,22 @@ export function LessonPlan() {
     return fullPlan.filter(plan => plan.grade === selectedGrade && (plan.subject === subject || (!plan.subject && subject === "Toán")));
   }, [selectedGrade, subject]);
 
-  // Find the fully selected lesson object
+  // Find the fully selected lesson object with fallback to first available lesson
   const selectedLesson = useMemo(() => {
-    if (!selectedLessonId) return null;
-    return availableLessons.find(p => p.id === selectedLessonId) || null;
+    if (!selectedLessonId) {
+      return availableLessons.length > 0 ? availableLessons[0] : null;
+    }
+    return availableLessons.find(p => p.id === selectedLessonId) || (availableLessons.length > 0 ? availableLessons[0] : null);
   }, [selectedLessonId, availableLessons]);
 
-  // Set the first lesson as default when changing grades
+  // Set the first lesson as default when changing grades or subjects
   useEffect(() => {
-    if (availableLessons.length > 0 && (!selectedLessonId || !availableLessons.find(l => l.id === selectedLessonId))) {
-      setSelectedLessonId(availableLessons[0].id);
+    if (availableLessons.length > 0) {
+      if (!selectedLessonId || !availableLessons.some(l => l.id === selectedLessonId)) {
+        setSelectedLessonId(availableLessons[0].id);
+      }
+    } else {
+      setSelectedLessonId("");
     }
   }, [availableLessons, selectedLessonId]);
   
@@ -87,58 +94,16 @@ export function LessonPlan() {
     }
   };
 
-  const generateLessonPlan = async () => {
-    if (activeTab === "system" && !selectedLesson) return;
-    if (activeTab === "upload" && (!customLessonName.trim())) {
-      setError("Vui lòng nhập tên bài học và tải lên file Kế hoạch giáo dục.");
-      return;
-    }
-    if (activeTab === "upgrade" && (!customLessonName.trim() || uploadedFiles.length === 0)) {
-      setError("Vui lòng nhập tên bài học và tải lên file Giáo án cũ cần nâng cấp.");
-      return;
-    }
-    
+  const executePlanGeneration = async (payload: any, endpoint = '/api/generate-lesson-plan', lessonDisplayName = "") => {
     setIsLoading(true);
     setError(null);
     setSuggestion("");
     
     try {
-      let endpoint = '/api/generate-lesson-plan';
-      let payload: any = {};
-      
-      if (activeTab === "system") {
-        payload = {
-          lesson: selectedLesson!.lesson,
-          requirement: selectedLesson!.requirement,
-          digitalComp: selectedLesson!.digitalComp,
-          aiComp: selectedLesson!.aiComp,
-          stem: selectedLesson!.stem,
-          grade: selectedLesson!.grade,
-          periods: selectedLesson!.periods,
-          subject: subject,
-          textbook: selectedTextbook?.name || "Kết nối tri thức với cuộc sống"
-        };
-      } else if (activeTab === "upload") {
-        endpoint = '/api/generate-lesson-plan-file';
-        payload = {
-          lesson: customLessonName,
-          subject: subject,
-          files: uploadedFiles
-        };
-      } else if (activeTab === "upgrade") {
-        endpoint = '/api/upgrade-lesson-plan';
-        payload = {
-          lesson: customLessonName,
-          subject: subject,
-          files: uploadedFiles
-        };
-      }
-      
       const response = await apiFetch(endpoint, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          
         },
         body: JSON.stringify(payload)
       });
@@ -157,9 +122,7 @@ export function LessonPlan() {
                 errorMsg = `Lỗi hệ thống (${response.status}): Không thể kết nối với máy chủ.`;
              }
           }
-        } catch (e) {
-          // ignore
-        }
+        } catch (e) {}
         throw new Error(errorMsg);
       }
 
@@ -168,13 +131,17 @@ export function LessonPlan() {
       setSuggestion(data.result);
       
       // Save to history
-      saveToHistory({
-        type: "KHBD",
-        grade: activeTab === "system" && selectedLesson ? selectedLesson.grade : 0,
-        subject: subject,
-        lessonName: activeTab === "system" && selectedLesson ? selectedLesson.lesson : customLessonName,
-        content: data.result
-      });
+      try {
+        saveToHistory({
+          type: "KHBD",
+          grade: payload.grade || selectedGrade,
+          subject: payload.subject || subject,
+          lessonName: lessonDisplayName || payload.lesson || "Kế hoạch bài dạy",
+          content: data.result
+        });
+      } catch (saveErr) {
+        console.warn("Could not save to history:", saveErr);
+      }
     } catch (err: any) {
       console.error(err);
       let errorMsg = err.message || "";
@@ -192,6 +159,93 @@ export function LessonPlan() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const generateLessonPlan = async () => {
+    let endpoint = '/api/generate-lesson-plan';
+    let payload: any = {};
+    let displayName = "";
+
+    if (activeTab === "system") {
+      if (selectedLesson) {
+        displayName = selectedLesson.lesson;
+        payload = {
+          lesson: selectedLesson.lesson,
+          requirement: selectedLesson.requirement,
+          digitalComp: selectedLesson.digitalComp,
+          aiComp: selectedLesson.aiComp,
+          stem: selectedLesson.stem,
+          grade: selectedLesson.grade || selectedGrade,
+          periods: selectedLesson.periods || customPeriods || 2,
+          subject: subject,
+          textbook: selectedTextbook?.name || "Kết nối tri thức với cuộc sống"
+        };
+      } else if (customLessonName.trim()) {
+        displayName = customLessonName.trim();
+        payload = {
+          lesson: customLessonName.trim(),
+          requirement: "",
+          digitalComp: "Ứng dụng phần mềm và học liệu số tương tác",
+          aiComp: "Sử dụng AI hỗ trợ học sinh phân tích, phản biện",
+          stem: "Gắn liền thực tiễn và định hướng STEM",
+          grade: selectedGrade,
+          periods: customPeriods || 2,
+          subject: subject,
+          textbook: selectedTextbook?.name || "Kết nối tri thức với cuộc sống"
+        };
+      } else {
+        setError("Vui lòng chọn bài học từ danh sách hoặc nhập tên bài học cần soạn.");
+        return;
+      }
+    } else if (activeTab === "upload") {
+      if (!customLessonName.trim() && uploadedFiles.length === 0) {
+        setError("Vui lòng nhập tên bài học hoặc tải lên tệp Kế hoạch giáo dục để AI soạn bài.");
+        return;
+      }
+      endpoint = '/api/generate-lesson-plan-file';
+      displayName = customLessonName.trim() || (uploadedFiles[0]?.name?.replace(/\.[^/.]+$/, "") || "Bài học");
+      payload = {
+        lesson: displayName,
+        subject: subject,
+        grade: selectedGrade,
+        periods: customPeriods || 2,
+        textbook: selectedTextbook?.name || "Kết nối tri thức với cuộc sống",
+        files: uploadedFiles
+      };
+    } else if (activeTab === "upgrade") {
+      if (!customLessonName.trim() && uploadedFiles.length === 0) {
+        setError("Vui lòng nhập tên bài học hoặc tải lên file Giáo án cũ cần nâng cấp.");
+        return;
+      }
+      endpoint = '/api/upgrade-lesson-plan';
+      displayName = customLessonName.trim() || (uploadedFiles[0]?.name?.replace(/\.[^/.]+$/, "") || "Bài học");
+      payload = {
+        lesson: displayName,
+        subject: subject,
+        grade: selectedGrade,
+        periods: customPeriods || 2,
+        files: uploadedFiles
+      };
+    }
+
+    await executePlanGeneration(payload, endpoint, displayName);
+  };
+
+  const handleDemoClick = () => {
+    setSubject("Toán");
+    setSelectedGrade(10);
+    setActiveTab("system");
+    executePlanGeneration({
+      lesson: "Hệ bất phương trình bậc nhất hai ẩn",
+      grade: 10,
+      periods: 2,
+      subject: "Toán",
+      requirement: "Nhận biết bất phương trình và hệ bất phương trình bậc nhất hai ẩn; Biểu diễn miền nghiệm của hệ bất phương trình bậc nhất hai ẩn trên mặt phẳng toạ độ; Vận dụng giải quyết một số bài toán thực tế.",
+      digitalComp: "Sử dụng GeoGebra biểu diễn miền nghiệm của hệ bất phương trình",
+      aiComp: "Sử dụng AI (ChatGPT/Gemini) gợi ý các tình huống thực tế tối ưu hóa kinh tế",
+      stem: "Bài toán thực tiễn lập kế hoạch sản xuất kinh doanh đạt lợi nhuận cao nhất",
+      textbook: selectedTextbook?.name || "Kết nối tri thức với cuộc sống"
+    }, '/api/generate-lesson-plan', "Hệ bất phương trình bậc nhất hai ẩn");
   };
 
   
@@ -289,7 +343,9 @@ export function LessonPlan() {
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Chọn Bài học từ Kế hoạch</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                {availableLessons.length > 0 ? "Chọn Bài học từ Kế hoạch" : "Nhập tên Bài học cần soạn"}
+              </label>
               {availableLessons.length > 0 ? (
                 <select 
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
@@ -303,14 +359,45 @@ export function LessonPlan() {
                   ))}
                 </select>
               ) : (
-                <div className="p-3 bg-amber-50 border border-amber-200 text-amber-700 text-sm rounded-lg">
-                  Hệ thống hiện tại chỉ tích hợp sẵn Kế hoạch mẫu cho một số môn học phổ biến. 
-                  <br/>Với các lớp/môn khác, vui lòng chuyển sang tab <b>"Từ tệp tải lên"</b> để AI đọc bài từ file Kế hoạch dạy học của bạn hoặc gõ thủ công.
+                <div className="space-y-3">
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-lg">
+                    Chương trình mẫu chưa có sẵn bài học cho môn <b>{subject}</b> (Lớp {selectedGrade}). Thầy/Cô hãy nhập tên bài học bên dưới để AI tự động soạn giáo án chi tiết chuẩn CV 5512:
+                  </div>
+                  <input 
+                    type="text" 
+                    placeholder="VD: Bài 1: Mệnh đề / Khái niệm về hàm số..."
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white text-sm"
+                    value={customLessonName}
+                    onChange={(e) => setCustomLessonName(e.target.value)}
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">Số tiết</label>
+                      <input 
+                        type="number" 
+                        min={1}
+                        max={10}
+                        value={customPeriods}
+                        onChange={(e) => setCustomPeriods(Number(e.target.value) || 2)}
+                        className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">Tích hợp STEM</label>
+                      <select 
+                        className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white text-sm"
+                        defaultValue="Tích hợp STEM thực tiễn"
+                      >
+                        <option value="Tích hợp STEM thực tiễn">Có STEM</option>
+                        <option value="Không">Không</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
 
-            {selectedLesson && (
+            {selectedLesson && availableLessons.length > 0 && (
               <div className="bg-slate-50 rounded-lg p-4 border border-slate-200 text-sm space-y-3">
                 <h3 className="font-semibold text-slate-800 border-b border-slate-200 pb-2">Thông tin bài học:</h3>
                 <p><span className="font-medium text-slate-700">Tên bài:</span> <span className="text-slate-800">{selectedLesson.lesson}</span></p>
@@ -403,24 +490,19 @@ export function LessonPlan() {
         )}
 
         <button 
-          onClick={() => {
-            setSubject("Toán");
-            setSelectedGrade(10);
-            setCustomLessonName("Hệ bất phương trình bậc nhất hai ẩn");
-            setActiveTab("upload");
-            setTimeout(generateLessonPlan, 100);
-          }}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-700 transition-colors mt-2 shadow-sm"
+          onClick={handleDemoClick}
+          disabled={isLoading}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-700 transition-colors mt-2 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
         >
           <Sparkles className="h-5 w-5" />
           Demo Soạn Giáo án BPT/HPT
         </button>
         <button 
           onClick={generateLessonPlan}
-          disabled={isLoading || (activeTab === "system" ? !selectedLesson : false)}
-          className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-70 disabled:cursor-not-allowed mt-2 shadow-sm"
+          disabled={isLoading}
+          className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-70 disabled:cursor-not-allowed mt-2 shadow-sm cursor-pointer"
         >
-          <Sparkles className="h-5 w-5" />
+          <Sparkles className={`h-5 w-5 ${isLoading ? 'animate-spin' : ''}`} />
           {isLoading ? (activeTab === 'upgrade' ? "Đang nâng cấp..." : "AI đang soạn bài...") : (activeTab === 'upgrade' ? "Nâng cấp Giáo án (Thêm NLS & AI)" : "Soạn Giáo án chuẩn công văn 5512")}
         </button>
       </div>
