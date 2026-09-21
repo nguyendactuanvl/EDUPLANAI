@@ -5,6 +5,171 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/**
+ * Làm sạch chuỗi JSON bên trong chuỗi string, tự động sửa các lỗi:
+ * - Ký tự backslash không hợp lệ trong LaTeX (\frac, \alpha, \le, \vec, \Omega, ...)
+ * - Unicode escape không hợp lệ (\upsilon, \underline, ...)
+ * - Xuống dòng hoặc tab chưa được escape trong chuỗi string
+ * - Dấu phẩy thừa cuối mảng/object (, } hoặc , ])
+ */
+export function sanitizeJsonString(str: string): string {
+  let result = "";
+  let inString = false;
+  let i = 0;
+  const len = str.length;
+
+  while (i < len) {
+    const ch = str[i];
+
+    if (!inString) {
+      if (ch === "\"") {
+        inString = true;
+        result += ch;
+        i++;
+      } else {
+        result += ch;
+        i++;
+      }
+    } else {
+      if (ch === "\"") {
+        inString = false;
+        result += ch;
+        i++;
+      } else if (ch === "\\") {
+        if (i + 1 >= len) {
+          result += "\\\\";
+          i++;
+        } else {
+          const next = str[i + 1];
+          if (next === "\"" || next === "\\") {
+            result += "\\" + next;
+            i += 2;
+          } else if (next === "/") {
+            result += "/";
+            i += 2;
+          } else if (next === "b" || next === "f" || next === "n" || next === "r" || next === "t") {
+            const charAfter = (i + 2 < len) ? str[i + 2] : "";
+            if (charAfter && /[a-zA-Z]/.test(charAfter)) {
+              result += "\\\\" + next;
+              i += 2;
+            } else {
+              result += "\\" + next;
+              i += 2;
+            }
+          } else if (next === "u") {
+            const hex = str.slice(i + 2, i + 6);
+            if (/^[0-9a-fA-F]{4}$/.test(hex)) {
+              result += "\\u" + hex;
+              i += 6;
+            } else {
+              result += "\\\\u";
+              i += 2;
+            }
+          } else {
+            result += "\\\\" + next;
+            i += 2;
+          }
+        }
+      } else if (ch === "\n") {
+        result += "\\n";
+        i++;
+      } else if (ch === "\r") {
+        result += "\\r";
+        i++;
+      } else if (ch === "\t") {
+        result += "\\t";
+        i++;
+      } else {
+        result += ch;
+        i++;
+      }
+    }
+  }
+
+  return result.replace(/,\s*([\}\]])/g, "$1");
+}
+
+export function repairTruncatedJson(str: string): string {
+  let inString = false;
+  let escaped = false;
+  const stack: string[] = [];
+
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === "\\") {
+        escaped = true;
+      } else if (ch === "\"") {
+        inString = false;
+      }
+    } else {
+      if (ch === "\"") {
+        inString = true;
+      } else if (ch === "{" || ch === "[") {
+        stack.push(ch);
+      } else if (ch === "}" && stack[stack.length - 1] === "{") {
+        stack.pop();
+      } else if (ch === "]" && stack[stack.length - 1] === "[") {
+        stack.pop();
+      }
+    }
+  }
+
+  let repaired = str;
+  if (inString) {
+    repaired += "\"";
+  }
+  repaired = repaired.replace(/,\s*$/, "");
+  while (stack.length > 0) {
+    const top = stack.pop();
+    if (top === "{") repaired += "}";
+    if (top === "[") repaired += "]";
+  }
+  return repaired;
+}
+
+/**
+ * An toàn phân tích chuỗi JSON trả về từ AI, xử lý triệt để lỗi "Bad escaped character in JSON"
+ * do công thức toán học LaTeX chứa các ký tự \ chưa được escape hợp lệ (như \frac, \le, \Omega, \alpha, ...)
+ */
+export function safeJsonParse<T = any>(text: string, fallback?: T): T {
+  if (!text || typeof text !== 'string') return (text as any) || (fallback as T);
+  let cleaned = text
+    .replace(/^```json\s*/gi, '')
+    .replace(/^```\s*/gi, '')
+    .replace(/```\s*$/gi, '')
+    .replace(/```/g, '')
+    .trim();
+
+  try {
+    return JSON.parse(cleaned);
+  } catch (e1) {
+    try {
+      const sanitized = sanitizeJsonString(cleaned);
+      return JSON.parse(sanitized);
+    } catch (e2) {
+      const match = cleaned.match(/(\{|\[)[\s\S]*(\}|\])/);
+      if (match) {
+        try {
+          return JSON.parse(sanitizeJsonString(match[0]));
+        } catch (e3) {}
+      }
+
+      try {
+        const repaired = repairTruncatedJson(cleaned);
+        return JSON.parse(sanitizeJsonString(repaired));
+      } catch (e4) {}
+
+      if (fallback !== undefined && fallback !== null) {
+        return fallback;
+      }
+      throw e1;
+    }
+  }
+}
+
 export function parseApiResponse<T = any>(text: string): T {
   if (!text || !text.trim()) {
     throw new Error("Máy chủ phản hồi rỗng (kết nối bị gián đoạn hoặc hết thời gian chờ). Vui lòng thử lại.");
@@ -14,14 +179,14 @@ export function parseApiResponse<T = any>(text: string): T {
     const rawError = clean.substring(clean.indexOf("SERVER_ERROR:") + 13).trim();
     let errorMsg = rawError;
     try {
-      const parsed = JSON.parse(rawError);
+      const parsed = safeJsonParse(rawError);
       if (parsed?.error?.message) errorMsg = parsed.error.message;
       else if (parsed?.message) errorMsg = parsed.message;
     } catch (e) {
       const jsonMatch = rawError.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         try {
-          const parsed = JSON.parse(jsonMatch[0]);
+          const parsed = safeJsonParse(jsonMatch[0]);
           if (parsed?.error?.message) errorMsg = parsed.error.message;
           else if (parsed?.message) errorMsg = parsed.message;
         } catch (e2) {}
@@ -34,13 +199,14 @@ export function parseApiResponse<T = any>(text: string): T {
     }
     throw new Error(errorMsg);
   }
+
   try {
-    return JSON.parse(clean);
+    return safeJsonParse<T>(clean);
   } catch (e) {
     const jsonMatch = clean.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       try {
-        return JSON.parse(jsonMatch[0]);
+        return safeJsonParse<T>(jsonMatch[0]);
       } catch (inner) {
         // Try salvaging valid question objects if JSON was truncated
         const questionsMatch = jsonMatch[0].match(/"questions"\s*:\s*\[([\s\S]*)/);
@@ -50,7 +216,7 @@ export function parseApiResponse<T = any>(text: string): T {
           let qm: RegExpExecArray | null;
           while ((qm = questionRegex.exec(questionsMatch[1])) !== null) {
             try {
-              const qObj = JSON.parse(qm[0]);
+              const qObj = safeJsonParse(qm[0]);
               if (qObj.content && (qObj.options || qObj.tfStatements || qObj.correctAnswer)) {
                 salvagedQuestions.push(qObj);
               }
@@ -610,3 +776,4 @@ export function formatMultipleChoiceInMarkdown(content: string): string {
 
   return text;
 }
+

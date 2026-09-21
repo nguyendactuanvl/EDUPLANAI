@@ -293,6 +293,10 @@ function handleAiError(error: any, req: any, res: any) {
     return res.status(503).json({ error: "Hệ thống AI của Google đang quá tải (503). Vui lòng đợi vài giây và thử lại." });
   }
 
+  if (lowerMsg.includes("bad escaped character") || lowerMsg.includes("unexpected token") || lowerMsg.includes("syntaxerror")) {
+    return res.status(500).json({ error: "Phản hồi từ AI chứa ký tự công thức chưa chuẩn. Hệ thống đang tự động tối ưu hóa, thầy/cô vui lòng bấm thử lại." });
+  }
+
   console.error("AI Error Debug:", error, error?.status, error?.message);
   res.status(500).json({ error: errorMsg || "Đã xảy ra lỗi không xác định từ máy chủ AI. Vui lòng thử lại sau." });
 }
@@ -338,6 +342,180 @@ async function keepAliveExecute(req: any, res: any, fn: () => Promise<any>) {
   }
 }
 
+/**
+ * Làm sạch chuỗi JSON bên trong chuỗi string, tự động sửa các lỗi:
+ * - Ký tự backslash không hợp lệ trong LaTeX (\frac, \alpha, \le, \vec, \Omega, ...)
+ * - Unicode escape không hợp lệ (\upsilon, \underline, ...)
+ * - Xuống dòng hoặc tab chưa được escape trong chuỗi string
+ * - Dấu phẩy thừa cuối mảng/object (, } hoặc , ])
+ */
+function sanitizeJsonString(str: string): string {
+  let result = "";
+  let inString = false;
+  let i = 0;
+  const len = str.length;
+
+  while (i < len) {
+    const ch = str[i];
+
+    if (!inString) {
+      if (ch === "\"") {
+        inString = true;
+        result += ch;
+        i++;
+      } else {
+        result += ch;
+        i++;
+      }
+    } else {
+      // Bên trong chuỗi JSON string
+      if (ch === "\"") {
+        inString = false;
+        result += ch;
+        i++;
+      } else if (ch === "\\") {
+        if (i + 1 >= len) {
+          result += "\\\\";
+          i++;
+        } else {
+          const next = str[i + 1];
+          if (next === "\"" || next === "\\") {
+            result += "\\" + next;
+            i += 2;
+          } else if (next === "/") {
+            result += "/";
+            i += 2;
+          } else if (next === "b" || next === "f" || next === "n" || next === "r" || next === "t") {
+            const charAfter = (i + 2 < len) ? str[i + 2] : "";
+            if (charAfter && /[a-zA-Z]/.test(charAfter)) {
+              // Lệnh LaTeX như \frac, \beta, \text, \tau, \rho, \rightarrow, \neq, \times...
+              result += "\\\\" + next;
+              i += 2;
+            } else {
+              // Escape chuẩn JSON như \n, \t...
+              result += "\\" + next;
+              i += 2;
+            }
+          } else if (next === "u") {
+            const hex = str.slice(i + 2, i + 6);
+            if (/^[0-9a-fA-F]{4}$/.test(hex)) {
+              result += "\\u" + hex;
+              i += 6;
+            } else {
+              // Lệnh LaTeX bắt đầu bằng \u như \upsilon, \underline...
+              result += "\\\\u";
+              i += 2;
+            }
+          } else {
+            // Tất cả các ký tự khác sau \ (như \alpha, \le, \vec, \Delta, \[, \], \{, \}, \$, \%...)
+            result += "\\\\" + next;
+            i += 2;
+          }
+        }
+      } else if (ch === "\n") {
+        result += "\\n";
+        i++;
+      } else if (ch === "\r") {
+        result += "\\r";
+        i++;
+      } else if (ch === "\t") {
+        result += "\\t";
+        i++;
+      } else {
+        result += ch;
+        i++;
+      }
+    }
+  }
+
+  // Loại bỏ dấu phẩy thừa trước ngoặc đóng
+  return result.replace(/,\s*([\}\]])/g, "$1");
+}
+
+function repairTruncatedJson(str: string): string {
+  let inString = false;
+  let escaped = false;
+  const stack: string[] = [];
+
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === "\\") {
+        escaped = true;
+      } else if (ch === "\"") {
+        inString = false;
+      }
+    } else {
+      if (ch === "\"") {
+        inString = true;
+      } else if (ch === "{" || ch === "[") {
+        stack.push(ch);
+      } else if (ch === "}" && stack[stack.length - 1] === "{") {
+        stack.pop();
+      } else if (ch === "]" && stack[stack.length - 1] === "[") {
+        stack.pop();
+      }
+    }
+  }
+
+  let repaired = str;
+  if (inString) {
+    repaired += "\"";
+  }
+  repaired = repaired.replace(/,\s*$/, "");
+  while (stack.length > 0) {
+    const top = stack.pop();
+    if (top === "{") repaired += "}";
+    if (top === "[") repaired += "]";
+  }
+  return repaired;
+}
+
+/**
+ * An toàn phân tích chuỗi JSON trả về từ AI, xử lý triệt để lỗi "Bad escaped character in JSON"
+ * do công thức toán học LaTeX chứa các ký tự \ chưa được escape hợp lệ (như \frac, \le, \Omega, \alpha, ...)
+ */
+function safeJsonParse<T = any>(text: string, fallback?: T): T {
+  if (!text || typeof text !== 'string') return (text as any) || (fallback as T);
+  let cleaned = text
+    .replace(/^```json\s*/gi, '')
+    .replace(/^```\s*/gi, '')
+    .replace(/```\s*$/gi, '')
+    .replace(/```/g, '')
+    .trim();
+
+  // 1. Thử parse nguyên bản
+  try {
+    return JSON.parse(cleaned);
+  } catch (e1) {
+    // 2. Thử làm sạch qua bộ sanitize
+    try {
+      const sanitized = sanitizeJsonString(cleaned);
+      return JSON.parse(sanitized);
+    } catch (e2) {
+      // 3. Thử trích xuất khối JSON giữa { ... } hoặc [ ... ]
+      const match = cleaned.match(/(\{|\[)[\s\S]*(\}|\])/);
+      if (match) {
+        try {
+          return JSON.parse(sanitizeJsonString(match[0]));
+        } catch (e3) {}
+      }
+
+      // 4. Thử tự động vá đóng ngoặc nếu chuỗi bị cắt ngắn (truncated)
+      try {
+        const repaired = repairTruncatedJson(cleaned);
+        return JSON.parse(sanitizeJsonString(repaired));
+      } catch (e4) {}
+
+      if (fallback !== undefined && fallback !== null) {
+        return fallback;
+      }
+      throw e1;
+    }
+  }
+}
 
 async function generateWithFallback(req: any, payloadOptions: any) {
   const client = getAiClient(req);
@@ -351,13 +529,7 @@ async function generateWithFallback(req: any, payloadOptions: any) {
       try {
         
         const config = payloadOptions.config || {};
-        const updatedPayload = { 
-          ...payloadOptions, 
-          model,
-          config: {
-            maxOutputTokens: 8192,
-            ...config,
-            systemInstruction: `Bạn là chuyên gia Toán học và Khảo thí GDPT 2018. BẮT BUỘC dùng cú pháp LaTeX chuẩn kẹp trong cặp dấu $...$ (nội dòng) hoặc $$...$$ (khối dòng) cho TẤT CẢ các thành phần toán:
+        const defaultSystemInstruction = `Bạn là chuyên gia Toán học và Khảo thí GDPT 2018. BẮT BUỘC dùng cú pháp LaTeX chuẩn kẹp trong cặp dấu $...$ (nội dòng) hoặc $$...$$ (khối dòng) cho TẤT CẢ các thành phần toán:
 - Chỉ số dưới BẮT BUỘC dùng dấu gạch dưới: $u_1$, $u_6$, $S_{10}$, $N_0$, $N_t$.
 - Số mũ / lũy thừa BẮT BUỘC dùng dấu mũ: $q^5$, $2^9$, $2^{10}$, $a^2 + b^2$.
 - Phân số BẮT BUỘC dùng \\frac{tử}{mẫu}: $\\frac{1 - (-2)^{10}}{1 - (-2)}$, $\\frac{108}{54}$.
@@ -369,7 +541,15 @@ async function generateWithFallback(req: any, payloadOptions: any) {
   + Nếu yêu cầu N câu thì hệ thống BẮT BUỘC PHẢI SINH ĐỦ 100% ĐÚNG N CÂU HOÀN CHỈNH từ câu 1 đến câu N.
   + Mỗi câu Đúng/Sai (loại "tf") BẮT BUỘC gồm ĐÚNG 4 mệnh đề con a), b), c), d) trên các dòng riêng biệt (mảng "tfStatements" có đúng 4 phần tử).
   + Mỗi câu trắc nghiệm (loại "mc") BẮT BUỘC có ĐÚNG 4 lựa chọn (mảng "options" có đúng 4 phần tử).
-  + Khi vẽ đồ thị hàm phân thức (bậc 1/1, bậc 2/1): BẮT BUỘC vẽ tiệm cận đứng và ngang/xiên bằng nét đứt (dashed), vẽ 2 nhánh riêng biệt ở 2 phía của tiệm cận đứng, có trục tọa độ Oxy với mũi tên và chia lưới/vạch rõ ràng.`
+  + Khi vẽ đồ thị hàm phân thức (bậc 1/1, bậc 2/1): BẮT BUỘC vẽ tiệm cận đứng và ngang/xiên bằng nét đứt (dashed), vẽ 2 nhánh riêng biệt ở 2 phía của tiệm cận đứng, có trục tọa độ Oxy với mũi tên và chia lưới/vạch rõ ràng.`;
+
+        const updatedPayload = { 
+          ...payloadOptions, 
+          model,
+          config: {
+            maxOutputTokens: 8192,
+            ...config,
+            systemInstruction: config.systemInstruction || defaultSystemInstruction
           } 
         };
         return await client.models.generateContent(updatedPayload);
@@ -546,14 +726,7 @@ Trả về danh sách các tiết học/lịch công tác.`;
       const response = await generateWithFallback(req, payloadOptions);
       if (!response || !response.text) throw new Error("No response from AI");
       
-      let parsed;
-      try {
-        parsed = JSON.parse(response.text);
-      } catch(e) {
-        const cleanJson = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
-        parsed = JSON.parse(cleanJson);
-      }
-      
+      const parsed = safeJsonParse(response.text);
       res.json(parsed);
     } catch (error: any) {
     return handleAiError(error, req, res);
@@ -697,23 +870,18 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT MỘT ĐỐI TƯỢNG JSON HỢP LỆ VỚI C
     let parsedData: any = {};
     const rawText = response.text.trim();
     try {
-      parsedData = JSON.parse(rawText);
+      parsedData = safeJsonParse(rawText);
     } catch (e) {
-      try {
-        const cleanJson = rawText.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
-        parsedData = JSON.parse(cleanJson);
-      } catch (e2) {
-        const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          try {
-            parsedData = JSON.parse(jsonMatch[0]);
-          } catch (e3) {
-            // Salvage questions if JSON was truncated
-            parsedData = { examName: `Đề kiểm tra ${subject} ${grade}`, questions: [] };
-          }
-        } else {
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          parsedData = safeJsonParse(jsonMatch[0]);
+        } catch (e3) {
+          // Salvage questions if JSON was truncated
           parsedData = { examName: `Đề kiểm tra ${subject} ${grade}`, questions: [] };
         }
+      } else {
+        parsedData = { examName: `Đề kiểm tra ${subject} ${grade}`, questions: [] };
       }
     }
 
@@ -756,11 +924,17 @@ HƯỚNG DẪN CHI TIẾT:
 1. **Phần Mục tiêu**: Hãy thêm hoặc làm rõ các mục tiêu về Năng lực số, Năng lực AI (nếu có thể), và STEM.
 2. **Phần Thiết bị & Học liệu**: Bổ sung các công cụ số, phần mềm, thiết bị tương tác, công cụ AI cần thiết cho bài dạy.
 3. **Phần Tiến trình dạy học**: 
-   - Với mỗi hoạt động (Khởi động, Hình thành kiến thức, Luyện tập, Vận dụng), hãy khéo léo lồng ghép việc giáo viên hoặc học sinh sử dụng thiết bị số, phần mềm dạy học, công cụ trí tuệ nhân tạo (AI) vào mục "Tổ chức thực hiện" hoặc "Sản phẩm".
-   - GIỮ NGUYÊN hoặc làm chi tiết thêm nội dung chuyên môn, câu hỏi, bài tập của bài cũ, tuyệt đối không được viết chung chung, sơ sài đi so với bản gốc. Phải thể hiện 4 bước rõ ràng (Chuyển giao, Thực hiện, Báo cáo, Kết luận). Trình bày tự do, KHÔNG bắt buộc phải kẻ bảng.
+   - Với mỗi hoạt động (Khởi động, Hình thành kiến thức, Luyện tập, Vận dụng):
+     + Mục "c) Sản phẩm": BẮT BUỘC PHẢI CÓ LỜI GIẢI CHI TIẾT từng bước hoặc bảng kiến thức hoàn chỉnh mà HS cần đạt, không chỉ ghi chung chung "phiếu trả lời" hay "câu trả lời của HS".
+     + Mục "d) Tổ chức thực hiện": BẮT BUỘC THỂ HIỆN RÕ 4 BƯỚC SƯ PHẠM KÈM LỜI THOẠI VÀ HÀNH ĐỘNG CỤ THỂ:
+       * Bước 1: Chuyển giao nhiệm vụ (câu hỏi/bài tập cụ thể, lời thoại GV dẫn dắt, câu lệnh prompt mẫu cho ChatGPT/Gemini, link/thao tác GeoGebra/Forms).
+       * Bước 2: Thực hiện nhiệm vụ (thời gian làm việc cá nhân/nhóm, dự kiến khó khăn/sai lầm học sinh thường mắc phải và cách GV gợi mở).
+       * Bước 3: Báo cáo, thảo luận (chỉ định nhóm/HS trình bày, các nhóm phản biện và đối chiếu kết quả phản biện từ công cụ AI/phần mềm).
+       * Bước 4: Kết luận, nhận định (GV chốt kiến thức, ghi rõ bảng tổng kết kiến thức hoặc nội dung cần ghi chép vào vở).
 4. **Tô màu Năng lực số và Năng lực AI**: Khi nhắc đến bất kỳ phần mềm, công cụ thiết bị số, Năng lực số hoặc công cụ AI nào (đặc biệt là những cái bạn vừa bổ sung), BẮT BUỘC phải bọc trong thẻ HTML \`<mark style="background-color: #dbeafe; color: #1d4ed8; font-weight: bold; padding: 2px 4px; border-radius: 4px;">Tên công cụ / NLS</mark>\` để tô màu nổi bật.
 ${MATH_FORMATTING_RULES}
-5. TUYỆT ĐỐI KHÔNG sử dụng thẻ HTML \`<br>\` hoặc \`<br/>\`. Sử dụng dấu xuống dòng chuẩn Markdown.`;
+5. TUYỆT ĐỐI KHÔNG sử dụng thẻ HTML \`<br>\` hoặc \`<br/>\`. Sử dụng dấu xuống dòng chuẩn Markdown.
+6. Soạn chi tiết đầy đủ 100%, không tóm tắt, không dùng dấu ba chấm (...).`;
 
     const response = await generateWithFallback(req, {
       contents: [
@@ -775,7 +949,8 @@ ${MATH_FORMATTING_RULES}
         }
       ],
       config: {
-        temperature: 0.7,
+        temperature: 0.5,
+        maxOutputTokens: 8192,
       }
     });
 
@@ -789,75 +964,244 @@ ${MATH_FORMATTING_RULES}
   }
 });
 
-app.all("/api/generate-lesson-plan", async (req, res) => {
-
+// Route for Educational Plan (KHGD - Phân phối chương trình)
+app.all("/api/generate-plan", async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-gemini-api-key');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  
-
   return keepAliveExecute(req, res, async () => {
+    const { subject = "Toán", grade = "10", topic = "" } = req.body;
+    const files = resolveFiles(req.body);
+    
+    const prompt = `Bạn là một Tổ trưởng chuyên môn và chuyên gia giáo dục. Hãy tạo/bổ sung một mẫu Kế hoạch giáo dục (KHGD) cho môn ${subject}, lớp ${grade}, chủ đề "${topic}".
+    Giữ nguyên cấu trúc KHGD gốc (của công văn 5512/BGDĐT-GDTrH) và chỉ bổ sung các cột còn thiếu theo yêu cầu chuẩn của các công văn mới nhất về Năng lực số (NLS) (CV 3456) và Năng lực AI (QĐ 2422).
+    
+    YÊU CẦU BẮT BUỘC ĐỐI VỚI NỘI DUNG:
+    - Cột "Năng lực số": BẮT BUỘC phải bắt đầu bằng mã chỉ báo cụ thể trong dấu ngoặc vuông (ví dụ: [1.1.NC1a], [3.1.NC1a], [5.3.NC1b]...). Theo sau là nội dung ứng dụng. Ví dụ: "[3.1.NC1a] Sử dụng công cụ vẽ số hóa biểu đồ".
+    - Cột "Năng lực AI": BẮT BUỘC phải bắt đầu bằng mã chỉ báo cụ thể trong dấu ngoặc vuông theo QĐ 2422 (ví dụ: [10.A1.1], [10.C2.1], [12.D2.1]...). Theo sau là yêu cầu cần đạt về AI tương ứng.
+    - Cột "Giáo dục STEM/STEAM": Đề xuất hợp lý nhất các bài có thể tích hợp Stem/Steam phù hợp với năng lực và điều kiện thực tế.
+    - Giữ nguyên các cột gốc: Bài học, Số tiết/bài, Yêu cầu cần đạt.
+    ${MATH_FORMATTING_RULES}
+    Trả về kết quả dưới dạng danh sách JSON array với các thuộc tính: lesson, periods, requirement, digitalComp, aiComp, stem, note.`;
 
-      const { subject, grade, topic } = req.body;
-      const files = resolveFiles(req.body);
-      
-      const prompt = `Bạn là một Tổ trưởng chuyên môn và chuyên gia giáo dục. Hãy tạo/bổ sung một mẫu Kế hoạch giáo dục (KHGD) cho môn ${subject}, lớp ${grade}, chủ đề "${topic}".
-      Giữ nguyên cấu trúc KHGD gốc (của công văn 5512/BGDĐT-GDTrH) và chỉ bổ sung các cột còn thiếu theo yêu cầu chuẩn của các công văn mới nhất về Năng lực số (NLS) (CV 3456) và Năng lực AI (QĐ 2422).
-      
-      YÊU CẦU BẮT BUỘC ĐỐI VỚI NỘI DUNG:
-      - Cột "Năng lực số": BẮT BUỘC phải bắt đầu bằng mã chỉ báo cụ thể trong dấu ngoặc vuông (ví dụ: [1.1.NC1a], [3.1.NC1a], [5.3.NC1b]...). Theo sau là nội dung ứng dụng. Ví dụ: "[3.1.NC1a] Sử dụng công cụ vẽ số hóa biểu đồ".
-      - Cột "Năng lực AI": BẮT BUỘC phải bắt đầu bằng mã chỉ báo cụ thể trong dấu ngoặc vuông theo QĐ 2422 (ví dụ: [10.A1.1], [10.C2.1], [12.D2.1]...). Theo sau là yêu cầu cần đạt về AI tương ứng.
-      - Cột "Giáo dục STEM/STEAM": Đề xuất hợp lý nhất các bài có thể tích hợp Stem/Steam phù hợp với năng lực và điều kiện thực tế.
-      - Giữ nguyên các cột gốc: Bài học, Số tiết/bài, Yêu cầu cần đạt.
-      ${MATH_FORMATTING_RULES}
-      Trả về kết quả dưới dạng danh sách JSON array với các thuộc tính: lesson, periods, requirement, digitalComp, aiComp, stem, note.`;
-
-      let contents: any = prompt;
-      if (files && files.length > 0) {
-        contents = [
-          {
-            role: "user",
-            parts: [
-              ...(await processFilesForAI(files)),
-              {
-                text: prompt
-              }
-            ]
-          }
-        ];
-      }
-      const response = await generateWithFallback(req, {
-        contents: contents,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                lesson: { type: Type.STRING },
-                periods: { type: Type.NUMBER },
-                requirement: { type: Type.STRING },
-                digitalComp: { type: Type.STRING },
-                aiComp: { type: Type.STRING },
-                stem: { type: Type.STRING },
-                note: { type: Type.STRING }
-              },
-              required: ["lesson", "periods", "requirement", "digitalComp", "aiComp", "stem", "note"]
-            }
+    let contents: any = prompt;
+    if (files && files.length > 0) {
+      contents = [
+        {
+          role: "user",
+          parts: [
+            ...(await processFilesForAI(files)),
+            { text: prompt }
+          ]
+        }
+      ];
+    }
+    const response = await generateWithFallback(req, {
+      contents: contents,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              lesson: { type: Type.STRING },
+              periods: { type: Type.NUMBER },
+              requirement: { type: Type.STRING },
+              digitalComp: { type: Type.STRING },
+              aiComp: { type: Type.STRING },
+              stem: { type: Type.STRING },
+              note: { type: Type.STRING }
+            },
+            required: ["lesson", "periods", "requirement", "digitalComp", "aiComp", "stem", "note"]
           }
         }
-      });
-
-      const data = JSON.parse(response.text || "[]");
-      return data;
-    
+      }
     });
 
+    const data = safeJsonParse(response.text || "[]");
+    return data;
+  });
+});
+
+// Route for Kế hoạch bài dạy (Giáo án CV 5512)
+app.all(["/api/generate-lesson-plan", "/api/generate-lesson-plan-file"], async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-gemini-api-key');
+
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  return keepAliveExecute(req, res, async () => {
+    // If request comes with topic only and no lesson, fallback to KHGD
+    if (req.body.topic && !req.body.lesson && !req.body.name) {
+      const { subject = "Toán", grade = "10", topic = "" } = req.body;
+      const files = resolveFiles(req.body);
+      const prompt = `Bạn là một Tổ trưởng chuyên môn và chuyên gia giáo dục. Hãy tạo mẫu Kế hoạch giáo dục (KHGD) cho môn ${subject}, lớp ${grade}, chủ đề "${topic}". Trả về kết quả dưới dạng danh sách JSON array với các thuộc tính: lesson, periods, requirement, digitalComp, aiComp, stem, note.`;
+      const response = await generateWithFallback(req, {
+        contents: prompt,
+        config: { responseMimeType: "application/json" }
+      });
+      return safeJsonParse(response.text || "[]");
+    }
+
+    const lesson = req.body.lesson || req.body.name || "Bài học";
+    const subject = req.body.subject || "Toán";
+    const grade = req.body.grade || "10";
+    const periods = Number(req.body.periods) || 2;
+    const requirement = req.body.requirement || req.body.requirements || "";
+    const digitalComp = req.body.digitalComp || req.body.digitalCompetence || "";
+    const aiComp = req.body.aiComp || req.body.aiCompetence || "";
+    const stem = req.body.stem || "";
+    const textbook = req.body.textbook || "Kết nối tri thức với cuộc sống";
+    const maxOutputTokens = 8192;
+    const files = resolveFiles(req.body);
+
+    const lessonPlanSystemInstruction = `Bạn là Chuyên gia Sư phạm cao cấp, Chuyên viên Vụ Giáo dục Trung học (Bộ GD&ĐT), và Giáo viên giỏi cốt cán chuyên sâu về đổi mới phương pháp dạy học theo Chương trình Giáo dục phổ thông 2018.
+Nhiệm vụ của bạn là biên soạn một KẾ HOẠCH BÀI DẠY (GIÁO ÁN) hoàn chỉnh, mẫu mực, chuẩn mực sư phạm 100% theo đúng quy định Công văn 5512/BGDĐT-GDTrH và bám sát bộ sách giáo khoa "${textbook}".
+
+YÊU CẦU ĐẶC BIỆT QUAN TRỌNG VỀ ĐỘ CHI TIẾT:
+TUYỆT ĐỐI KHÔNG ĐƯỢC TÓM TẮT SƠ SÀI, KHÔNG CHỈ VIẾT DÀN Ý HAY GẠCH ĐẦU DÒNG CHUNG CHUNG. Hãy biên soạn một GIÁO ÁN CHI TIẾT ĐẦY ĐỦ NHƯ GIÁO VIÊN SOẠN THỰC TẾ ĐỂ ĐỨNG LỚP VÀ NỘP DUYỆT BAN GIÁM HIỆU/TỔ CHUYÊN MÔN. Mọi câu hỏi, bài toán, lời thoại giáo viên, hành động của học sinh, khó khăn dự kiến, bảng chốt kiến thức và lời giải đều phải được viết rõ ràng, trọn vẹn 100%.
+
+CÁC NGUYÊN TẮC CỐT LÕI BẮT BUỘC TUÂN THỦ NGHIÊM NGẶT:
+
+1. TIẾN TRÌNG DẠY HỌC PHÂN BỔ ĐẦY ĐỦ ${periods} TIẾT (CHUẨN HÓA 4 HOẠT ĐỘNG CHO TỪNG TIẾT):
+- Căn cứ vào thời lượng ${periods} tiết, phần "III. TIẾN TRÌNG DẠY HỌC" BẮT BUỘC PHẢI ĐƯỢC PHÂN CHIA RÕ RÀNG VÀ CHI TIẾT THEO TỪNG TIẾT HỌC: TIẾT 1, TIẾT 2, ..., TIẾT ${periods}.
+- Mỗi tiết học là một chỉnh thể sư phạm hoàn chỉnh gồm ĐẦY ĐỦ 4 HOẠT ĐỘNG CHUẨN CÔNG VĂN 5512:
+  + Hoạt động 1: Khởi động / Mở đầu (Xác định vấn đề / tình huống học tập của tiết)
+  + Hoạt động 2: Hình thành kiến thức mới (Chiếm lĩnh các đơn vị kiến thức tương ứng phân phối cho tiết đó)
+  + Hoạt động 3: Luyện tập (Hệ thống câu hỏi, bài tập có giải chi tiết để củng cố kiến thức tiết học)
+  + Hoạt động 4: Vận dụng / Giao việc về nhà (Ứng dụng thực tiễn, định hướng STEM, chuẩn bị cho tiết tiếp theo).
+- Soạn đầy đủ cho tất cả các tiết (từ Tiết 1 đến Tiết ${periods}), tuyệt đối KHÔNG bỏ lửng hay viết tắt.
+
+2. ĐẦU RA MỤC "c) Sản phẩm" BẮT BUỘC PHẢI CÓ LỜI GIẢI / ĐÁP ÁN CHI TIẾT:
+- Bắt buộc trình bày LỜI GIẢI CHI TIẾT từng bước, đáp số cụ thể hoặc BẢNG KIẾN THỨC HOÀN CHỈNH mà học sinh cần đạt được.
+- TUYỆT ĐỐI KHÔNG chỉ ghi chung chung như "phiếu trả lời", "câu trả lời của HS", "học sinh làm bài vào vở". Toàn bộ nội dung lời giải, các bước biến đổi, công thức và đáp số phải được viết đầy đủ vào mục Sản phẩm.
+
+3. Ở MỖI HOẠT ĐỘNG, MỤC "d) Tổ chức thực hiện" BẮT BUỘC VIẾT RÕ 4 BƯỚC KÈM LỜI THOẠI VÀ HÀNH ĐỘNG CỤ THỂ:
+- **Bước 1: Chuyển giao nhiệm vụ**:
+  + GV chiếu slide hoặc phát phiếu học tập (ghi rõ nội dung cụ thể câu hỏi/bài tập mẫu, số liệu và công thức rõ ràng, KHÔNG ghi chung chung).
+  + Kèm lời thoại sư phạm cụ thể của giáo viên khi dẫn dắt và giao việc cho học sinh.
+  + Hướng dẫn cụ thể thao tác số/AI/STEM: Ghi rõ CÂU LỆNH PROMPT MẪU học sinh cần nhập vào ChatGPT/Gemini là gì (ví dụ: \`"Hãy tìm 3 phản ví dụ trong thực tế chứng minh mệnh đề sau là sai: ..."\`); cung cấp đường link hoặc hướng dẫn thao tác GeoGebra/Google Forms/Quizizz cụ thể.
+- **Bước 2: Thực hiện nhiệm vụ**:
+  + Nêu rõ thời gian làm việc (học sinh làm việc cá nhân trong bao nhiêu phút, sau đó thảo luận cặp đôi hoặc nhóm trong bao nhiêu phút).
+  + GV quan sát, bao quát lớp; DỰ KIẾN CÁC KHÓ KHĂN, SAI LẦM PHỔ BIẾN học sinh thường mắc phải và CÁCH GV GỢI MỞ, HỖ TRỢ kịp thời để học sinh tự tìm ra hướng giải quyết.
+- **Bước 3: Báo cáo, thảo luận**:
+  + Chỉ định rõ nhóm hoặc học sinh trình bày (chiếu bài làm lên bảng, dùng bảng nhóm hoặc trình chiếu từ thiết bị thông minh).
+  + Các nhóm khác chú ý theo dõi, nhận xét, đối chiếu kết quả phản biện từ công cụ AI/phần mềm.
+  + GV định hướng câu hỏi thảo luận mở rộng hoặc cho học sinh chất vấn lẫn nhau để khắc sâu bản chất kiến thức.
+- **Bước 4: Kết luận, nhận định**:
+  + GV phân tích, nhận xét thái độ làm việc và đánh giá độ chính xác trong câu trả lời của các nhóm.
+  + GV chốt kiến thức trọng tâm: GHI RÕ BẢNG TỔNG KẾT KIẾN THỨC HOẶC NỘI DUNG CHÍNH HỌC SINH CẦN GHI CHÉP VÀO VỞ ĐỂ HỌC TẬP.
+
+4. THỂ HIỆN RÕ NĂNG LỰC SỐ, NĂNG LỰC AI VÀ STEM TRONG TỪNG HOẠT ĐỘNG:
+- Lồng ghép trực tiếp vào tiến trình hoạt động (ở mục Nội dung, Sản phẩm và 4 bước Tổ chức thực hiện):
+  + [Năng lực số (NLS)]: Chỉ rõ phần mềm (Google Forms, Quizizz, GeoGebra, Desmos, Padlet, Canva...) và sản phẩm số đầu ra.
+  + [Năng lực AI]: Kịch bản tương tác với AI (ChatGPT/Gemini), câu lệnh prompt mẫu, so sánh đối chiếu kết quả của AI với SGK, đánh giá tính chính xác và phản biện giới hạn của AI.
+  + [Tích hợp STEM/STEAM]: Giao nhiệm vụ thực tiễn gắn với kỹ thuật và đời sống.
+- TÔ MÀU NỔI BẬT: BẮT BUỘC bọc mọi công cụ số, phần mềm, NLS hoặc AI trong thẻ HTML:
+  <mark style="background-color: #dbeafe; color: #1d4ed8; font-weight: bold; padding: 2px 4px; border-radius: 4px;">Tên công cụ / NLS / AI</mark>
+
+5. CHUẨN MỰC TRÌNH BÀY VÀ TOÀN VẸN 100%:
+- Soạn đầy đủ, chi tiết từ đầu đến cuối cho tất cả các tiết (từ Tiết 1 đến Tiết ${periods}).
+- Tuyệt đối KHÔNG viết tóm tắt, KHÔNG để dấu ba chấm (...), KHÔNG ghi "(tương tự tiết 1)".
+- Đảm bảo công thức toán học dùng chuẩn LaTeX kẹp trong $...$ hoặc $$...$$.`;
+
+    const prompt = `Hãy biên soạn toàn diện KẾ HOẠCH BÀI DẠY chuẩn Công văn 5512/BGDĐT-GDTrH và bộ sách "${textbook}" cho bài học sau:
+
+THÔNG TIN BÀI DẠY:
+- Môn học: ${subject}
+- Lớp: ${grade}
+- Tên bài dạy: ${lesson}
+- Thời lượng: ${periods} tiết (BẮT BUỘC: Tiến trình dạy học ở Phần III phải chia cụ thể theo từng tiết: từ TIẾT 1 đến TIẾT ${periods}, mỗi tiết có đủ 4 hoạt động)
+- Bộ sách giáo khoa: ${textbook}
+${requirement ? `- Yêu cầu cần đạt: ${requirement}` : ''}
+${digitalComp ? `- Năng lực số (NLS) cần lồng ghép: ${digitalComp}` : ''}
+${aiComp ? `- Năng lực Trí tuệ nhân tạo (AI) cần lồng ghép: ${aiComp}` : ''}
+${stem ? `- Định hướng STEM/STEAM: ${stem}` : ''}
+
+CẤU TRÚC KẾ HOẠCH BÀI DẠY BẮT BUỘC (VIẾT CHI TIẾT TOÀN DIỆN, KHÔNG ĐƯỢC TÓM TẮT):
+
+# KẾ HOẠCH BÀI DẠY: ${lesson.toUpperCase()}
+**Môn học:** ${subject} | **Lớp:** ${grade} | **Thời lượng:** ${periods} tiết  
+**Bộ sách:** ${textbook}
+
+---
+
+## I. MỤC TIÊU
+1. **Kiến thức:** Trình bày cụ thể các kiến thức học sinh cần chiếm lĩnh sau bài học.
+2. **Năng lực:**
+   - **Năng lực chung:** Tự chủ và tự học; Giao tiếp và hợp tác; Giải quyết vấn đề và sáng tạo.
+   - **Năng lực đặc thù (${subject}):** Nêu rõ các năng lực thành phần chuyên môn môn học.
+   - **Năng lực số (NLS):** Chỉ báo và thao tác số học sinh vận dụng.
+   - **Năng lực AI:** Năng lực xây dựng câu lệnh prompt, kiểm chứng, phản biện kết quả của AI.
+3. **Phẩm chất:** Chăm chỉ, trung thực, trách nhiệm, nhân ái.
+
+## II. THIẾT BỊ DẠY HỌC VÀ HỌC LIỆU
+1. **Giáo viên:** Máy chiếu/ti vi tương tác, bài giảng điện tử, phiếu học tập số (Google Forms/Quizizz), máy tính kết nối mạng, câu lệnh mẫu (prompts) cho AI, phần mềm dạy học (GeoGebra/Desmos).
+2. **Học sinh:** SGK ${textbook}, vở ghi chép, thiết bị thông minh (quét mã QR, thực hiện prompt AI, tra cứu học liệu số).
+
+## III. TIẾN TRÌNG DẠY HỌC (BẮT BUỘC PHÂN CHIA CỤ THỂ THEO ĐÚNG ${periods} TIẾT)
+
+(Hãy soạn chi tiết lần lượt từ TIẾT 1 đến TIẾT ${periods}. Trong MỖI TIẾT, phải có ĐẦY ĐỦ 4 HOẠT ĐỘNG:
+- Hoạt động 1: Mở đầu / Khởi động
+- Hoạt động 2: Hình thành kiến thức mới
+- Hoạt động 3: Luyện tập
+- Hoạt động 4: Vận dụng / Giao việc về nhà
+
+Ở MỖI HOẠT ĐỘNG, BẮT BUỘC TRÌNH BÀY ĐỦ 4 MỤC CHI TIẾT NHƯ SAU:
+a) Mục tiêu: Nêu rõ mục tiêu cần đạt của hoạt động (kiến thức, NLS, năng lực AI, phẩm chất).
+b) Nội dung: Nhiệm vụ học tập cụ thể, câu hỏi, đề bài hoặc phiếu học tập (ghi rõ nội dung cụ thể câu hỏi/bài tập mẫu, không ghi chung chung).
+c) Sản phẩm: BẮT BUỘC TRÌNH BÀY LỜI GIẢI CHI TIẾT hoặc BẢNG KIẾN THỨC HOÀN CHỈNH mà HS cần đạt, TUYỆT ĐỐI KHÔNG CHỈ GHI "phiếu trả lời" hay "câu trả lời của HS".
+d) Tổ chức thực hiện: BẮT BUỘC VIẾT RÕ 4 BƯỚC KÈM LỜI THOẠI VÀ HÀNH ĐỘNG CỤ THỂ:
+   - **Bước 1: Chuyển giao nhiệm vụ**:
+     + GV chiếu slide/giao phiếu học tập (ghi rõ nội dung cụ thể câu hỏi/bài tập mẫu, không ghi chung chung).
+     + Kèm lời thoại sư phạm dẫn dắt của GV.
+     + Hướng dẫn cụ thể thao tác số/AI/STEM: Câu lệnh prompt mẫu học sinh cần nhập vào ChatGPT/Gemini là gì; link hoặc thao tác GeoGebra/Forms cụ thể.
+   - **Bước 2: Thực hiện nhiệm vụ**:
+     + HS làm việc cá nhân hoặc nhóm trong bao nhiêu phút.
+     + Dự kiến các khó khăn, sai lầm học sinh thường mắc phải và cách GV gợi mở.
+   - **Bước 3: Báo cáo, thảo luận**:
+     + Chỉ định nhóm/HS trình bày; các nhóm khác nhận xét, đối chiếu kết quả phản biện từ công cụ AI/phần mềm.
+   - **Bước 4: Kết luận, nhận định**:
+     + GV chốt kiến thức trọng tâm (ghi rõ bảng tổng kết kiến thức hoặc nội dung cần ghi chép vào vở).
+)
+
+LƯU Ý ĐẶC BIỆT:
+- Lồng ghép trực tiếp các kịch bản [Năng lực số], [Năng lực AI] và [Tích hợp STEM/STEAM] vào từng hoạt động và sản phẩm cụ thể của học sinh.
+- Tô màu mọi công cụ số, NLS, AI bằng: <mark style="background-color: #dbeafe; color: #1d4ed8; font-weight: bold; padding: 2px 4px; border-radius: 4px;">Tên công cụ / NLS / AI</mark>.
+- Viết chi tiết đầy đủ 100%, không tóm tắt, không dùng dấu ba chấm (...).
+${MATH_FORMATTING_RULES}`;
+
+    let contents: any = prompt;
+    if (files && files.length > 0) {
+      contents = [
+        {
+          role: "user",
+          parts: [
+            ...(await processFilesForAI(files)),
+            { text: prompt }
+          ]
+        }
+      ];
+    }
+
+    const response = await generateWithFallback(req, {
+      contents: contents,
+      config: {
+        systemInstruction: lessonPlanSystemInstruction,
+        temperature: 0.5,
+        maxOutputTokens: maxOutputTokens
+      }
+    });
+
+    return { result: response.text };
+  });
 });
 
 app.all("/api/generate-similar", async (req, res) => {
@@ -985,13 +1329,7 @@ app.all("/api/generate-interactive-worksheet", async (req, res) => {
     });
 
     let rawOutput = response.text || '';
-    let parsedData: any = {};
-    try {
-      parsedData = JSON.parse(rawOutput);
-    } catch {
-      const cleanJson = rawOutput.replace(/```json/g, '').replace(/```/g, '').trim();
-      parsedData = JSON.parse(cleanJson);
-    }
+    let parsedData: any = safeJsonParse(rawOutput, { questions: [] });
     
     // Process questions
     const formattedQuestions = (parsedData.questions || []).map((q: any, idx: number) => {
