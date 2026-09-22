@@ -24,6 +24,12 @@ import {
   Link2,
   Clipboard
 } from 'lucide-react';
+import { 
+  STANDARDIZED_EXAM_TYPES, 
+  getDefaultDurationForExamType, 
+  formatExamTitle, 
+  normalizeExamType 
+} from '../lib/examConfig';
 import mammoth from 'mammoth';
 import QRCode from 'qrcode';
 import LZString from 'lz-string';
@@ -96,6 +102,7 @@ export function UploadTeacherExamModal({
   const [step, setStep] = useState<'input' | 'preview_edit' | 'share_popup'>('input');
   
   // Exam metadata
+  const [examType, setExamType] = useState<string>("Đề kiểm tra giữa kỳ 1");
   const [examTitle, setExamTitle] = useState("Đề kiểm tra trắc nghiệm online");
   const [subject, setSubject] = useState(defaultSubject);
   const [grade, setGrade] = useState(defaultGrade);
@@ -104,6 +111,20 @@ export function UploadTeacherExamModal({
   const [isUnlimitedTime, setIsUnlimitedTime] = useState<boolean>(false);
   const [detectedDurationSource, setDetectedDurationSource] = useState<string | null>(null);
   const userModifiedDuration = useRef(false);
+
+  const handleExamTypeChange = (newType: string) => {
+    setExamType(newType);
+    userModifiedDuration.current = false;
+    if (!isUnlimitedTime) {
+      const defaultDur = getDefaultDurationForExamType(newType, "THPT", String(grade), subject);
+      setDuration(defaultDur);
+      setDurationInput(String(defaultDur));
+      setDetectedDurationSource(`Gợi ý chuẩn (${newType}): ${defaultDur} phút`);
+    }
+    if (!examTitle || examTitle === "Đề kiểm tra trắc nghiệm online" || examTitle.startsWith("ĐỀ ")) {
+      setExamTitle(formatExamTitle(newType, subject, String(grade)));
+    }
+  };
 
   // Raw exam text & input
   const [rawText, setRawText] = useState("");
@@ -574,10 +595,12 @@ export function UploadTeacherExamModal({
 
       // 2. Format payload compatible with StudentExamView
       const finalDuration = isUnlimitedTime ? 0 : (parseInt(String(duration), 10) || 0);
+      const finalTitle = examTitle || formatExamTitle(examType, subject, String(grade));
 
       const payload = {
         examData: {
-          examName: examTitle || "Đề kiểm tra trực tuyến",
+          examName: finalTitle,
+          examType: examType,
           subject: subject,
           grade: grade,
           duration: finalDuration,
@@ -585,6 +608,7 @@ export function UploadTeacherExamModal({
           isUnlimitedTime: isUnlimitedTime || finalDuration === 0,
           createdAt: new Date().toISOString()
         },
+        examType: examType,
         duration: finalDuration,
         examDuration: finalDuration,
         isUnlimitedTime: isUnlimitedTime || finalDuration === 0,
@@ -787,7 +811,7 @@ export function UploadTeacherExamModal({
             <div className="space-y-6">
               {/* Exam Info Card */}
               <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4 text-sm">
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5">
                   <div className="md:col-span-2">
                     <label className="block text-xs font-bold text-slate-700 mb-1">Tên đề thi / Bài kiểm tra</label>
                     <input
@@ -800,10 +824,29 @@ export function UploadTeacherExamModal({
                   </div>
 
                   <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Loại đề</label>
+                    <select
+                      value={examType}
+                      onChange={e => handleExamTypeChange(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-800 text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none shadow-2xs"
+                    >
+                      {STANDARDIZED_EXAM_TYPES.map(t => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">Môn học</label>
                     <select
                       value={subject}
-                      onChange={e => setSubject(e.target.value)}
+                      onChange={e => {
+                        const newSub = e.target.value;
+                        setSubject(newSub);
+                        if (!examTitle || examTitle === "Đề kiểm tra trắc nghiệm online" || examTitle.startsWith("ĐỀ ")) {
+                          setExamTitle(formatExamTitle(examType, newSub, String(grade)));
+                        }
+                      }}
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-800 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none shadow-2xs"
                     >
                       {GDPT_2018_SUBJECTS.map(s => (
@@ -1912,3 +1955,4 @@ export function UploadTeacherExamModal({
     </div>
   );
 }
+

@@ -101,6 +101,15 @@ const MATH_FORMATTING_RULES = `QUY TẮC ĐỊNH DẠNG TOÁN HỌC VÀ VĂN B�
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
+app.use(express.text({ type: ['text/plain', 'text/*', 'application/json'], limit: '50mb' }));
+app.use((req, _res, next) => {
+  if (typeof req.body === 'string' && (req.body.trim().startsWith('{') || req.body.trim().startsWith('['))) {
+    try {
+      req.body = JSON.parse(req.body);
+    } catch (e) {}
+  }
+  next();
+});
 
 const chunkStore = new Map<string, { chunks: string[], type: string, total: number, timestamp: number }>();
 
@@ -921,7 +930,7 @@ ${detailedSolution !== false ? '- BẮT BUỘC kèm lời giải chi tiết (exp
 
 BẮT BUỘC TRẢ VỀ DUY NHẤT MỘT ĐỐI TƯỢNG JSON HỢP LỆ VỚI CẤU TRÚC SAU:
 {
-  "examName": "ĐỀ KIỂM TRA MÔN ${subject.toUpperCase()} - LỚP ${grade} (${duration} PHÚT)",
+  "examName": "${examType.toUpperCase().startsWith('ĐỀ') ? examType.toUpperCase() : 'ĐỀ ' + examType.toUpperCase()} - MÔN ${subject.toUpperCase()} ${grade.replace(/^(LỚP|KHỐI)\s*/i, '').trim()} (${duration} PHÚT)",
   "questions": [
     {
       "id": 1,
@@ -1392,7 +1401,7 @@ app.all("/api/generate-interactive-worksheet", async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ message: 'Method not allowed' });
     
-  try {
+  return keepAliveExecute(req, res, async () => {
     const { lesson, subject, grade, type } = req.body;
        
     const promptText = `Bạn là một giáo viên xuất sắc môn ${subject || "chung"}. Hãy tạo một Phiếu bài tập (Worksheet) tương tác thật chuyên nghiệp cho học sinh lớp ${grade}, bài học/chủ đề: "${lesson}". Hình thức: ${type || "Kết hợp trắc nghiệm, đúng/sai, trả lời ngắn, tự luận"}.
@@ -1462,13 +1471,11 @@ app.all("/api/generate-interactive-worksheet", async (req, res) => {
        };
     });
 
-    res.json({
+    return {
        ...parsedData,
        questions: formattedQuestions
-    });
-  } catch (error: any) {
-    return handleAiError(error, req, res);
-  }
+    };
+  });
 });
 
 app.all("/api/generate-worksheet", async (req, res) => {
@@ -2035,3 +2042,4 @@ if (!process.env.VERCEL) {
   }
 }
 export default app;
+

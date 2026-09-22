@@ -19,7 +19,7 @@ import {
   type ParagraphChild,
   type FileChild,
 } from 'docx';
-import { masterSanitizeLatex } from './utils';
+import { fixInlineOptionText, sanitizeMathBeforeRender } from './utils';
 
 interface RunStyle {
   bold?: boolean;
@@ -497,25 +497,22 @@ function parseInlineContent(
  * Strips leading choice letters (A., B., C., D., A), B), C), D)) so labels are not duplicated.
  */
 function cleanOptionText(text: string): string {
-  let cleaned = text
+  const stripped = text
     .replace(/^\s*(?:[-*]\s*)?(?:\*{0,2})[A-D][\.\:\)]?(?:\*{0,2})[\.\:\)]?\s*/i, '')
     .replace(/^[\s\.\:\)]+/, '')
     .trim();
-  return masterSanitizeLatex(cleaned);
+  const sanitized = sanitizeMathBeforeRender(stripped);
+  return fixInlineOptionText(sanitized);
 }
 
 /**
  * Strips leading true/false statement letters (a), b), c), d)) so labels are not duplicated.
  */
 function cleanTfText(text: string): string {
-  let cleaned = text
-    .replace(/trà\s+sữ\s*\n*\s*a\./gi, 'trà sữa. ')
-    .replace(/trà\s+sữ\s*\n*\s*a\)/gi, 'trà sữa) ')
-    .replace(/sữ\s*\n+\s*a\./gi, 'sữa. ')
+  return text
     .replace(/^\s*(?:[-*]\s*)?(?:\*{0,2})[a-d][\.\:\)]?(?:\*{0,2})[\.\:\)]?\s*/i, '')
     .replace(/^[\s\.\:\)]+/, '')
     .trim();
-  return masterSanitizeLatex(cleaned);
 }
 
 const INVISIBLE_BORDER = {
@@ -641,21 +638,12 @@ function parseStatementRuns(
   options: ExportOptions
 ): ParagraphChild[] {
   let cleanText = (statementText || '').trim();
-  // Sửa lỗi bẻ đôi từ tiếng Việt như "trà sữa" trước khi xóa nhãn
-  cleanText = cleanText
-    .replace(/trà\s+sữ\s*\n*\s*a\./gi, 'trà sữa. ')
-    .replace(/trà\s+sữ\s*\n*\s*a\)/gi, 'trà sữa) ')
-    .replace(/sữ\s*\n+\s*a\./gi, 'sữa. ');
-
   // Xóa bỏ nhãn tiền tố của ý (a), b), c), d) nếu có ở đầu chuỗi)
   cleanText = cleanText.replace(/^\s*(?:[-*]\s*)?(?:\*{0,2})\(?[a-d]\)?[\.\:\)]?(?:\*{0,2})[\.\:\)]?\s*/i, '').trim();
 
   if (!cleanText) {
     return [];
   }
-
-  // Chuẩn hóa ký hiệu LaTeX toàn diện
-  cleanText = masterSanitizeLatex(cleanText);
 
   // Tận dụng chính hàm bóc tách văn bản kèm công thức đang dùng cho đề bài (parseTextWithMath)
   // để xử lý NGUYÊN VẸN toàn bộ chuỗi của từng ý a), b), c), d), bảo toàn công thức toán và dấu chấm kết thúc.

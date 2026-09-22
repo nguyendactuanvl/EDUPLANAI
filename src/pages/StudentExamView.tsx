@@ -115,9 +115,16 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
   }, [timeLeft, isStarted, isSubmitted]);
 
   const examTitle = examData?.examData?.examName || examData?.examName || "Đề kiểm tra trực tuyến";
+  const examType = examData?.examData?.examType || examData?.examType || "";
+  const startTimeStr = examData?.examData?.startTime || examData?.startTime || null;
+  const endTimeStr = examData?.examData?.endTime || examData?.endTime || null;
   const rawDuration = examData?.examData?.examDuration ?? examData?.examData?.duration ?? examData?.examDuration ?? examData?.duration;
   const isUnlimited = examData?.examData?.isUnlimitedTime || examData?.isUnlimitedTime || rawDuration === 0 || rawDuration === '0';
   const examDuration = isUnlimited ? 0 : (Number(rawDuration) || 45);
+
+  const nowTimestamp = Date.now();
+  const isBeforeStart = startTimeStr ? nowTimestamp < new Date(startTimeStr).getTime() : false;
+  const isAfterEnd = endTimeStr ? nowTimestamp > new Date(endTimeStr).getTime() : false;
 
   const currentExam = React.useMemo(() => {
     if (!examData) return null;
@@ -251,41 +258,147 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
       return q.type !== 'essay' && qType !== 'ESSAY';
     });
 
+    const detailedAnswers: Array<{
+      questionNumber: number;
+      studentChoice: string;
+      correctChoice: string;
+      isCorrect: boolean;
+      type: string;
+      hasAnswered: boolean;
+      questionContent?: string;
+      options?: string[];
+      tfDetails?: Array<{
+        sub: string;
+        statement: string;
+        studentChoice: string;
+        correctChoice: string;
+        isCorrect: boolean;
+        hasAnswered: boolean;
+      }>;
+      explanation?: string;
+      essayText?: string;
+      essayImages?: string[];
+    }> = [];
+
     currentExam.questions.forEach((q: any, idx: number) => {
       const ans = answers[idx];
       let isCorrect = false;
       let isWrong = false;
       const qType = String(q.type || '').toUpperCase();
+      const qNum = idx + 1;
+      const content = q.content || q.question || q.text || '';
+      const explanation = q.explanation || '';
       
-      if (q.type === 'mc' || qType === 'MULTIPLE_CHOICE' || (!q.type && q.options)) {
+      if (q.type === 'essay' || qType === 'ESSAY') {
+        const textAns = String(answers[idx] || '').trim();
+        const imgs = essayImages[idx] || [];
+        const hasAns = textAns.length > 0 || imgs.length > 0;
+        detailedAnswers.push({
+          questionNumber: qNum,
+          studentChoice: textAns || (imgs.length > 0 ? `[Đã đính kèm ${imgs.length} ảnh]` : 'Chưa làm'),
+          correctChoice: q.correctAnswer || q.explanation || 'Tự luận (GV chấm)',
+          isCorrect: false,
+          type: 'essay',
+          hasAnswered: hasAns,
+          questionContent: content,
+          explanation,
+          essayText: textAns,
+          essayImages: imgs
+        });
+      } else if (q.type === 'mc' || qType === 'MULTIPLE_CHOICE' || (!q.type && q.options)) {
         if (ans === q.correctOptionIndex) { totalScore += 1; isCorrect = true; }
         else if (ans !== undefined) { isWrong = true; }
+
+        const optLetter = (ans !== undefined && ans >= 0 && ans <= 3) ? String.fromCharCode(65 + ans) : '';
+        const corrLetter = (q.correctOptionIndex !== undefined && q.correctOptionIndex >= 0 && q.correctOptionIndex <= 3) 
+          ? String.fromCharCode(65 + q.correctOptionIndex) 
+          : (String(q.correctAnswer || 'A').toUpperCase().charAt(0));
+
+        detailedAnswers.push({
+          questionNumber: qNum,
+          studentChoice: optLetter || 'Chưa làm',
+          correctChoice: corrLetter,
+          isCorrect,
+          type: 'mc',
+          hasAnswered: ans !== undefined,
+          questionContent: content,
+          options: q.options || [],
+          explanation
+        });
       } else if (q.type === 'tf' || qType === 'TRUE_FALSE') {
         if (q.tfStatements && q.tfStatements.length > 0) {
            let correctCount = 0;
            let answered = false;
-           q.tfStatements.forEach((stmt: any, sIdx: number) => {
+           const tfDetails = q.tfStatements.map((stmt: any, sIdx: number) => {
+             const sub = String.fromCharCode(97 + sIdx);
              const studentAns = ans ? ans[sIdx] : undefined;
              if (studentAns !== undefined) answered = true;
              const isTrue = stmt.correct === true || String(stmt.correct).toLowerCase() === 'true';
-             if (studentAns === isTrue) correctCount++;
+             const isSubOk = studentAns !== undefined && studentAns === isTrue;
+             if (isSubOk) correctCount++;
+             return {
+               sub,
+               statement: stmt.statement || stmt.text || '',
+               studentChoice: studentAns === true ? 'Đúng' : studentAns === false ? 'Sai' : 'Chưa chọn',
+               correctChoice: isTrue ? 'Đúng' : 'Sai',
+               isCorrect: isSubOk,
+               hasAnswered: studentAns !== undefined
+             };
            });
+
            if (correctCount === 1) totalScore += 0.1;
            else if (correctCount === 2) totalScore += 0.25;
            else if (correctCount === 3) totalScore += 0.5;
            else if (correctCount === 4) { totalScore += 1.0; isCorrect = true; }
            
            if (answered && correctCount < 4) isWrong = true;
+
+           const studentChoiceStr = tfDetails.map(t => `${t.sub}:${t.studentChoice === 'Đúng' ? 'Đ' : t.studentChoice === 'Sai' ? 'S' : '-'}`).join(' ');
+           const correctChoiceStr = tfDetails.map(t => `${t.sub}:${t.correctChoice === 'Đúng' ? 'Đ' : 'S'}`).join(' ');
+
+           detailedAnswers.push({
+             questionNumber: qNum,
+             studentChoice: answered ? studentChoiceStr : 'Chưa làm',
+             correctChoice: correctChoiceStr,
+             isCorrect,
+             type: 'tf',
+             hasAnswered: answered,
+             questionContent: content,
+             tfDetails,
+             explanation
+           });
         } else {
            const isTrue = q.correct === true || String(q.correct).toLowerCase() === 'true' || String(q.correctAnswer).toLowerCase().includes('đúng');
            if (ans === isTrue) { totalScore += 1; isCorrect = true; }
            else if (ans !== undefined) { isWrong = true; }
+
+           detailedAnswers.push({
+             questionNumber: qNum,
+             studentChoice: ans === true ? 'Đúng' : ans === false ? 'Sai' : 'Chưa làm',
+             correctChoice: isTrue ? 'Đúng' : 'Sai',
+             isCorrect,
+             type: 'tf',
+             hasAnswered: ans !== undefined,
+             questionContent: content,
+             explanation
+           });
         }
       } else if (q.type === 'sa' || qType === 'SHORT_ANSWER') {
          const correctAns = String(q.correctAnswer || q.correct || '').trim();
          const studentAns = String(ans || '').trim();
          if (correctAns && compareShortAnswers(studentAns, correctAns)) { totalScore += 1; isCorrect = true; }
          else if (ans !== undefined && studentAns !== '') { isWrong = true; }
+
+         detailedAnswers.push({
+           questionNumber: qNum,
+           studentChoice: studentAns || 'Chưa làm',
+           correctChoice: correctAns,
+           isCorrect,
+           type: 'sa',
+           hasAnswered: studentAns.length > 0,
+           questionContent: content,
+           explanation
+         });
       }
       
       if (isCorrect) fullCorrectCount++;
@@ -306,6 +419,8 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
       id: Date.now().toString(),
       examId: currentExam?.code || examId || 'online_exam',
       examName: examData.examName || examTitle || 'Phiếu bài tập',
+      examType: examType || '',
+      duration: isUnlimited ? 'Không giới hạn' : examDuration,
       studentName: studentInfo.name || 'Học sinh ẩn danh',
       studentClass: studentInfo.class || '',
       score: Number(finalScore.toFixed(2)),
@@ -314,6 +429,7 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
       unanswered: objectiveQuestions.length - fullCorrectCount - wrongCount,
       totalQuestions: currentExam.questions.length,
       hasEssay: hasEssayQuestions,
+      detailedAnswers: detailedAnswers,
       essaySubmissions: currentExam.questions.map((q: any, idx: number) => {
         const qType = String(q.type || '').toUpperCase();
         if (q.type === 'essay' || qType === 'ESSAY') {
@@ -366,12 +482,15 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
         body: JSON.stringify({
           examId: currentExam.id || currentExam.code || examId || 'online_exam',
           examName: examTitle,
+          examType: examType || 'Đề kiểm tra',
+          duration: isUnlimited ? 'Không giới hạn' : `${examDuration} phút`,
           studentName: studentInfo.name,
           className: studentInfo.class,
           score: Number(finalScore.toFixed(2)),
           correctCount: fullCorrectCount,
           totalQuestions: objectiveQuestions.length,
-          timeSpent: formattedTimeSpent
+          timeSpent: formattedTimeSpent,
+          detailedAnswers: detailedAnswers
         })
       }).catch(err => {
         console.warn("Lỗi gửi Webhook điểm thi:", err);
@@ -384,42 +503,103 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
   if (!isStarted) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-        <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 max-w-md w-full">
-          <div className="flex justify-center mb-6">
+        <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 max-w-md w-full text-center">
+          <div className="flex justify-center mb-4">
             <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center">
               <FileText className="w-8 h-8 text-emerald-600" />
             </div>
           </div>
-          <h1 className="text-2xl font-bold text-center text-slate-800 mb-2">{examTitle}</h1>
-          <p className="text-center text-slate-500 mb-6 text-sm">
-            Thời lượng: <strong className="text-emerald-700 font-semibold">{isUnlimited ? "Không giới hạn thời gian" : `${examDuration} phút`}</strong> - Vui lòng điền thông tin để bắt đầu
+
+          {examType && (
+            <div className="inline-block px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-xs font-bold mb-2">
+              {examType}
+            </div>
+          )}
+
+          <h1 className="text-2xl font-bold text-slate-800 mb-2">{examTitle}</h1>
+          <p className="text-slate-500 mb-5 text-sm">
+            Thời lượng: <strong className="text-emerald-700 font-semibold">{isUnlimited ? "Không giới hạn thời gian" : `${examDuration} phút`}</strong>
           </p>
+
+          {/* Schedule Warnings */}
+          {isBeforeStart && startTimeStr && (
+            <div className="mb-5 p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs text-left space-y-1">
+              <p className="font-bold flex items-center gap-1.5 text-amber-900">
+                <span>🕒</span> Phòng thi chưa đến giờ mở đề!
+              </p>
+              <p>Thời gian bắt đầu làm bài: <strong>{new Date(startTimeStr).toLocaleString('vi-VN')}</strong>. Vui lòng quay lại vào đúng khung giờ trên.</p>
+            </div>
+          )}
+
+          {isAfterEnd && endTimeStr && (
+            <div className="mb-5 p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs text-left space-y-1">
+              <p className="font-bold flex items-center gap-1.5 text-rose-900">
+                <span>⛔</span> Đã hết thời hạn làm bài!
+              </p>
+              <p>Phòng thi đã đóng lúc: <strong>{new Date(endTimeStr).toLocaleString('vi-VN')}</strong>. Hệ thống không còn nhận bài làm mới.</p>
+            </div>
+          )}
           
-          <div className="space-y-4 mb-6">
+          <div className="space-y-4 mb-6 text-left">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Họ và tên học sinh</label>
-              <input type="text" value={studentInfo.name} onChange={e => setStudentInfo({...studentInfo, name: e.target.value})} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Ví dụ: Nguyễn Văn A" />
+              <input 
+                type="text" 
+                value={studentInfo.name} 
+                onChange={e => setStudentInfo({...studentInfo, name: e.target.value})} 
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none" 
+                placeholder="Ví dụ: Nguyễn Văn A" 
+                disabled={isBeforeStart || isAfterEnd}
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Lớp</label>
-              <input type="text" value={studentInfo.class} onChange={e => setStudentInfo({...studentInfo, class: e.target.value})} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Ví dụ: 12A1" />
+              <input 
+                type="text" 
+                value={studentInfo.class} 
+                onChange={e => setStudentInfo({...studentInfo, class: e.target.value})} 
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none" 
+                placeholder="Ví dụ: 12A1" 
+                disabled={isBeforeStart || isAfterEnd}
+              />
             </div>
           </div>
           
           <button 
-            disabled={!studentInfo.name.trim() || !studentInfo.class.trim()}
+            disabled={!studentInfo.name.trim() || !studentInfo.class.trim() || isBeforeStart || isAfterEnd}
             onClick={() => {
+              const currentNow = Date.now();
+              if (startTimeStr && currentNow < new Date(startTimeStr).getTime()) {
+                alert(`Phòng thi chưa đến giờ mở đề! Giờ mở đề: ${new Date(startTimeStr).toLocaleString('vi-VN')}`);
+                return;
+              }
+              if (endTimeStr && currentNow > new Date(endTimeStr).getTime()) {
+                alert(`Đã hết thời hạn làm bài thi! Phòng thi đã đóng lúc ${new Date(endTimeStr).toLocaleString('vi-VN')}`);
+                return;
+              }
+
               setIsStarted(true);
               const mins = parseInt(String(examDuration), 10);
               if (!isUnlimited && !isNaN(mins) && mins > 0) {
-                setTimeLeft(mins * 60);
+                let totalSecs = mins * 60;
+                if (endTimeStr) {
+                  const secsUntilEnd = Math.floor((new Date(endTimeStr).getTime() - currentNow) / 1000);
+                  if (secsUntilEnd > 0 && secsUntilEnd < totalSecs) {
+                    totalSecs = secsUntilEnd;
+                  }
+                }
+                setTimeLeft(totalSecs);
               } else {
                 setTimeLeft(null);
               }
             }}
-            className="w-full py-3.5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="w-full py-3.5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
           >
-            Bắt đầu làm bài {isUnlimited ? "(Không giới hạn thời gian)" : `(${examDuration} phút)`}
+            {isBeforeStart 
+              ? "Chưa đến giờ mở đề" 
+              : isAfterEnd 
+              ? "Phòng thi đã đóng" 
+              : `Bắt đầu làm bài ${isUnlimited ? "(Không giới hạn thời gian)" : `(${examDuration} phút)`}`}
           </button>
         </div>
       </div>
@@ -431,7 +611,14 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
         <div className="max-w-4xl mx-auto px-4 py-3 flex justify-between items-center">
           <div>
-            <h1 className="font-bold text-slate-800 truncate max-w-md">{examTitle}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="font-bold text-slate-800 truncate max-w-md">{examTitle}</h1>
+              {examType && (
+                <span className="hidden sm:inline-block px-2 py-0.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded text-[11px] font-semibold">
+                  {examType}
+                </span>
+              )}
+            </div>
             <p className="text-xs text-slate-500">Học sinh: {studentInfo.name} - Lớp: {studentInfo.class} (Mã đề: {currentExam?.code || selectedCode || "101"})</p>
           </div>
           {isStarted && !isSubmitted && (
@@ -918,3 +1105,4 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
     </div>
   );
 }
+

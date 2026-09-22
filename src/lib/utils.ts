@@ -425,198 +425,226 @@ export function wrapNakedMathEnvironments(text: string): string {
 }
 
 /**
- * Chuẩn hóa ký hiệu toán học cả Unicode và LaTeX (không thuộc, phần bù, tập con, khác...)
+ * Chuyển đổi mã OMML (Office Math Markup Language) từ Word Equation sang LaTeX
  */
-export const cleanMathText = (content: string): string => {
-  if (!content) return '';
-  return content
-    // 1. Chuẩn hóa không thuộc về \notin (xử lý cả LaTeX và ký tự thường/Unicode)
-    .replace(/\\in\s*\//g, ' \\notin ')
-    .replace(/∈\s*\//g, ' \\notin ')
-    .replace(/∉/g, ' \\notin ')
-    .replace(/(?<=\s)in\s*\/(?=\s)/g, ' \\notin ')
-    .replace(/\\not\s*\\in/g, ' \\notin ')
-    .replace(/\\not\s+in(?![a-zA-Z])/g, ' \\notin ')
-    
-    // 2. Chuẩn hóa phần bù C_E A hoặc C_A B (tránh dính chữ CAB)
-    .replace(/C([A-Z])([A-Z])/g, 'C_{$1}$2')
-    .replace(/C_([A-Z])\s*([A-Z])/g, 'C_{$1}$2')
-    
-    // 3. Chuẩn hóa không phải tập con
-    .replace(/\\subset(eq)?\s*\//g, ' \\not\\subset ')
-    .replace(/⊂\s*\//g, ' \\not\\subset ')
-    .replace(/⊄/g, ' \\not\\subset ')
-    
-    // 4. Chuẩn hóa dấu khác
-    .replace(/=\s*\//g, ' \\ne ')
-    .replace(/\/\s*=/g, ' \\ne ')
-    .replace(/≠/g, ' \\ne ');
-};
+export const convertOmmlToLatex = (content: string): string => {
+  if (!content || !content.includes('<m:')) return content;
 
-export const sanitizeAndFormatMath = (rawText: string): string => {
-  if (!rawText) return '';
-  let text = rawText;
+  const ommlNodeToLatex = (nodeXml: string): string => {
+    if (!nodeXml) return '';
+    let xml = nodeXml.trim();
 
-  // Sửa lỗi bẻ đôi từ tiếng Việt do nhận nhầm nhãn a., a)
-  text = text
-    .replace(/trà\s+sữ\s*\n*\s*a\./gi, 'trà sữa. ')
-    .replace(/trà\s+sữ\s*\n*\s*a\)/gi, 'trà sữa) ')
-    .replace(/sữ\s*\n+\s*a\./gi, 'sữa. ');
+    // Phân số: <m:f><m:num>...</m:num><m:den>...</m:den></m:f>
+    xml = xml.replace(/<m:f[\s\S]*?>[\s\S]*?<m:num>([\s\S]*?)<\/m:num>[\s\S]*?<m:den>([\s\S]*?)<\/m:den>[\s\S]*?<\/m:f>/gi, (_m, num, den) => {
+      return `\\frac{${ommlNodeToLatex(num)}}{${ommlNodeToLatex(den)}}`;
+    });
 
-  // Tách dòng các câu hỏi bị dính chùm
-  text = text.replace(/([.!?])\s*(1[89]\.|2[0-9]\.|Câu\s+\d+:)/g, '$1\n\n$2');
-  text = text.replace(/([.!?])\s*(20\.|21\.|22\.|Câu\s+\d+:)/g, '$1\n\n$2');
+    // Căn thức: <m:rad>
+    xml = xml.replace(/<m:rad[\s\S]*?>([\s\S]*?)<\/m:rad>/gi, (_m, inner) => {
+      const degMatch = inner.match(/<m:deg>([\s\S]*?)<\/m:deg>/i);
+      const eMatch = inner.match(/<m:e>([\s\S]*?)<\/m:e>/i);
+      const deg = degMatch ? ommlNodeToLatex(degMatch[1]).trim() : '';
+      const e = eMatch ? ommlNodeToLatex(eMatch[1]).trim() : '';
+      return deg ? `\\sqrt[${deg}]{${e}}` : `\\sqrt{${e}}`;
+    });
 
-  // 1. TỰ ĐỘNG SỬA HỆ PHƯƠNG TRÌNH / BẤT PHƯƠNG TRÌNH (\begin{cases})
-  // Trường hợp có \end{cases} nhưng thiếu \begin{cases}:
-  text = text.replace(/(?<!\\begin\{cases\})\s*([\s\S]*?)\\end\{cases\}/g, (match, body) => {
-    // Nếu trong body chưa có \begin{cases}, tự động bổ sung
-    if (!body.includes('\\begin{cases}')) {
-      const lines = body.split(/\n\s*\n/);
-      if (lines.length > 1) {
-        const preamble = lines.slice(0, -1).join('\n\n');
-        const caseBody = lines[lines.length - 1];
-        return `${preamble}\n\n$$\\begin{cases} ${caseBody.trim()} \\end{cases}$$`;
+    // Chỉ số trên / dưới: sSubSup, sSub, sSup
+    xml = xml.replace(/<m:sSubSup[\s\S]*?>[\s\S]*?<m:e>([\s\S]*?)<\/m:e>[\s\S]*?<m:sub>([\s\S]*?)<\/m:sub>[\s\S]*?<m:sup>([\s\S]*?)<\/m:sup>[\s\S]*?<\/m:sSubSup>/gi, (_m, b, sub, sup) => {
+      return `{${ommlNodeToLatex(b)}}_{${ommlNodeToLatex(sub)}}^{${ommlNodeToLatex(sup)}}`;
+    });
+    xml = xml.replace(/<m:sSub[\s\S]*?>[\s\S]*?<m:e>([\s\S]*?)<\/m:e>[\s\S]*?<m:sub>([\s\S]*?)<\/m:sub>[\s\S]*?<\/m:sSub>/gi, (_m, b, sub) => {
+      return `{${ommlNodeToLatex(b)}}_{${ommlNodeToLatex(sub)}}`;
+    });
+    xml = xml.replace(/<m:sSup[\s\S]*?>[\s\S]*?<m:e>([\s\S]*?)<\/m:e>[\s\S]*?<m:sup>([\s\S]*?)<\/m:sup>[\s\S]*?<\/m:sSup>/gi, (_m, b, sup) => {
+      return `{${ommlNodeToLatex(b)}}^{${ommlNodeToLatex(sup)}}`;
+    });
+
+    // Dấu ngoặc và hệ phương trình: <m:d>
+    xml = xml.replace(/<m:d[\s\S]*?>([\s\S]*?)<\/m:d>/gi, (_m, inner) => {
+      const begChrMatch = inner.match(/<m:begChr\s+m:val="([^"]*)"/i);
+      const endChrMatch = inner.match(/<m:endChr\s+m:val="([^"]*)"/i);
+      const begChr = begChrMatch ? begChrMatch[1] : '(';
+      const endChr = endChrMatch ? endChrMatch[1] : ')';
+
+      const eqArrMatch = inner.match(/<m:eqArr[\s\S]*?>([\s\S]*?)<\/m:eqArr>/i);
+      if (eqArrMatch) {
+        const rows: string[] = [];
+        const eMatches = eqArrMatch[1].matchAll(/<m:e[\s\S]*?>([\s\S]*?)<\/m:e>/gi);
+        for (const em of eMatches) {
+          const rowContent = ommlNodeToLatex(em[1]).trim();
+          if (rowContent) rows.push(rowContent);
+        }
+        if (begChr === '{' && (!endChr || endChr === '')) {
+          return `\\begin{cases} ${rows.join(' \\\\ ')} \\end{cases}`;
+        }
+        if (begChr === '[' && (!endChr || endChr === '')) {
+          return `\\left[ \\begin{array}{l} ${rows.join(' \\\\ ')} \\end{array} \\right.`;
+        }
+        return `\\left${begChr === '{' ? '\\{' : (begChr || '.')} \\begin{aligned} ${rows.join(' \\\\ ')} \\end{aligned} \\right${endChr === '}' ? '\\}' : (endChr || '.')}`;
       }
-      return `$$\\begin{cases} ${body.trim()} \\end{cases}$$`;
-    }
-    return match;
+
+      const eMatch = inner.match(/<m:e[\s\S]*?>([\s\S]*?)<\/m:e>/i);
+      const content = eMatch ? ommlNodeToLatex(eMatch[1]).trim() : '';
+      const leftBracket = begChr === '{' ? '\\{' : (begChr || '.');
+      const rightBracket = endChr === '}' ? '\\}' : (endChr || '.');
+      return `\\left${leftBracket} ${content} \\right${rightBracket}`;
+    });
+
+    // Trích xuất văn bản trong <m:t>
+    xml = xml.replace(/<m:t[\s\S]*?>([\s\S]*?)<\/m:t>/gi, (_m, t) => t);
+
+    // Dọn các thẻ rác còn lại
+    return xml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  };
+
+  let text = content;
+
+  // Xử lý container <m:oMathPara>
+  text = text.replace(/<m:oMathPara[\s\S]*?>[\s\S]*?<\/m:oMathPara>/gi, (match) => {
+    const math = ommlNodeToLatex(match);
+    return math ? `$$${math}$$` : '';
   });
 
-  // Đảm bảo khối \begin{cases}...\end{cases} luôn được bọc trong cặp $$
-  text = text.replace(/(?<!\$)\\begin\{cases\}([\s\S]*?)\\end\{cases\}(?!\$)/g, '$$\\begin{cases}$1\\end{cases}$$');
-  // Chuẩn hóa dấu ngắt dòng cho cases (tránh dính dòng như 1002x)
-  text = text.replace(/\\\\(?=[a-zA-Z0-9])/g, '\\\\ ');
-
-  // Xử lý khối \begin{cases} lồng trong dấu single $
-  text = text.replace(/\$([^$]*?)\\begin\{cases\}([\s\S]*?)\\end\{cases\}([^$]*?)\$/g, 
-    (_match, before, casesContent, after) => {
-      const cleanBefore = before.trim() ? `$${before.trim()}$` : '';
-      const cleanCases = `$$\\begin{cases}${casesContent}\\end{cases}$$`;
-      const cleanAfter = after.trim() ? `$${after.trim()}$` : '';
-      return `${cleanBefore}\n${cleanCases}\n${cleanAfter}`.trim();
-    }
-  );
-
-  // 2. CHUẨN HÓA CÁC KÝ HIỆU PHỦ ĐỊNH & GẠCH CHÉO BỊ TÁCH
-  text = text
-    // Dấu không thuộc: \in/, \in /, \not\in, \not \in, ∈/ -> \notin
-    .replace(/\\in\s*\//g, ' \\notin ')
-    .replace(/∈\s*\//g, ' \\notin ')
-    .replace(/∉/g, ' \\notin ')
-    .replace(/(?<=\s)in\s*\/(?=\s)/g, ' \\notin ')
-    .replace(/\\not\s*\\in/g, ' \\notin ')
-    .replace(/\\not\s+in(?![a-zA-Z])/g, ' \\notin ')
-    // Dấu không phải tập con: \subset/, \subset /, \not\subset -> \not\subset
-    .replace(/\\subset(eq)?\s*\//g, ' \\not\\subset ')
-    .replace(/⊂\s*\//g, ' \\not\\subset ')
-    .replace(/⊄/g, ' \\not\\subset ')
-    .replace(/\\not\s*\\subset(eq)?(?![a-zA-Z])/g, ' \\not\\subset ')
-    // Dấu khác: =/, / =, \not= -> \ne
-    .replace(/=\s*\//g, ' \\ne ')
-    .replace(/\/\s*=/g, ' \\ne ')
-    .replace(/\\not\s*=/g, ' \\ne ')
-    .replace(/\\not\s*\\equiv/g, ' \\not\\equiv ')
-    .replace(/≠/g, ' \\ne ');
-
-  // 3. HÀN GẮN ĐỊNH NGHĨA PHÉP HIỆU & PHẦN BÙ
-  // Hàn gắn khối phép hiệu bị vỡ: {x \mid x \in A và x \notin B}
-  text = text.replace(
-    /\\?\{?\s*x\s*\\?mid\s*x\s*\\?in\s*A\s*(\\text\{\s*và\s*\}|và)\s*\$?x\s*\\notin\s*B\$?\s*\\?\}?/g,
-    '$$\\{x \\mid x \\in A \\text{ và } x \\notin B\\}$$'
-  );
-  text = text.replace(
-    /\{x\s*\|\s*x\s*\\in\s*A\s+và\s+x\s*\\notin\s*B\}/g,
-    '$$\\{x \\mid x \\in A \\text{ và } x \\notin B\\}$$'
-  );
-  // Chuẩn hóa ký hiệu phần bù C_A B hoặc C_E A
-  text = text
-    .replace(/\bC_([A-Z])([A-Z])\b/g, 'C_{$1}$2')
-    .replace(/\bC([A-Z])([A-Z])\b/g, 'C_{$1}$2')
-    .replace(/C_\{([A-Z])\}\s*([A-Z])/g, '\\mathrm{C}_{$1}$2');
-  text = text.replace(/(?<![\$a-zA-Z0-9\\])\\mathrm\{C\}_\{([A-Z])\}\s*([A-Z])(?![a-zA-Z0-9\$])/g, '$\\mathrm{C}_{$1}$2$');
-
-  // 4. PHỤC HỒI DẤU GẠCH CHÉO NGƯỢC (\) BỊ RỤNG
-  // Trong cặp dấu $...$
-  text = text.replace(/\$([^\$]+)\$/g, (match, formula) => {
-    let fixed = formula
-      .replace(/(?<!\\)\b(cap|cup|in|notin|subset|supset|subseteq|supseteq)\b/g, '\\$1')
-      .replace(/(?<!\\)\b(mathbb|mathbf|mathcal)\b/g, '\\$1')
-      .replace(/(?<!\\)\b(mid)\b/g, '\\mid ')
-      .replace(/(?<!\\)\b(sin|cos|tan|cot|lim)\b/g, '\\$1')
-      .replace(/(?<!\\)\b(sqrt|frac|left|right|le|ge|ne|times|pm|cdot)\b/g, '\\$1');
-    return `$${fixed}$`;
-  });
-  // Các từ dính ngoài cặp dấu $
-  text = text
-    .replace(/(?<!\\)\b([a-zA-Z])inmathbb([A-Z])mid/g, '$1 \\in \\mathbb{$2} \\mid ')
-    .replace(/(?<!\\)\b([a-zA-Z])\s*=\s*xinmathbb([A-Z])mid/g, '$1 = \\{x \\in \\mathbb{$2} \\mid ')
-    .replace(/(?<!\\)\b([a-zA-Z])\s*=\s*\\?\{?\s*x\s*in\s*mathbb\s*([A-Z])\s*\\?mid/g, '$1 = \\{x \\in \\mathbb{$2} \\mid ')
-    .replace(/(?<!\\)\b([A-Z])cap([A-Z])\b/g, '$1 \\ cap $2')
-    .replace(/(?<!\\)\b([A-Z])cup([A-Z])\b/g, '$1 \\cup $2')
-    .replace(/(?<!\\)\b([A-Z])setminus([A-Z])\b/g, '$1 \\setminus $2')
-    .replace(/(?<!\\)\b(emptyset)\b/g, '\\emptyset')
-    .replace(/(?<!\\)\b(cap|cup|setminus)\b/g, '\\$1')
-    .replace(/(?<!\\)\b(mathbb)([RZQCND])\b/g, '\\$1{$2}')
-    .replace(/(?<!\\)\b(mid)\b/g, '\\mid ')
-    .replace(/(\d+)?sqrt(\d+)/g, '$1\\sqrt{$2}')
-    .replace(/frac7sqrt33/g, '\\frac{7\\sqrt{3}}{3}')
-    .replace(/dcdottanalpha/g, 'd \\cdot \\tan\\alpha')
-    .replace(/(?<!\\)\b(cdot)\b/g, '\\cdot')
-    .replace(/\^\\\\+circ|\^\\circ|\^circ/g, '^{\\circ}')
-    .replace(/(\d+)\s*\^\{\\circ\}/g, '$1^{\\circ}');
-
-  text = text.replace(/(?<![\$a-zA-Z0-9])(\d+\^\{\\circ\})(?![\$a-zA-Z0-9])/g, '$$$1$$');
-  text = text.replace(/(?<![\$a-zA-Z0-9])((\d+)?\\sqrt\{\d+\})(?![\$a-zA-Z0-9])/g, '$$$1$$');
-
-  // Khắc phục thiếu ngoặc nhọn đóng ở cuối điều kiện tập hợp
-  text = text.replace(/([A-Z]\s*=\s*\\\{[^}]+=\s*0)(?!\})/g, '$1\\}');
-  text = text.replace(/([A-Z]\s*=\s*\\\{[^}]+<\s*\d+)(?!\})/g, '$1\\}');
-  text = text.replace(/([A-Z]\s*=\s*\\\{[^}]+>\s*\d+)(?!\})/g, '$1\\}');
-  text = text.replace(/([A-Z]\s*=\s*\\\{[^}]+(?:<=|>=|\\le|\\ge)\s*\d+)(?!\})/g, '$1\\}');
-
-  // 5. CÔNG THỨC NGHIỆM LƯỢNG GIÁC DẤU MÓC VUÔNG
-  // Nếu có dạng họ nghiệm sin/cos tuyển, ưu tiên dùng \left[ ... \right.
-  text = text.replace(/\\begin\s*\{cases\*?\}([\s\S]*?)\\end\s*\{cases\*?\}/g, (match, body) => {
-    const isTrig = /(?:k\s*2\s*\\pi|2\s*k\s*\\pi|k\s*\\pi|\b\d*k\pi\b|k\s*\\in\s*(?:\\mathbb\{Z\}|Z)|[+\-]\s*k\s*\\pi|[+\-]\s*k2\\pi)/i.test(body);
-    if (isTrig) {
-      let formattedBody = body.trim();
-      formattedBody = formattedBody.replace(/\\\\(?=[a-zA-Z0-9])/g, '\\\\ ');
-      return `\\left[\\begin{aligned} ${formattedBody} \\end{aligned}\\right.`;
-    }
-    return match;
+  // Xử lý container <m:oMath>
+  text = text.replace(/<m:oMath[\s\S]*?>[\s\S]*?<\/m:oMath>/gi, (match) => {
+    const math = ommlNodeToLatex(match);
+    return math ? `$${math}$` : '';
   });
 
-  // Tự động bọc ngoặc nhọn { } cho các phương án tập hợp
-  text = text.replace(/\b([A-Z])\s*=\s*(-?\d+(?:\s*;\s*-?\d+)*)\b/g, '$1 = \\{$2\\}');
-  text = text.replace(/(?<![\$a-zA-Z0-9])([A-Z]\s*=\s*\\\{[^$\n]+?\\\\})(?![\$a-zA-Z0-9])/g, '$$$1$$');
-  text = text.replace(/(?<![\$a-zA-Z0-9])([A-Z]\s*\\(?:cap|cup|setminus)\s*[A-Z])(?![\$a-zA-Z0-9])/g, '$$$1$$');
-
-  // Phục hồi môi trường cho ký hiệu toán trôi nổi ngoài dấu $
-  const floatSymbols = ['Leftrightarrow', 'Leftarrow', 'Rightarrow', 'notin', 'in', 'cap', 'cup', 'setminus', 'emptyset', 'neq', 'subset', 'supset'];
-  text = text.replace(new RegExp(`(?<![\\$a-zA-Z])\\\\(${floatSymbols.join('|')})(?![a-zA-Z])`, 'g'), (m, sym, offset, fullStr) => {
-    const before = fullStr.slice(0, offset);
-    const dollarsBefore = (before.match(/(?<!\\)\$/g) || []).length;
-    if (dollarsBefore % 2 === 0) {
-      return ` $\\${sym}$ `;
-    }
-    return m;
+  // Xử lý khối <m:d> độc lập
+  text = text.replace(/<m:d[\s\S]*?>[\s\S]*?<\/m:d>/gi, (match) => {
+    const math = ommlNodeToLatex(match);
+    return math ? `$$${math}$$` : '';
   });
-
-  text = text.replace(/(?<!\$)(m\s*\\in\s*\[\s*-?\d+\s*;\s*-?\d+\s*\])(?!\$)/g, '$$$1$$');
-  text = text.replace(/(?<!\$)([a-zA-Z]\s*\\in\s*[\(\[]\s*-?\d+\s*;\s*-?\d+\s*[\)\]])(?!\$)/g, '$$$1$$');
-  text = text.replace(/(?<!\$)([A-Z]\s*=\s*[\(\[]\s*-?\d+\s*;\s*-?\d+\s*[\)\]])(?!\$)/g, '$$$1$$');
-
-  if (text.includes('\\{') && !text.includes('$') && !/[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/i.test(text)) {
-    text = `$${text}$`;
-  }
 
   return text;
 };
 
-export const masterSanitizeLatex = sanitizeAndFormatMath;
-export const masterSanitizeMath = sanitizeAndFormatMath;
-export const repairSetTheorySyntax = sanitizeAndFormatMath;
+/**
+ * Chuẩn hóa văn bản & công thức toán trước khi render:
+ * 1. Sửa lỗi chính tả văn bản thông dụng (ví dụ: "và o các khoảng trống" -> "vào các khoảng trống")
+ * 2. Tự động tách liên từ "và", "hoặc", "với" bị dính giữa 2 công thức (vd: )vàB =, ]vàB =)
+ * 3. Tách cặp $ nếu liên từ "và", "hoặc", "hay", "với" bị bao bọc bên trong công thức math
+ * 4. Tự động bao bọc các biểu thức tập hợp trần A = [a; b) vào cặp dấu $...$
+ * 5. Định dạng typography dòng "Đáp số: ........" cho đồng đều và đẹp mắt
+ */
+export const polishMathText = (content: string): string => {
+  if (!content) return '';
+  let text = content;
+
+  // 1. Sửa lỗi chính tả văn bản thông dụng
+  text = text.replace(/và\s+o\s+các\s+khoảng\s+trống/gi, 'vào các khoảng trống');
+  text = text.replace(/và\s+o\s+(?:các\s+)?(?:khoảng|chỗ)\s+trống/gi, 'vào các khoảng trống');
+
+  // 2. Tự động tách liên từ "và", "hoặc", "với" bị dính giữa 2 công thức (vd: )vàB =, ]vàB =)
+  // Trường hợp nằm ngoài hoặc trong dấu $, bảo vệ không phá vỡ từ tiếng Việt (vào, vàng, vài)
+  text = text
+    .replace(/([\)\]\}0-9a-zA-Z])(?<!\s)và(?!(?:o|i|ng|c|t)\b)([A-Za-z])/g, '$1 và $2')
+    .replace(/([\)\]\}0-9a-zA-Z])(?<!\s)hoặc([A-Za-z])/g, '$1 hoặc $2')
+    .replace(/([\)\]\}0-9a-zA-Z])(?<!\s)với([A-Za-z])/g, '$1 với $2')
+    .replace(/([\)\]\}0-9a-zA-Z])\s*và\s*([A-Z])/g, '$1 và $2')
+    .replace(/([\)\]\}0-9a-zA-Z])\s*hoặc\s*([A-Z])/g, '$1 hoặc $2')
+    .replace(/([\)\]\}0-9a-zA-Z])\s*với\s*([A-Z])/g, '$1 với $2');
+
+  // Bảo vệ tạm thời các khối \text{...} để không vô tình xé rách văn bản đã được bọc chuẩn
+  const textTokens: string[] = [];
+  text = text.replace(/\\text\{[^{}]*\}/g, (match) => {
+    textTokens.push(match);
+    return `___POLISH_TEXT_${textTokens.length - 1}___`;
+  });
+
+  // 3. Tách cặp $ nếu liên từ "và", "hoặc", "hay", "với" bị bao bọc bên trong công thức math
+  // Ví dụ: $A = [-4; 5) và B = (-2; 7]$ -> $A = [-4; 5)$ và $B = (-2; 7]$
+  // Đảm bảo p1 và p2 không phải chỉ toàn khoảng trắng hoặc rỗng (tránh match nhầm $ và $)
+  let prev = '';
+  let iter = 0;
+  while (prev !== text && iter < 4) {
+    prev = text;
+    iter++;
+    text = text.replace(/\$([^\$\s][^\$]*?)\s+(và|hoặc|hay|với)\s+([^\$]*?[^\$\s])\$/g, (_match, p1, conj, p2) => {
+      return `$${p1.trim()}$ ${conj} $${p2.trim()}$`;
+    });
+    // Xử lý trường hợp không có khoảng trắng: $A = [-4; 5)vàB = (-2; 7]$
+    text = text.replace(/\$([^\$\s][^\$]*?)(và|hoặc|hay|với)([^\$]*?[^\$\s])\$/g, (_match, p1, conj, p2) => {
+      return `$${p1.trim()}$ ${conj} $${p2.trim()}$`;
+    });
+  }
+
+  // Khôi phục các khối \text{...}
+  text = text.replace(/___POLISH_TEXT_(\d+)___/g, (_m, idx) => textTokens[Number(idx)] || '');
+
+  // 4. Bọc các biểu thức tập hợp đứng trần như A = [-4; 5) thành $A = [-4; 5)$
+  text = text.replace(/(?<!\$)\b([A-Z]\s*=\s*[\[\(][^\]\)\n]+[\]\)])(?!\$)/g, '$$$1$$');
+
+  // 5. Định dạng dòng "Đáp số: ........" cho đồng đều và đẹp mắt
+  text = text.replace(/(?:\*?Đáp số:\*?\s*)[\.]{3,}/gi, '*Đáp số:* ................................................................');
+
+  return text;
+};
+
+export const sanitizeAndFormatMath = polishMathText;
+
+/**
+ * Chuẩn hóa và khắc phục triệt để lỗi vỡ công thức:
+ * 1. Dấu khác bị tách: / =, /=, \not= -> \ne
+ * 2. Dấu không thuộc: ∈/, ∈ /, \in/, \in /, \not\in -> \notin
+ * 3. Dấu không phải tập con: ⊂/, \subset/, \not\subset -> \not\subset
+ * 4. Hàn gắn khối Phép Hiệu {x | x ∈ A và x ∉ B} bị vỡ hoặc rách dấu $$
+ * 5. Dọn dẹp dấu $ thừa hoặc cọc cạch
+ * 6. Tự động chuyển đổi các thẻ OMML Word Math sang LaTeX KaTeX
+ * 7. Tách bạch liên từ và, hoặc, với giữa các công thức math
+ */
+export const sanitizeMathBeforeRender = (content: string): string => {
+  if (!content) return '';
+  let text = polishMathText(content);
+
+  // BƯỚC 0: Tự động chuyển đổi XML OMML Word Equation nếu có
+  text = convertOmmlToLatex(text);
+
+  // BƯỚC 1: Xử lý dứt điểm dấu "khác" (/ =, /=, \not=, =)
+  text = text
+    .replace(/\/\s*=\s*/g, ' \\ne ')
+    .replace(/=\s*\/\s*/g, ' \\ne ')
+    .replace(/\\not\s*=\s*/g, ' \\ne ');
+
+  // BƯỚC 2: Xử lý dứt điểm dấu "không thuộc" (∈/, ∈ /, \in/, \in /, \not\in)
+  text = text
+    .replace(/(?:\\in|∈)\s*\/\s*/g, ' \\notin ')
+    .replace(/\\not\s*\\in\s*/g, ' \\notin ')
+    .replace(/\\not\s+in(?![a-zA-Z])/g, ' \\notin ');
+
+  // BƯỚC 3: Xử lý dấu "không phải tập con" (⊂/, \subset/, \not\subset)
+  text = text
+    .replace(/(?:\\subset|⊂)(?:eq)?\s*\/\s*/g, ' \\not\\subset ')
+    .replace(/\\not\s*\\subset(?:eq)?(?![a-zA-Z])/g, ' \\not\\subset ');
+
+  // BƯỚC 4: Hàn gắn khối Phép Hiệu {x | x ∈ A và x ∉ B}
+  // Bắt mọi trường hợp vỡ khối kể cả khi có \mid, |, chữ "và", "hoặc"
+  text = text.replace(
+    /A\s*\\setminus\s*B\s*=\s*\{?\s*x\s*(?:\\mid|\|)\s*x\s*(?:\\in|∈)\s*A\s*(?:\\text\{\s*và\s*\}|và)\s*x\s*(?:\\notin|\\in\s*\/|∈\s*\/)\s*B\s*\}?\s*\${0,2}/gi,
+    '$$A \\setminus B = \\{x \\mid x \\in A \\text{ và } x \\notin B\\}$$'
+  );
+
+  // Bắt các khối tổng quát dạng {x \mid ... và ...} bị rách dấu $$
+  text = text.replace(/\{\s*x\s*\\mid\s*x\s*\\in\s*([A-Z])\s*và\s*x\s*\\notin\s*([A-Z])\s*\}\${1,2}/gi, 
+    '$$\\{x \\mid x \\in $1 \\text{ và } x \\notin $2\\}$$'
+  );
+
+  // Bắt các trường hợp tổng quát X \setminus Y
+  text = text.replace(
+    /(?<!\\text\{\s*)([A-Z])\s*\\setminus\s*([A-Z])\s*=\s*\{?\s*x\s*(?:\\mid|\|)\s*x\s*(?:\\in|∈)\s*\1\s*(?<!\\text\{\s*)và\s*x\s*(?:\\notin|\\in\s*\/|∈\s*\/)\s*\2\s*\}?\s*\${0,2}/gi,
+    (_m, p1, p2) => `$$${p1} \\setminus ${p2} = \\{x \\mid x \\in ${p1} \\text{ và } x \\notin ${p2}\\}$$`
+  );
+
+  // BƯỚC 5: Dọn dẹp các dấu $ thừa hoặc cọc cạch
+  text = text
+    .replace(/\${3,}/g, '$$')
+    .replace(/([a-zA-Z0-9\emptyset\\])\s*\/\s*=\s*([a-zA-Z0-9\emptyset\\])/g, '$1 \\ne $2');
+
+  return text;
+};
+
+export const normalizeMathContent = sanitizeMathBeforeRender;
 
 /**
  * Chuẩn hóa toàn cục công thức toán LaTeX (Khóa vĩnh viễn bộ lọc chuẩn hóa):
@@ -626,29 +654,35 @@ export const repairSetTheorySyntax = sanitizeAndFormatMath;
  */
 export const normalizeMathLatex = (rawText: string): string => {
   if (!rawText) return '';
-  let text = masterSanitizeMath(rawText);
-  text = cleanMathText(text);
+  let text = sanitizeMathBeforeRender(rawText);
+
+  // BƯỚC 0: Tách rời các từ nối tiếng Việt bị dính liền với ký tự toán và sửa rách dấu $$ (vd: 3hoặcm -> 3 hoặc m, $$hoặc$$ -> hoặc)
+  text = text
+    .replace(/([0-9a-zA-Z\$\\])(?<!\s)(hoặc|hay)(?=[a-zA-Z0-9\$\\])/gi, '$1 $2 ')
+    .replace(/([0-9a-zA-Z\$\\])(?<!\s)và(?!(?:o|i|ng|c|t)\b)(?=[a-zA-Z0-9\$\\])/gi, '$1 và ')
+    .replace(/(hoặc|hay)(?=[a-zA-Z0-9])/gi, '$1 ')
+    .replace(/và(?!(?:o|i|ng|c|t)\b)(?=[a-zA-Z0-9])/gi, 'và ')
+    .replace(/(?<=[a-zA-Z0-9\$\\])(hoặc|hay)/gi, ' $1')
+    .replace(/(?<=[a-zA-Z0-9\$\\])và(?!(?:o|i|ng|c|t)\b)/gi, ' và')
+    .replace(/\$\$\s*(hoặc|và|hay)\s*\$\$/gi, ' $1 ')
+    .replace(/\$\$\s*(hoặc|và|hay)\s*/gi, '$ $1 ')
+    .replace(/\s*(hoặc|và|hay)\s*\$\$/gi, ' $1 $')
+    .replace(/\$\s*(hoặc|và|hay)\s*\$/gi, ' $1 ');
 
   // BƯỚC 1: Xử lý các biến thể ký hiệu gạch chéo bị lệch sang phải hoặc tách rời
   text = text
-    // Dấu không thuộc: \in/, \in /, \not\in, \not \in, ∈/, ∈ /
+    // Dấu không thuộc: \in/, \in /, \not\in, \not \in
     .replace(/\\in\s*\//g, ' \\notin ')
-    .replace(/∈\s*\//g, ' \\notin ')
-    .replace(/∉/g, ' \\notin ')
-    .replace(/(?<=\s)in\s*\/(?=\s)/g, ' \\notin ')
     .replace(/\\not\s*\\in/g, ' \\notin ')
     .replace(/\\not\s+in(?![a-zA-Z])/g, ' \\notin ')
-    // Dấu không phải tập con: \subset/, \subset /, \not\subset, ⊂/, ⊄
+    // Dấu không phải tập con: \subset/, \subset /, \not\subset
     .replace(/\\subset(eq)?\s*\//g, ' \\not\\subset ')
     .replace(/\\not\s*\\subset(eq)?(?![a-zA-Z])/g, ' \\not\\subset ')
-    .replace(/⊂\s*\//g, ' \\not\\subset ')
-    .replace(/⊄/g, ' \\not\\subset ')
-    // Dấu khác: =/, = /, /=, \not=, ≠
+    // Dấu khác: =/, = /, /=, \not=
     .replace(/=\s*\//g, ' \\ne ')
     .replace(/\/\s*=/g, ' \\ne ')
     .replace(/\\not\s*=/g, ' \\ne ')
-    .replace(/\\not\s*\\equiv/g, ' \\not\\equiv ')
-    .replace(/≠/g, ' \\ne ');
+    .replace(/\\not\s*\\equiv/g, ' \\not\\equiv ');
 
   // BƯỚC 2: Tự động khôi phục dấu backslash (\) bị mất bên trong công thức
   // Áp dụng cho nội dung nằm trong cặp dấu $...$ hoặc các cụm từ khóa toán học đặc trưng
@@ -669,12 +703,7 @@ export const normalizeMathLatex = (rawText: string): string => {
   text = text
     .replace(/(?<!\\)\b([a-zA-Z])inmathbb([A-Z])mid/g, '$1 \\in \\mathbb{$2} \\mid ')
     .replace(/(?<!\\)\b([A-Z])cap([A-Z])\b/g, '$1 \\cap $2')
-    .replace(/(?<!\\)\b([A-Z])cup([A-Z])\b/g, '$1 \\cup $2')
-    // Tự động bọc naked C_{A}B hoặc C_A B
-    .replace(/(?<![\$a-zA-Z0-9\\])\bC_\{([A-Z])\}\s*([A-Z])\b(?![a-zA-Z0-9\$])/g, '$C_{$1}$2$')
-    .replace(/(?<![\$a-zA-Z0-9\\])\bC_([A-Z])\s+([A-Z])\b(?![a-zA-Z0-9\$])/g, '$C_{$1}$2$')
-    // Tự động bọc naked x \notin B
-    .replace(/(?<![\$a-zA-Z0-9\\])\b([a-zA-Z0-9]+)\s*\\notin\s*([a-zA-Z0-9]+)\b(?![a-zA-Z0-9\$])/g, '$$$1 \\notin $2$$');
+    .replace(/(?<!\\)\b([A-Z])cup([A-Z])\b/g, '$1 \\cup $2');
 
   // BƯỚC 4: Tự động bọc $$ cho hệ phương trình \begin{cases} nếu thiếu
   text = text
@@ -683,6 +712,77 @@ export const normalizeMathLatex = (rawText: string): string => {
     .replace(/\\\\(?=[a-zA-Z0-9])/g, '\\\\ ');
 
   return text;
+};
+
+/**
+ * Khắc phục triệt để lỗi rách dấu $$ và dính chữ tiếng Việt ("hoặc", "và", "hay") trong 4 phương án trắc nghiệm:
+ * 1. Tách rời các từ nối tiếng Việt bị dính liền với số/ký tự (vd: 3hoặcm -> 3 hoặc m, avàa -> a và a)
+ * 2. Sửa lỗi đóng/mở $$ bị rách giữa biểu thức (vd: \ge 3$$ hoặc $$m \le -1)
+ * 3. Tách từ nối ra ngoài dấu $ và tự động bọc $ cho các vế công thức
+ */
+export const fixInlineOptionText = (text: string): string => {
+  if (!text) return '';
+  let res = text;
+
+  // Giữ lại nhãn phương án nếu có (vd: A., B., C., D. hoặc **A.**, - A.)
+  let prefix = '';
+  const prefixMatch = res.match(/^(\s*(?:[-*]\s*)?(?:\*{0,2})[A-Da-d][\.\:\)](?:\*{0,2})\s*)/);
+  if (prefixMatch) {
+    prefix = prefixMatch[1];
+    res = res.slice(prefix.length);
+  }
+
+  // Bảo vệ tạm thời các khối \text{...} để không bị bóc tách nhầm các từ hoặc, và, hay bên trong \text{}
+  const textTokens: string[] = [];
+  res = res.replace(/\\text\{[^{}]*\}/g, (match) => {
+    textTokens.push(match);
+    return `___TEXT_TOKEN_${textTokens.length - 1}___`;
+  });
+
+  // Bước 1: Tách rời các từ nối tiếng Việt bị dính liền với số/ký tự (vd: 3hoặcm -> 3 hoặc m, avàa -> a và a)
+  res = res
+    .replace(/([0-9a-zA-Z\$\\])(?<!\s)(hoặc|hay)(?=[a-zA-Z0-9\$\\])/gi, '$1 $2 ')
+    .replace(/([0-9a-zA-Z\$\\])(?<!\s)và(?!(?:o|i|ng|c|t)\b)(?=[a-zA-Z0-9\$\\])/gi, '$1 và ')
+    .replace(/(hoặc|hay)(?=[a-zA-Z0-9])/gi, '$1 ')
+    .replace(/và(?!(?:o|i|ng|c|t)\b)(?=[a-zA-Z0-9])/gi, 'và ')
+    .replace(/(?<=[a-zA-Z0-9\$\\])(hoặc|hay)/gi, ' $1')
+    .replace(/(?<=[a-zA-Z0-9\$\\])và(?!(?:o|i|ng|c|t)\b)/gi, ' và');
+
+  // Bước 2: Sửa lỗi đóng/mở $$ bị rách giữa biểu thức (vd: \ge 3$$ hoặc $$m \le -1)
+  res = res
+    .replace(/\$\$\s*(hoặc|và|hay)\s*\$\$/gi, ' $1 ')
+    .replace(/\$\$\s*(hoặc|và|hay)\s*/gi, '$ $1 ')
+    .replace(/\s*(hoặc|và|hay)\s*\$\$/gi, ' $1 $')
+    .replace(/\$\s*(hoặc|và|hay)\s*\$/gi, ' $1 ');
+
+  // Bước 3: Nếu một phương án chứa công thức nhưng thiếu cặp dấu $ ở đầu/cuối:
+  // Ví dụ: `m \ge 3 hoặc m+2 \le 1` -> `$m \ge 3$ hoặc $m+2 \le 1$`
+  const parts = res.split(/\s+(hoặc|và|hay)\s+/gi);
+  if (parts.length > 1) {
+    res = parts.map(part => {
+      const trimmed = part.trim();
+      if (['hoặc', 'và', 'hay'].includes(trimmed.toLowerCase())) {
+        return trimmed;
+      }
+      // Nếu vế có chứa ký hiệu toán (\ge, \le, <, >, +, -, =, v.v.) mà chưa bọc đủ dấu $
+      if (/[\\<>=+\-\^_\/]/.test(trimmed) || /\b\d+[a-zA-Z]\b/.test(trimmed)) {
+        const cleanPart = trimmed.replace(/\$/g, '').trim();
+        return `$${cleanPart}$`;
+      }
+      return trimmed;
+    }).join(' ');
+  } else {
+    // Nếu không có từ nối nhưng có lệnh LaTeX trần trụi thiếu $ (vd: b \le a)
+    if (/[\\<>=]/.test(res) && !res.includes('$')) {
+      res = `$${res}$`;
+    }
+  }
+
+  // Khôi phục lại các khối \text{...}
+  res = res.replace(/___TEXT_TOKEN_(\d+)___/g, (_m, idx) => textTokens[Number(idx)] || '');
+
+  // Dọn dẹp khoảng trắng và dấu $ thừa
+  return (prefix + res.replace(/\${3,}/g, '$$')).trim();
 };
 
 /**
@@ -742,6 +842,12 @@ export function cleanOptionText(opt: any): string {
   if (!opt && opt !== 0) return '';
   let text = String(opt).trim();
   
+  // Tiền xử lý dứt điểm các lỗi vỡ công thức phép hiệu và tách dấu khác
+  text = sanitizeMathBeforeRender(text);
+
+  // Tách rời chữ tiếng Việt bị dính vào công thức và sửa rách dấu $$
+  text = fixInlineOptionText(text);
+
   // 1. Remove leading option prefixes like "A.", "A)", "A:", "a.", "a)"
   text = text.replace(/^[A-Da-d][\.\:\)]\s*/, '').trim();
 
@@ -749,24 +855,24 @@ export function cleanOptionText(opt: any): string {
   text = text.replace(/([\.\;\,])\s*\$+$/g, '$1').trim();
   text = text.replace(/([\.\;\,])\s*\$+(\s)/g, '$1$2').trim();
 
-  // 3. Remove redundant outer $ or $$ wrapping the entire option (especially if multiline or with spaces)
-  // e.g. "$\n\begin{cases}...\end{cases}\n$" or "$ \begin{cases}... $" or "$$ ... $$"
-  text = text.replace(/^\s*\${1,2}\s*([\s\S]*?)\s*\${1,2}\s*$/, '$1').trim();
+  // 3. Remove redundant outer $ or $$ wrapping the entire option (chỉ khi là một công thức đơn lẻ, không bóc nhầm các biểu thức nối bởi hoặc/và/hay)
+  const dollarCount = (text.match(/(?<!\\)\$/g) || []).length;
+  const hasConjunction = /\b(hoặc|và|hay)\b/i.test(text);
+  if (!hasConjunction && (dollarCount === 2 || (dollarCount === 4 && text.startsWith('$$') && text.endsWith('$$')))) {
+    text = text.replace(/^\s*\${1,2}\s*([\s\S]*?)\s*\${1,2}\s*$/, '$1').trim();
+  }
 
   // 4. Remove trailing orphan dollar signs after punctuation again
   text = text.replace(/([\.\;\,])\s*\$+$/g, '$1').trim();
 
   // 5. If there is an odd number of dollar signs and the string ends with a dollar sign, remove the trailing orphan dollar
-  let dollarCount = (text.match(/(?<!\\)\$/g) || []).length;
-  if (dollarCount % 2 !== 0 && text.endsWith('$')) {
+  let currentDollars = (text.match(/(?<!\\)\$/g) || []).length;
+  if (currentDollars % 2 !== 0 && text.endsWith('$')) {
     text = text.replace(/\s*\$+$/, '').trim();
   }
 
   // 6. Normalize infinity in all forms
   text = normalizeInfinity(text);
-
-  // 6.5. Tự động khôi phục cấu trúc tập hợp cho phương án trắc nghiệm (A = 1; 2 -> A = {1; 2})
-  text = repairSetTheorySyntax(text);
 
   // 7. If it contains a LaTeX block environment (cases, array, matrix, aligned, etc.)
   // Wrap it tightly as inline math $...$ so it renders right next to "A." without stray dollars or newlines
@@ -790,10 +896,10 @@ export function cleanOptionText(opt: any): string {
 
   // 9. Check if text already has complete $...$ pairs
   const hasMatchedDollars = /(?<!\\)\$[^$\n]+?(?<!\\)\$/.test(text);
-  dollarCount = (text.match(/(?<!\\)\$/g) || []).length;
+  currentDollars = (text.match(/(?<!\\)\$/g) || []).length;
 
   // TUYỆT ĐỐI không tự động gắn thêm dấu $ vào cuối chuỗi nếu chuỗi đã có cặp dấu $...$ hoàn chỉnh!
-  if (!hasMatchedDollars && dollarCount === 0) {
+  if (!hasMatchedDollars && currentDollars === 0) {
     const hasVietnameseWords = /[a-zA-Zàáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]{2,}\s+[a-zA-Zàáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]{2,}/i.test(text);
     if (!hasVietnameseWords && /(?:[\\^_=><\+\-\*\/]|\d+[a-zA-Z]|[a-zA-Z]\d+)/.test(text) && !/^(đúng|sai|có|không|luôn|tất cả|cả|đáp án|phương án|với|hàm số|điểm)\b/i.test(text)) {
       if (!text.startsWith('$') && !text.endsWith('$')) {
@@ -801,6 +907,10 @@ export function cleanOptionText(opt: any): string {
       }
     }
   }
+
+  // Đảm bảo bóc tách từ nối và chuẩn hóa lại lần cuối
+  text = sanitizeMathBeforeRender(text);
+  text = fixInlineOptionText(text);
 
   // Final cleanup of any trailing orphan dollar or trailing dollar after punctuation
   text = text.replace(/([\.\;\,])\s*\$+$/g, '$1').trim();
@@ -842,12 +952,6 @@ export function cleanQuestionStem(content: any, options?: any[], tfStatements?: 
     .replace(/\s{2,}/g, ' ')
     .trim();
 
-  // Sửa lỗi bẻ đôi từ tiếng Việt như "trà sữa" trước khi xử lý nhãn
-  text = text
-    .replace(/trà\s+sữ\s*\n*\s*a\./gi, 'trà sữa. ')
-    .replace(/trà\s+sữ\s*\n*\s*a\)/gi, 'trà sữa) ')
-    .replace(/sữ\s*\n+\s*a\./gi, 'sữa. ');
-
   // If the question has separate options array
   if (options && options.length >= 2) {
     // 1. Remove HTML grid of options if present
@@ -864,9 +968,7 @@ export function cleanQuestionStem(content: any, options?: any[], tfStatements?: 
   // If the question has separate tfStatements array (True/False question)
   if (tfStatements && tfStatements.length >= 2) {
     // Remove duplicate trailing sub-statements: a) ... b) ... c) ... d) ... from stem
-    // Chỉ cắt khi nhãn a), a. đứng đầu dòng mới hoặc sau dấu chấm/dấu hai chấm ngắt câu rõ ràng
-    text = text.replace(/(?:\r?\n)+(?:[-*]\s*)?(?:\*{0,2})a[\.:\)]\s+[\s\S]*$/i, '');
-    text = text.replace(/(?:[\.:]\s+)(?:[-*]\s*)?(?:\*{0,2})a\)\s+[\s\S]*$/i, '.');
+    text = text.replace(/(?:\r?\n|\s)*(?:[-*]\s*)?(?:\*{0,2})a[\.:\)]\s+[\s\S]*$/i, '');
   }
   
   return text.trim();
