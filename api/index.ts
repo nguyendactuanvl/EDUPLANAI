@@ -18,8 +18,16 @@ const MATH_FORMATTING_RULES = `QUY TẮC ĐỊNH DẠNG TOÁN HỌC VÀ VĂN B�
 3. Công thức nằm riêng một dòng độc lập: Luôn kẹp trong cặp dấu $$...$$.
 4. Ký hiệu bắt buộc: Phân số dùng \\dfrac{a}{b}, hệ phương trình dùng \\begin{cases} ... \\end{cases}, dấu khác (không bằng) BẮT BUỘC dùng \\neq (tuyệt đối KHÔNG viết dạng "/ =", "/=", "!=" hay "=/=").
    Ký hiệu vô cực (vô cùng) BẮT BUỘC dùng \\infty: $-\\infty, +\\infty$. Tuyệt đối KHÔNG viết thiếu dấu gạch chéo thành -infty, +infty hay in fty. Các khoảng như $(-\\infty; -1)$, $(-1; +\\infty)$ BẮT BUỘC có \\ trước infty.
-5. Bố cục văn bản dùng định dạng Markdown rõ ràng.
-6. [CỰC KỲ QUAN TRỌNG] BẢNG BIẾN THIÊN VÀ ĐỒ THỊ BẰNG TIKZ:
+5. [CỰC KỲ QUAN TRỌNG] QUY ƯỚC CÔNG THỨC NGHIỆM PHƯƠNG TRÌNH LƯỢNG GIÁC (CHUẨN TOÁN HỌC & KATEX):
+   - Khi biểu diễn họ nghiệm tuyển của phương trình lượng giác (\\sin, \\cos, \\tan, \\cot hoặc các bài toán phương trình có nghiệm phân nhánh "hoặc"):
+     + BẮT BUỘC sử dụng dấu móc vuông \\left[ kết hợp \\begin{aligned} ... \\end{aligned}\\right. thay vì dấu móc nhọn \\begin{cases}.
+     + Cú pháp chuẩn KaTeX:
+       $$\\left[\\begin{aligned} x &= \\alpha + k2\\pi \\\\ x &= \\pi - \\alpha + k2\\pi \\end{aligned}\\right. \\quad (k \\in \\mathbb{Z})$$
+       (hoặc viết trong dòng: $\\left[\\begin{aligned} x &= \\alpha + k2\\pi \\\\ x &= \\pi - \\alpha + k2\\pi \\end{aligned}\\right.$).
+     + TUYỆT ĐỐI KHÔNG dùng \\begin{cases} cho họ nghiệm lượng giác (vì \\begin{cases} là dấu ngoặc nhọn biểu thị hệ 'và', trong khi các họ nghiệm lượng giác phân nhánh là tuyển 'hoặc', toán học quy chuẩn dùng dấu ngoặc vuông \\left[).
+   - GIỮ NGUYÊN dấu móc nhọn \\begin{cases} ... \\end{cases} cho hệ phương trình / hệ bất phương trình (điều kiện đồng thời xảy ra).
+6. Bố cục văn bản dùng định dạng Markdown rõ ràng.
+7. [CỰC KỲ QUAN TRỌNG] BẢNG BIẾN THIÊN VÀ ĐỒ THỊ BẰNG TIKZ:
    - BẮT BUỘC đặt toàn bộ code vẽ bảng biến thiên hoặc đồ thị vào trong khối markdown \`\`\`tikz ... \`\`\`. 
    - BẮT BUỘC phải bao bọc mã bên trong \\begin{tikzpicture} và \\end{tikzpicture}. KHÔNG DÙNG pgfplots (axis).
    - VỚI BẢNG BIẾN THIÊN: Dùng gói tkz-tab chuẩn mực. KHÔNG dùng môi trường ma trận array.
@@ -82,7 +90,14 @@ const MATH_FORMATTING_RULES = `QUY TẮC ĐỊNH DẠNG TOÁN HỌC VÀ VĂN B�
         { "statement": "Nội dung ý d", "correct": true/false }
       ]
     - PHẦN TRẮC NGHIỆM 4 LỰA CHỌN (loại "mc"): BẮT BUỘC đủ 4 phương án A, B, C, D hoàn chỉnh trong mảng "options".
-    - PHẦN TRẢ LỜI NGẮN (loại "sa"): Đưa ra câu hỏi định lượng và giá trị số/kết quả chính xác trong "correctAnswer".`;
+    - PHẦN TRẢ LỜI NGẮN (loại "sa"): Đưa ra câu hỏi định lượng và giá trị số/kết quả chính xác trong "correctAnswer".
+      + [RÀNG BUỘC ĐẶC BIỆT CHO CHỦ ĐỀ TẬP HỢP]:
+        * TUYỆT ĐỐI KHÔNG ra đề yêu cầu "Tìm tập hợp", "Viết kết quả dưới dạng khoảng/đoạn/nửa khoảng" hay biểu diễn nghiệm dưới dạng tập hợp.
+        * BẮT BUỘC câu hỏi phải có đáp số là MỘT CON SỐ CỤ THỂ, ví dụ:
+          . "Tập hợp $A \cap B$ có bao nhiêu phần tử là số nguyên?"
+          . "Biết $A \cap B = (a; b)$. Tính giá trị của biểu thức $T = a + b$ (hoặc $T = 2a - b$)?"
+          . "Tính độ dài của khoảng/đoạn..."
+        * Đảm bảo đáp số luôn là MỘT SỐ NGUYÊN hoặc SỐ THẬP PHÂN có ĐỘ DÀI TỐI ĐA 4 KÝ TỰ (ví dụ: "3", "-2", "15", "2.5", "-0.5").`;
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
@@ -110,24 +125,54 @@ setInterval(() => {
 }, 60 * 1000);
 
 
+async function extractTextFromPdf(buffer: Buffer): Promise<string> {
+  try {
+    const pdfModule = await import('pdf-parse');
+    const mod: any = pdfModule;
+    if (typeof mod === 'function') {
+      const data = await mod(buffer);
+      return data?.text || '';
+    }
+    if (mod?.default && typeof mod.default === 'function') {
+      const data = await mod.default(buffer);
+      return data?.text || '';
+    }
+    const PDFParseClass = mod?.PDFParse || mod?.default?.PDFParse;
+    if (PDFParseClass) {
+      const parser = new PDFParseClass({ data: buffer });
+      const res = await parser.getText();
+      return res?.text || '';
+    }
+  } catch (err) {
+    console.warn("PDF text parse error:", err);
+  }
+  return '';
+}
+
 async function processFilesForAI(files: any[]) {
   const processedFiles = [];
   for (const f of files) {
     if (!f.data) continue;
     try {
+      let rawBase64 = typeof f.data === 'string' ? f.data.trim() : '';
+      if (rawBase64.startsWith('data:')) {
+        rawBase64 = rawBase64.replace(/^data:[^;]+;base64,/, '').trim();
+      }
+
       let isDoc = f.type === 'application/msword' || f.name?.endsWith('.doc');
       let isDocx = f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || f.name?.endsWith('.docx');
+      let isPdf = f.type === 'application/pdf' || f.name?.toLowerCase().endsWith('.pdf') || rawBase64.startsWith('JVBERi0');
       
       // Fallback identification based on data signature if type/name is missing
-      if (!isDoc && !isDocx && f.data.startsWith('0M8R4KGxGuE')) {
+      if (!isDoc && !isDocx && !isPdf && rawBase64.startsWith('0M8R4KGxGuE')) {
          isDoc = true; // OLE format
       }
-      if (!isDoc && !isDocx && f.data.startsWith('UEsDBBQ')) {
+      if (!isDoc && !isDocx && !isPdf && rawBase64.startsWith('UEsDBBQ')) {
          isDocx = true; // ZIP format
       }
 
       if (isDocx) {
-        const buffer = Buffer.from(f.data, 'base64');
+        const buffer = Buffer.from(rawBase64, 'base64');
         const result = await mammoth.convertToHtml({ buffer });
         processedFiles.push({
           inlineData: {
@@ -136,7 +181,7 @@ async function processFilesForAI(files: any[]) {
           }
         });
       } else if (isDoc) {
-        const buffer = Buffer.from(f.data, 'base64');
+        const buffer = Buffer.from(rawBase64, 'base64');
         const extractor = new WordExtractor();
         const extracted = await extractor.extract(buffer);
         processedFiles.push({
@@ -145,19 +190,41 @@ async function processFilesForAI(files: any[]) {
             mimeType: 'text/plain'
           }
         });
+      } else if (isPdf) {
+        // Gửi file Base64 sạch sang Gemini API dưới dạng inlineData
+        processedFiles.push({
+          inlineData: {
+            data: rawBase64,
+            mimeType: 'application/pdf'
+          }
+        });
+
+        // Bổ sung cơ chế trích xuất văn bản từ PDF làm dữ liệu văn bản đối chiếu
+        try {
+          const pdfBuffer = Buffer.from(rawBase64, 'base64');
+          const pdfText = await extractTextFromPdf(pdfBuffer);
+          if (pdfText && pdfText.trim()) {
+            processedFiles.push({
+              text: `[Văn bản trích xuất từ file PDF ${f.name || 'đề thi'}]:\n${pdfText.trim().substring(0, 60000)}`
+            });
+          }
+        } catch (pdfErr) {
+          console.warn("pdf-parse extraction notice:", pdfErr);
+        }
       } else {
         processedFiles.push({
           inlineData: {
-            data: f.data,
+            data: rawBase64,
             mimeType: f.type || 'text/plain'
           }
         });
       }
     } catch (e) {
       console.error("Error processing file:", e);
+      let rawBase64 = typeof f.data === 'string' ? f.data.replace(/^data:[^;]+;base64,/, '').trim() : f.data;
       processedFiles.push({
         inlineData: {
-          data: f.data,
+          data: rawBase64,
           mimeType: f.type || 'text/plain'
         }
       });
@@ -167,16 +234,10 @@ async function processFilesForAI(files: any[]) {
 }
 
 function resolveFiles(reqBody: any) {
-  let files = reqBody.files || [];
-  files = files.map(f => {
-    if (f.data && typeof f.data === "string" && f.data.startsWith("data:")) {
-      const matches = f.data.match(/^data:(.*?);base64,(.*)$/);
-      if (matches) {
-        return { ...f, type: matches[1], data: matches[2] };
-      }
-    }
-    return f;
-  });
+  let files: any[] = [];
+  if (Array.isArray(reqBody.files)) {
+    files.push(...reqBody.files);
+  }
   const fileIds = reqBody.fileIds || [];
   for (const id of fileIds) {
     const entry = chunkStore.get(id);
@@ -185,7 +246,18 @@ function resolveFiles(reqBody: any) {
       chunkStore.delete(id);
     }
   }
-  return files;
+
+  return files.map(f => {
+    if (f && f.data && typeof f.data === "string") {
+      const trimmed = f.data.trim();
+      const matches = trimmed.match(/^data:([^;]+);base64,(.*)$/s);
+      if (matches) {
+        return { ...f, type: f.type || matches[1], data: matches[2].trim() };
+      }
+      return { ...f, data: trimmed };
+    }
+    return f;
+  });
 }
 
 function resolveSingleFile(reqBody: any) {
@@ -378,38 +450,55 @@ function sanitizeJsonString(str: string): string {
           result += "\\\\";
           i++;
         } else {
-          const next = str[i + 1];
-          if (next === "\"" || next === "\\") {
-            result += "\\" + next;
+          let slashCount = 0;
+          let k = i;
+          while (k < len && str[k] === "\\") {
+            slashCount++;
+            k++;
+          }
+
+          if (slashCount === 2) {
+            // LaTeX line break like \\ in cases, array, matrix
+            // In JSON, 4 backslashes are required to yield 2 backslashes after JSON.parse
+            result += "\\\\\\\\";
             i += 2;
-          } else if (next === "/") {
-            result += "/";
-            i += 2;
-          } else if (next === "b" || next === "f" || next === "n" || next === "r" || next === "t") {
-            const charAfter = (i + 2 < len) ? str[i + 2] : "";
-            if (charAfter && /[a-zA-Z]/.test(charAfter)) {
-              // Lệnh LaTeX như \frac, \beta, \text, \tau, \rho, \rightarrow, \neq, \times...
+          } else if (slashCount >= 4) {
+            result += "\\\\\\\\";
+            i += 4;
+          } else {
+            const next = str[i + 1];
+            if (next === "\"") {
+              result += "\\\"";
+              i += 2;
+            } else if (next === "/") {
+              result += "/";
+              i += 2;
+            } else if (next === "b" || next === "f" || next === "n" || next === "r" || next === "t") {
+              const charAfter = (i + 2 < len) ? str[i + 2] : "";
+              if (charAfter && /[a-zA-Z]/.test(charAfter)) {
+                // Lệnh LaTeX như \frac, \beta, \text, \tau, \rho, \rightarrow, \neq, \times...
+                result += "\\\\" + next;
+                i += 2;
+              } else {
+                // Escape chuẩn JSON như \n, \t...
+                result += "\\" + next;
+                i += 2;
+              }
+            } else if (next === "u") {
+              const hex = str.slice(i + 2, i + 6);
+              if (/^[0-9a-fA-F]{4}$/.test(hex)) {
+                result += "\\u" + hex;
+                i += 6;
+              } else {
+                // Lệnh LaTeX bắt đầu bằng \u như \upsilon, \underline...
+                result += "\\\\u";
+                i += 2;
+              }
+            } else {
+              // Tất cả các ký tự khác sau \ (như \alpha, \le, \vec, \Delta, \[, \], \{, \}, \$, \%...)
               result += "\\\\" + next;
               i += 2;
-            } else {
-              // Escape chuẩn JSON như \n, \t...
-              result += "\\" + next;
-              i += 2;
             }
-          } else if (next === "u") {
-            const hex = str.slice(i + 2, i + 6);
-            if (/^[0-9a-fA-F]{4}$/.test(hex)) {
-              result += "\\u" + hex;
-              i += 6;
-            } else {
-              // Lệnh LaTeX bắt đầu bằng \u như \upsilon, \underline...
-              result += "\\\\u";
-              i += 2;
-            }
-          } else {
-            // Tất cả các ký tự khác sau \ (như \alpha, \le, \vec, \Delta, \[, \], \{, \}, \$, \%...)
-            result += "\\\\" + next;
-            i += 2;
           }
         }
       } else if (ch === "\n") {
@@ -534,13 +623,15 @@ async function generateWithFallback(req: any, payloadOptions: any) {
 - Số mũ / lũy thừa BẮT BUỘC dùng dấu mũ: $q^5$, $2^9$, $2^{10}$, $a^2 + b^2$.
 - Phân số BẮT BUỘC dùng \\frac{tử}{mẫu}: $\\frac{1 - (-2)^{10}}{1 - (-2)}$, $\\frac{108}{54}$.
 - Phép nhân dùng \\cdot, dấu suy ra/tương đương dùng \\Rightarrow, \\Leftrightarrow.
-- Hệ phương trình BẮT BUỘC dùng \\begin{cases} ... \\end{cases} kèm xuống dòng \\\\ rõ ràng.
+- Họ nghiệm phương trình lượng giác (\\sin, \\cos...): BẮT BUỘC dùng dấu móc vuông \\left[ thay vì \\begin{cases}, cú pháp chuẩn KaTeX: $\\left[\\begin{aligned} x &= \\alpha + k2\\pi \\\\ x &= \\pi - \\alpha + k2\\pi \\end{aligned}\\right. \\quad (k \\in \\mathbb{Z})$.
+- Hệ phương trình / Hệ bất phương trình: GIỮ NGUYÊN dấu móc nhọn \\begin{cases} ... \\end{cases} kèm xuống dòng \\\\ rõ ràng.
 - Tuyệt đối KHÔNG viết công thức dưới dạng text thường như u1, q5, 2^9 viết thành 29.
 - [QUY CHUẨN CẤU TRÚC ĐỀ THI / PHIẾU HỌC TẬP GDPT 2018]:
   + TUYỆT ĐỐI KHÔNG ĐƯỢC tóm tắt, không được bỏ qua bất kỳ câu nào, TUYỆT ĐỐI KHÔNG ĐƯỢC sinh placeholder như "(Các câu tương tự...)", "(Tương tự cho các câu sau...)", "(Các câu 5 đến 12 tương tự...)", "... (tiếp tục)" hoặc viết tắt câu.
   + Nếu yêu cầu N câu thì hệ thống BẮT BUỘC PHẢI SINH ĐỦ 100% ĐÚNG N CÂU HOÀN CHỈNH từ câu 1 đến câu N.
   + Mỗi câu Đúng/Sai (loại "tf") BẮT BUỘC gồm ĐÚNG 4 mệnh đề con a), b), c), d) trên các dòng riêng biệt (mảng "tfStatements" có đúng 4 phần tử).
   + Mỗi câu trắc nghiệm (loại "mc") BẮT BUỘC có ĐÚNG 4 lựa chọn (mảng "options" có đúng 4 phần tử).
+  + Câu trả lời ngắn (loại "sa") CHỦ ĐỀ TẬP HỢP: TUYỆT ĐỐI KHÔNG ra đề yêu cầu "Tìm tập hợp", "Viết khoảng/đoạn/nửa khoảng". BẮT BUỘC đáp số là MỘT CON SỐ CỤ THỂ (số phần tử nguyên, tính giá trị biểu thức $T = a + b$ hoặc $2a - b$ với $A \cap B = (a; b)$, tính độ dài khoảng...) và đáp số có độ dài tối đa 4 ký tự.
   + Khi vẽ đồ thị hàm phân thức (bậc 1/1, bậc 2/1): BẮT BUỘC vẽ tiệm cận đứng và ngang/xiên bằng nét đứt (dashed), vẽ 2 nhánh riêng biệt ở 2 phía của tiệm cận đứng, có trục tọa độ Oxy với mũi tên và chia lưới/vạch rõ ràng.`;
 
         const updatedPayload = { 
@@ -752,7 +843,8 @@ app.all("/api/generate-exam", async (req, res) => {
       qCounts = {},
       matrixFile,
       selectedTopics = [],
-      detailedSolution = true
+      detailedSolution = true,
+      realWorldConfig
     } = req.body;
 
     let files = resolveFiles(req.body);
@@ -775,18 +867,45 @@ app.all("/api/generate-exam", async (req, res) => {
     const essayCount = Number(qCounts.essay) || 0;
     const totalQuestions = mcCount + tfCount + saCount + essayCount;
 
+    const isRealWorldEnabled = realWorldConfig ? realWorldConfig.enabled !== false : false;
+    const rwLevel = realWorldConfig?.level || "standard";
+    const rwLevelText = 
+      rwLevel === "high" ? "Tăng cường (~50% câu thực tế)" :
+      rwLevel === "max" ? "Chuyên đề thực tế (~70% - 100% câu thực tế)" :
+      "Tiêu chuẩn (~30% câu thực tế)";
+
+    const realWorldDirective = isRealWorldEnabled ? `
+ƯU TIÊN CÂU HỎI BỐI CẢNH THỰC TIỄN (CHUẨN GDPT 2018):
+- Mức độ ưu tiên: ${rwLevelText}.
+- Thiết kế các câu hỏi có ngữ cảnh đời sống thực tế rõ ràng (kinh doanh, sản xuất xưởng cơ khí/may mặc, đo đạc hàng hải, đo chiều cao tháp/sông, bài toán chi tiêu/lãi suất).
+- Tránh các bài toán thuần túy đại số khô khan nếu chủ đề có khả năng ứng dụng thực tế cao (nhất là Hệ bất phương trình bậc nhất hai ẩn và Hệ thức lượng trong tam giác).
+- Đối với Phần III (Trả lời ngắn): Đặt câu hỏi thực tế yêu cầu tính một đại lượng cụ thể (mét, nghìn đồng, số sản phẩm, số giờ...) và làm tròn theo đúng yêu cầu để đáp số là một số nguyên hoặc số thập phân tối đa 4 ký tự.
+- ĐẶC BIỆT: Đối với mỗi câu hỏi có ngữ cảnh/ứng dụng thực tế, hãy thêm trường "isRealWorld": true vào đối tượng câu hỏi tương ứng trong mảng "questions".
+` : '';
+
     const promptText = `Bạn là một chuyên gia khảo thí và giáo viên giỏi bộ môn ${subject}.
 Nhiệm vụ của bạn là biên soạn một Đề kiểm tra chuẩn chất lượng cao cho học sinh Lớp ${grade}, môn ${subject}, Thời gian làm bài: ${duration} phút.
 Hình thức/Kỳ thi: ${examType}.
 ${selectedTopics.length > 0 ? `Các chủ đề/bài học trọng tâm: ${selectedTopics.join(', ')}.` : ''}
 ${matrix ? `Yêu cầu ma trận/đặc tả: ${matrix}` : ''}
 ${customPrompt ? `Yêu cầu chi tiết của giáo viên:\n${customPrompt}` : ''}
+${realWorldDirective}
 
 CẤU TRÚC VÀ SỐ LƯỢNG CÂU HỎI BẮT BUỘC:
 TUYỆT ĐỐI KHÔNG ĐƯỢC tóm tắt, không được bỏ qua bất kỳ câu nào, TUYỆT ĐỐI KHÔNG ĐƯỢC sinh placeholder như "(Các câu tương tự...)" hay viết tắt câu. Phải sinh ĐỦ 100% các câu hỏi theo đúng số lượng yêu cầu:
 ${mcCount > 0 ? `- Phần I: ĐÚNG ${mcCount} câu hỏi Trắc nghiệm nhiều lựa chọn (loại "mc") - mỗi câu gồm đúng 4 phương án lựa chọn trong mảng "options", chỉ có 1 phương án đúng.` : ''}
 ${tfCount > 0 ? `- Phần II: ĐÚNG ${tfCount} câu hỏi Trắc nghiệm Đúng/Sai (loại "tf") - mỗi câu BẮT BUỘC có đề dẫn chung và ĐÚNG 4 ý a), b), c), d) trong mảng "tfStatements" (4 phần tử). Học sinh xác định từng ý là Đúng (true) hay Sai (false).` : ''}
-${saCount > 0 ? `- Phần III: ĐÚNG ${saCount} câu hỏi Trả lời ngắn (loại "sa") - kết quả là một số, phân số, hoặc cụm từ ngắn gọn trong "correctAnswer".` : ''}
+${saCount > 0 ? `- Phần III: ĐÚNG ${saCount} câu hỏi Trắc nghiệm Trả lời ngắn (loại "sa") - CHUẨN ĐỊNH DẠNG BỘ GD&ĐT 2018:
+  + BẮT BUỘC câu hỏi phải dẫn tới MỘT KẾT QUẢ SỐ CỤ THỂ (ví dụ: "Tính giá trị biểu thức $T = ...$", "Tìm số nguyên dương nhỏ nhất...", "Tính diện tích tam giác...", "Tìm số nghiệm của phương trình...").
+  + TUYỆT ĐỐI KHÔNG ra đề dạng mở (như "Viết hệ bất phương trình...", "Nêu kết luận...", "Giải thích vì sao...").
+  + [RÀNG BUỘC ĐẶC BIỆT CHO CHỦ ĐỀ TẬP HỢP]:
+    * TUYỆT ĐỐI KHÔNG ra đề yêu cầu "Tìm tập hợp", "Viết kết quả dưới dạng khoảng/đoạn/nửa khoảng" hay biểu diễn nghiệm dưới dạng tập hợp.
+    * BẮT BUỘC câu hỏi phải có đáp số là MỘT CON SỐ CỤ THỂ, ví dụ:
+      - "Tập hợp $A \\cap B$ có bao nhiêu phần tử là số nguyên?"
+      - "Biết $A \\cap B = (a; b)$. Tính giá trị của biểu thức $T = a + b$ (hoặc $T = 2a - b$)?"
+      - "Tính độ dài khoảng/đoạn..."
+    * Đảm bảo đáp số luôn là MỘT SỐ NGUYÊN hoặc SỐ THẬP PHÂN có ĐỘ DÀI TỐI ĐA 4 KÝ TỰ (ví dụ: "3", "-2", "15", "2.5", "-0.5").
+  + ĐÁP ÁN BẮT BUỘC (RÀNG BUỘC PHIẾU CHẤM GDPT 2018): Trường "correctAnswer" BẮT BUỘC chỉ là một chuỗi số có ĐỘ DÀI TỐI ĐA 4 KÝ TỰ (kể cả dấu âm '-' hoặc dấu phẩy/chấm thập phân), ví dụ: "22", "-3.5", "13", "102", "0.25", "-8". TUYỆT ĐỐI KHÔNG viết chữ, đơn vị đo hay công thức toán vào "correctAnswer" (nêu đơn vị trong đề bài).` : ''}
 ${essayCount > 0 ? `- Phần IV: ĐÚNG ${essayCount} câu hỏi Tự luận (loại "essay") - bài toán tự luận có hướng dẫn giải và thang điểm chi tiết.` : ''}
 ${totalQuestions === 0 ? 'Nếu không chỉ định số lượng, hãy tạo 12 câu trắc nghiệm nhiều lựa chọn (mc), 2 câu Đúng/Sai (tf), 4 câu Trả lời ngắn (sa) theo đúng cấu trúc đề thi mới của Bộ GD&ĐT.' : ''}
 
@@ -797,7 +916,7 @@ ${MATH_FORMATTING_RULES}
 - TUYỆT ĐỐI KHÔNG lặp lại các chữ A, B, C, D vào nội dung của câu hỏi hoặc phương án (hệ thống sẽ tự động gán nhãn A, B, C, D).
 - Câu trắc nghiệm (mc): mảng "options" phải có ĐÚNG 4 phần tử dạng chuỗi. "correctOptionIndex" là chỉ số đáp án đúng (0, 1, 2, 3).
 - Câu đúng/sai (tf): "tfStatements" phải là mảng ĐÚNG 4 đối tượng [{ "statement": "...", "correct": true/false }].
-- Câu trả lời ngắn (sa): "correctAnswer" là chuỗi kết quả ngắn gọn (ví dụ: "3", "-1/2", "5").
+- Câu trả lời ngắn (sa): "correctAnswer" BẮT BUỘC là MỘT SỐ CỤ THỂ có độ dài TỐI ĐA 4 KÝ TỰ (ví dụ: "22", "-3.5", "13", "102"). Tuyệt đối không dùng dạng mở hay công thức.
 ${detailedSolution !== false ? '- BẮT BUỘC kèm lời giải chi tiết (explanation) rõ ràng, chuẩn xác sư phạm cho từng câu hỏi.' : '- Giáo viên KHÔNG yêu cầu lời giải chi tiết. Hãy để trường "explanation" là chuỗi ngắn gọn để tối ưu tốc độ tạo đề.'}
 
 BẮT BUỘC TRẢ VỀ DUY NHẤT MỘT ĐỐI TƯỢNG JSON HỢP LỆ VỚI CẤU TRÚC SAU:
@@ -808,6 +927,7 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT MỘT ĐỐI TƯỢNG JSON HỢP LỆ VỚI C
       "id": 1,
       "type": "mc",
       "level": "Nhận biết",
+      "isRealWorld": false,
       "content": "Nội dung câu hỏi...",
       "options": ["Phương án A", "Phương án B", "Phương án C", "Phương án D"],
       "correctOptionIndex": 0,
@@ -817,7 +937,8 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT MỘT ĐỐI TƯỢNG JSON HỢP LỆ VỚI C
       "id": 2,
       "type": "tf",
       "level": "Thông hiểu",
-      "content": "Nội dung câu hỏi Đúng/Sai...",
+      "isRealWorld": true,
+      "content": "Nội dung câu hỏi Đúng/Sai bối cảnh thực tế...",
       "tfStatements": [
         { "statement": "Khẳng định a", "correct": true },
         { "statement": "Khẳng định b", "correct": false },
@@ -830,8 +951,8 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT MỘT ĐỐI TƯỢNG JSON HỢP LỆ VỚI C
       "id": 3,
       "type": "sa",
       "level": "Vận dụng",
-      "content": "Nội dung câu trả lời ngắn...",
-      "correctAnswer": "Kết quả đúng",
+      "content": "Tính diện tích tam giác $ABC$... (Kết quả làm tròn đến hàng đơn vị).",
+      "correctAnswer": "25",
       "explanation": "Lời giải chi tiết..."
     },
     {
@@ -893,7 +1014,8 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT MỘT ĐỐI TƯỢNG JSON HỢP LỆ VỚI C
       ...q,
       id: q.id || idx + 1,
       type: q.type || 'mc',
-      level: q.level || 'Nhận biết'
+      level: q.level || 'Nhận biết',
+      isRealWorld: Boolean(q.isRealWorld)
     }));
 
     return parsedData;
@@ -1280,7 +1402,7 @@ app.all("/api/generate-interactive-worksheet", async (req, res) => {
     2. Các câu hỏi có thể thuộc 4 loại hình:
        - mc: Trắc nghiệm 4 lựa chọn (chỉ viết nội dung câu hỏi vào "content", 4 phương án vào mảng "options", TUYỆT ĐỐI KHÔNG lặp lại các phương án A, B, C, D trong "content").
        - tf: Trắc nghiệm Đúng/Sai (Mỗi câu BẮT BUỘC gồm ĐÚNG 4 ý a, b, c, d trên các dòng riêng biệt, mảng "tfStatements" BẮT BUỘC có đúng 4 phần tử có thuộc tính statement và correct).
-       - sa: Trả lời ngắn (kết quả là 1 số hoặc 1 từ/cụm từ ngắn gọn trong "correctAnswer")
+       - sa: Trả lời ngắn (kết quả là 1 số cụ thể có độ dài tối đa 4 ký tự trong "correctAnswer". ĐẶC BIỆT CHỦ ĐỀ TẬP HỢP: Tuyệt đối không ra đề dạng tìm tập hợp hay viết khoảng/đoạn; bắt buộc hỏi số phần tử nguyên, tính biểu thức T = a+b hoặc độ dài khoảng để đáp số là một con số).
        - essay: Tự luận (nội dung đề bài và hướng dẫn chấm cụ thể)
     ${MATH_FORMATTING_RULES}
     3. BẮT BUỘC SỬA LỖI CHÍNH TẢ tiếng Việt thật cẩn thận.
@@ -1501,6 +1623,233 @@ ${MATH_FORMATTING_RULES}
       });
       return { result: response.text };
     });
+});
+
+app.all("/api/extract-file-text", async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-gemini-api-key');
+
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
+  try {
+    const files = resolveFiles(req.body);
+    if (!files || files.length === 0) {
+      return res.status(400).json({ error: "Không tìm thấy file để trích xuất văn bản." });
+    }
+
+    const f = files[0];
+    let rawBase64 = typeof f.data === 'string' ? f.data.trim() : '';
+    if (rawBase64.startsWith('data:')) {
+      rawBase64 = rawBase64.replace(/^data:[^;]+;base64,/, '').trim();
+    }
+
+    const buffer = Buffer.from(rawBase64, 'base64');
+    let extractedText = "";
+
+    const isPdf = f.type === 'application/pdf' || f.name?.toLowerCase().endsWith('.pdf') || rawBase64.startsWith('JVBERi0');
+    const isDocx = f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || f.name?.endsWith('.docx') || rawBase64.startsWith('UEsDBBQ');
+    const isDoc = f.type === 'application/msword' || f.name?.endsWith('.doc') || rawBase64.startsWith('0M8R4KGxGuE');
+
+    if (isPdf) {
+      extractedText = await extractTextFromPdf(buffer);
+    } else if (isDocx) {
+      const result = await mammoth.extractRawText({ buffer });
+      extractedText = result.value || "";
+    } else if (isDoc) {
+      const extractor = new WordExtractor();
+      const extracted = await extractor.extract(buffer);
+      extractedText = extracted.getBody() || "";
+    } else {
+      extractedText = buffer.toString('utf8');
+    }
+
+    return res.json({ text: extractedText.trim() });
+  } catch (err: any) {
+    console.warn("File text extraction warning:", err);
+    return res.status(500).json({ error: "Không thể trích xuất văn bản từ tệp: " + (err.message || String(err)) });
+  }
+});
+
+app.all("/api/parse-exam", async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-gemini-api-key');
+
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ message: 'Method not allowed' });
+  }
+
+  return keepAliveExecute(req, res, async () => {
+    const { rawText } = req.body || {};
+    const files = resolveFiles(req.body);
+
+    const promptText = `Bạn là chuyên gia bóc tách đề thi môn Toán và khoa học tự nhiên chuẩn cấu trúc GDPT 2018. Hãy phân tích tài liệu đề thi được cung cấp (Word, PDF, Text) và tự động nhận diện chính xác từng câu hỏi thuộc các phần của đề thi:
+
+[CỰC KỲ QUAN TRỌNG: BẮT BUỘC BÓC TÁCH TOÀN BỘ ĐỀ THI - TUYỆT ĐỐI KHÔNG ĐƯỢC DỪNG LẠI Ở 12 CÂU CỦA PHẦN I]:
+- Quét tiếp toàn bộ tài liệu từ đầu đến cuối đề thi để trích xuất đầy đủ 100% tất cả các phần:
+  + PHẦN I: Trắc nghiệm nhiều lựa chọn (Câu 1 đến Câu 12).
+  + PHẦN II: Trắc nghiệm Đúng/Sai (Câu 1, 2... của Phần II hoặc Câu 13, 14...). Mỗi câu BẮT BUỘC có 4 ý a), b), c), d) kèm trạng thái Đúng hoặc Sai trong mảng "tfStatements".
+  + PHẦN III: Trắc nghiệm trả lời ngắn / điền số (Câu 1, 2, 3, 4...). Lưu nội dung câu hỏi và ô đáp án số ngắn trong "correctAnswer" (ví dụ: "4", "13", "273", "-5", "1/2"...).
+  + PHẦN IV: Tự luận (nếu có tiêu đề "PHẦN IV. Tự luận" hoặc bài toán tự luận): Đánh dấu type: "ESSAY". Bóc tách trọn vẹn nội dung câu hỏi (Câu 1, 2, 3...) kèm hướng dẫn chấm / đáp án chi tiết nếu có trong "correctAnswer" hoặc "explanation".
+- ĐẢM BẢO DANH SÁCH CÂU HỎI NHẬN VỀ ĐẦY ĐỦ CẢ ĐỀ THI (Ví dụ: 18 câu gồm 12 câu Phần I + 2 câu Đúng/Sai Phần II + 4 câu Điền số Phần III + các câu Tự luận Phần IV nếu có). TUYỆT ĐỐI KHÔNG BỎ SÓT HOẶC CẮT BỚT BẤT KỲ CÂU NÀO.
+
+QUY TẮC NHẬN DIỆN THỜI GIAN LÀM BÀI & TIÊU ĐỀ ĐỀ THI:
++ Tự động quét phần tiêu đề / đầu trang / ghi chú đề thi để tìm thời gian làm bài, ví dụ:
+  - "Thời gian làm bài : 90 Phút", "Thời gian: 60 phút", "Thời gian làm bài: 45 phút", "120 phút", "Thời lượng: 50 phút", "Thời gian: 90 phút (không kể thời gian phát đề)"...
+  - Trích xuất số phút thực tế tìm thấy (kiểu số nguyên dương, ví dụ: 90). Nếu tài liệu không ghi thời gian, trả về null.
++ Tự động nhận diện tiêu đề đề thi ở đầu trang (ví dụ: "ĐỀ KIỂM TRA ĐỊNH KỲ MÔN TOÁN LỚP 12", "ĐỀ THI HỌC KỲ I..."), gán vào trường "examTitle". Nếu không rõ, để null.
+
+CẤU TRÚC ĐỀ THI GDPT 2018 GỒM CÁC PHẦN:
+1. PHẦN I: TRẮC NGHIỆM NHIỀU LỰA CHỌN (MULTIPLE_CHOICE)
+- Gồm các câu hỏi có 4 phương án A, B, C, D (chọn 1 đáp án đúng).
+- Trường type: "MULTIPLE_CHOICE" (hoặc "mc").
+- Gồm: "question", "options" (mảng 4 phương án A, B, C, D), "correctAnswer" (ví dụ: "A"), "explanation" (nếu có).
+
+2. PHẦN II: TRẮC NGHIỆM ĐÚNG / SAI (TRUE_FALSE)
+- Gồm các câu có lệnh hỏi chính và 4 ý con a, b, c, d. Mỗi ý học sinh chọn Đúng hoặc Sai.
+- Trường type: "TRUE_FALSE" (hoặc "tf").
+- Gồm: "question" (nội dung đề bài dẫn), "tfStatements" (mảng gồm 4 phần tử tương ứng với 4 ý a, b, c, d).
+  + Mỗi phần tử trong tfStatements: {"statement": "Nội dung ý a/b/c/d...", "correct": true hoặc false}.
+  + Ví dụ: [{"statement": "Hàm số đồng biến trên (0; 2)", "correct": true}, ...]
+
+3. PHẦN III: TRẮC NGHIỆM TRẢ LỜI NGẮN / ĐIỀN SỐ (SHORT_ANSWER) - CHUẨN GDPT 2018:
+- Gồm các câu hỏi học sinh tự tính toán và điền đáp số ngắn. Không có 4 phương án A, B, C, D.
+- BẮT BUỘC câu hỏi phải dẫn tới một kết quả số cụ thể (ví dụ: "Tính giá trị biểu thức...", "Tính diện tích...", "Tìm số nghiệm..."). Tuyệt đối không ra đề dạng mở.
+- Trường type: "SHORT_ANSWER" (hoặc "sa").
+- ĐÁP ÁN BẮT BUỘC (RÀNG BUỘC PHIẾU CHẤM GDPT 2018): Trường "correctAnswer" BẮT BUỘC là MỘT CHUỖI SỐ CÓ ĐỘ DÀI TỐI ĐA 4 KÝ TỰ (kể cả dấu âm '-' hoặc dấu phẩy/chấm thập phân), ví dụ: "22", "-3.5", "13", "102". Tuyệt đối không chứa chữ cái, đơn vị đo hay công thức dài dòng.
+- Gồm: "question", "correctAnswer", "explanation" (nếu có).
+
+4. PHẦN IV: TỰ LUẬN (ESSAY) - nếu có:
+- Gồm các câu hỏi tự luận yêu cầu học sinh trình bày bài giải (Câu 1, Câu 2...).
+- Trường type: "ESSAY" (hoặc "essay").
+- Gồm: "question" (nội dung bài toán tự luận), "correctAnswer" hoặc "explanation" (lời giải / hướng dẫn chấm chi tiết kèm thang điểm nếu có).
+
+QUY TẮC NHẬN DIỆN HÌNH VẼ / ĐỒ THỊ MINH HỌA (FIGURES / CHARTS / IMAGES):
++ Khi đọc tài liệu đề thi (PDF, Word, ảnh), nếu một câu hỏi có kèm theo hình vẽ, đồ thị hàm số (ví dụ: đồ thị tọa độ Oxy, hình không gian, hình tròn, biểu đồ...), BẮT BUỘC:
+  - Đánh dấu thuộc tính: "hasFigure": true
+  - Nếu đề bài có ghi chú hoặc có đường dẫn ảnh/mô tả đồ thị, ghi vào: "figureDescription": "Mô tả ngắn gọn hình vẽ (ví dụ: Đồ thị hàm số bậc ba trên hệ trục Oxy qua các điểm...)"
+  - Nếu câu không có hình vẽ thì "hasFigure": false hoặc bỏ qua.
+
+QUY TẮC BẮT BUỘC VỀ TOÁN HỌC VÀ CÔNG THỨC (LATEX):
++ TẤT CẢ các ký hiệu toán học, biến số (x, y, m, a, b...), biểu thức, phương trình, hệ phương trình BẮT BUỘC đặt trong cặp dấu $...$ (nội dòng) hoặc $$...$$ (khối riêng).
++ QUY TẮC ĐẶC BIỆT VỀ DẤU $:
+  - Tuyệt đối không tự động gắn thêm dấu $ vào cuối chuỗi nếu chuỗi đã có cặp dấu $...$ hoàn chỉnh.
+  - Tuyệt đối không để ký tự $ mồ côi (trailing dollar sign) ở cuối đáp án hoặc nằm sau dấu chấm câu (ví dụ: cấm viết ".$" hay ". $", phải cắt bỏ sạch sẽ thành ".").
++ HỌ NGHIỆM PHƯƠNG TRÌNH LƯỢNG GIÁC (\sin, \cos...): BẮT BUỘC sử dụng dấu móc vuông \left[ kết hợp \begin{aligned} ... \end{aligned}\right. thay vì dấu móc nhọn \begin{cases}. Cú pháp chuẩn KaTeX:
+  $\left[\begin{aligned} x &= \alpha + k2\pi \\ x &= \pi - \alpha + k2\pi \end{aligned}\right. \quad (k \in \mathbb{Z})$
++ HỆ PHƯƠNG TRÌNH / HỆ BẤT PHƯƠNG TRÌNH: GIỮ NGUYÊN dấu móc nhọn \begin{cases} ... \end{cases} và BẮT BUỘC bọc trong cặp dấu $...$ hoặc $$...$$. Các dòng phương trình BẮT BUỘC cách nhau bởi dấu xuống dòng \\ (hai dấu gạch chéo ngược) rõ ràng. Ví dụ:
+  $\begin{cases} 2x + y = 5 \\ x - y = 1 \end{cases}$
++ Tuyệt đối KHÔNG viết \\ x - y (một gạch) làm dính dòng phương trình, BẮT BUỘC phải là \\\\ x - y.
++ Sử dụng cú pháp LaTeX chuẩn: \\frac{a}{b}, \\sqrt{x}, \\sin x, \\cos x, \\tan x, \\cot x, \\pi, \\ge, \\le, \\in, \\Leftrightarrow, \\Rightarrow, \\Delta.
++ Giữ nguyên font tiếng Việt UTF-8 chuẩn cho đề bài và các phương án.
+
+Trả về kết quả dưới dạng JSON có cấu trúc sau:
+{
+  "examTitle": "Tiêu đề đề thi nếu có hoặc null",
+  "duration": 90, // Số phút làm bài tìm thấy trong đề thi (ví dụ: 15, 45, 50, 60, 90, 120), hoặc null nếu không có
+  "questions": [
+    {
+      "id": 1,
+      "type": "MULTIPLE_CHOICE", // "MULTIPLE_CHOICE", "TRUE_FALSE", "SHORT_ANSWER", "ESSAY"
+      "question": "Nội dung câu hỏi...",
+      "hasFigure": false,
+      "options": ["A. ...", "B. ...", "C. ...", "D. ..."],
+      "correctAnswer": "A",
+      "explanation": "Lời giải chi tiết nếu có..."
+    }
+  ]
+}
+
+LƯU Ý QUAN TRỌNG VỀ JSON: Đảm bảo tất cả các dấu gạch chéo ngược (\\) trong mã LaTeX phải được escape thành kép (\\\\) khi tạo chuỗi JSON (ví dụ: \\\\begin{cases} ... \\\\end{cases}, \\\\frac{a}{b}). Tuyệt đối chỉ trả về JSON hợp lệ, không kèm bất kỳ lời dẫn hay giải thích nào ngoài khối JSON.`;
+
+    const userParts: any[] = [];
+    if (files && files.length > 0) {
+      const processed = await processFilesForAI(files);
+      userParts.push(...processed);
+    }
+    if (rawText && typeof rawText === 'string' && rawText.trim()) {
+      userParts.push({ text: `Nội dung tài liệu đề thi:\n${rawText}` });
+    }
+    userParts.push({ text: promptText });
+
+    const response = await generateWithFallback(req, {
+      contents: [
+        {
+          role: "user",
+          parts: userParts
+        }
+      ],
+      config: {
+        temperature: 0.1,
+        responseMimeType: "application/json"
+      }
+    });
+
+    if (!response || !response.text) {
+      throw new Error("Không nhận được phản hồi từ AI");
+    }
+
+    const aiCleanText = response.text.trim();
+    let parsed: any[] = [];
+    let detectedDuration: number | null = null;
+    let detectedTitle: string | null = null;
+
+    try {
+      const p = safeJsonParse(aiCleanText);
+      if (Array.isArray(p)) {
+        parsed = p;
+      } else if (p && typeof p === 'object') {
+        parsed = Array.isArray(p.questions) ? p.questions : (Array.isArray(p.result) ? p.result : []);
+        if (typeof p.duration === 'number' && p.duration > 0) {
+          detectedDuration = p.duration;
+        } else if (typeof p.duration === 'string') {
+          const parsedMins = parseInt(p.duration, 10);
+          if (!isNaN(parsedMins) && parsedMins > 0) detectedDuration = parsedMins;
+        }
+        if (typeof p.examTitle === 'string' && p.examTitle.trim()) {
+          detectedTitle = p.examTitle.trim();
+        }
+      }
+    } catch {
+      const arrayMatch = aiCleanText.match(/\[\s*\{[\s\S]*\}\s*\]/);
+      if (arrayMatch) {
+        try {
+          parsed = safeJsonParse(arrayMatch[0], []);
+        } catch {}
+      }
+    }
+
+    // Helper regex to extract duration if AI missed it
+    if (!detectedDuration && rawText && typeof rawText === 'string') {
+      const headerSnippet = rawText.slice(0, 4000);
+      const durRegexes = [
+        /(?:thời\s*gian\s*làm\s*bài|thời\s*lượng\s*làm\s*bài)[\s:\-=–—]*(\d{1,3})\s*(?:phút|p\b|'|min)/i,
+        /(?:thời\s*gian|thời\s*lượng)[\s:\-=–—]+(\d{1,3})\s*(?:phút|p\b|'|min)/i,
+        /(?:thời\s*gian\s*làm\s*bài|thời\s*lượng\s*làm\s*bài)[\s]+(\d{1,3})\s*(?:phút|p\b|'|min)/i,
+        /\(\s*(?:thời\s*gian\s*làm\s*bài[\s:\-]*)?(\d{1,3})\s*phút\s*(?:[,\-–—\(\)][^\)]*)?\)/i,
+        /(?:time\s*allowed|duration|exam\s*duration)[\s:\-=–—]*(\d{1,3})\s*(?:minutes|mins|min|m\b)/i
+      ];
+      for (const reg of durRegexes) {
+        const match = headerSnippet.match(reg);
+        if (match && match[1]) {
+          const m = parseInt(match[1], 10);
+          if (m >= 5 && m <= 300) {
+            detectedDuration = m;
+            break;
+          }
+        }
+      }
+    }
+
+    return { 
+      questions: parsed,
+      duration: detectedDuration,
+      examTitle: detectedTitle
+    };
+  });
 });
 
 app.all("/api/exams/share", (req, res) => {

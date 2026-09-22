@@ -25,9 +25,13 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   public reset = () => {
+    const isDynamicImportError = this.state.error?.message?.includes("dynamically imported module") || 
+                                 this.state.error?.message?.includes("Failed to fetch");
     this.setState({ hasError: false, error: undefined });
     if (this.props.onReset) {
       this.props.onReset();
+    } else if (isDynamicImportError && typeof window !== 'undefined') {
+      window.location.reload();
     }
   };
 

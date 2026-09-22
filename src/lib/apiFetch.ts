@@ -1,3 +1,5 @@
+import { safeJsonParse } from './utils';
+
 export const API_KEY_STORAGE = 'eduplan_gemini_api_key_v2';
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -85,7 +87,32 @@ export async function apiFetch(url: string, options: RequestInit = {}): Promise<
         throw new Error("Máy chủ trả về trang lỗi HTML thay vì JSON (Lỗi " + response.status + "). Hệ thống đang bảo trì, quá tải, hoặc xác thực bị lỗi.");
       }
     }
-    if (response.ok) return response;
+    if (response.ok) {
+      // Bọc hàm response.json() để tự động chặn lỗi SERVER_ERROR hoặc công thức LaTeX có dấu \ chưa escape
+      response.json = async () => {
+        const text = await response.text();
+        const clean = text.trim();
+        if (clean.includes("SERVER_ERROR:")) {
+          const rawError = clean.substring(clean.indexOf("SERVER_ERROR:") + 13).trim();
+          throw new Error("Lỗi kết nối máy chủ phân tích đề: " + (rawError || "Máy chủ phản hồi lỗi."));
+        }
+        if (clean.startsWith("SERVER_ERR")) {
+          throw new Error("Lỗi kết nối máy chủ phân tích đề: " + clean);
+        }
+        try {
+          return safeJsonParse(clean);
+        } catch (e: any) {
+          const match = clean.match(/```(?:json)?\s*([\s\S]*?)```/i) || clean.match(/(\{|\[)[\s\S]*(\}|\])/);
+          if (match) {
+            try {
+              return safeJsonParse(match[1] || match[0]);
+            } catch (e2) {}
+          }
+          throw new Error("Lỗi định dạng dữ liệu máy chủ: " + (e?.message || "Dữ liệu trả về không phải JSON hợp lệ."));
+        }
+      };
+      return response;
+    }
 
     const clonedRes = response.clone();
     let errorData;

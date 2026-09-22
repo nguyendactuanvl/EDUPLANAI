@@ -8,11 +8,14 @@ import katex from 'katex';
 // @ts-ignore
 import renderMathInElement from 'katex/dist/contrib/auto-render.js';
 import { TikzRenderer, getTikzSvg } from './TikzRenderer';
-import { fixMath } from '../lib/utils';
+import { fixMath, formatMathContent } from '../lib/utils';
+
+export { formatMathContent };
 
 export const MarkdownRenderer = ({ content, className }: { content: string, className?: string }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  let processedContent = fixMath(content || '');
+  let processedContent = formatMathContent(content || '');
+  processedContent = fixMath(processedContent);
 
   // 0. Unescape escaped dollar signs so KaTeX/remark-math parses them as math delimiters
   processedContent = processedContent.replace(/\\(\$)/g, '$1');
@@ -29,6 +32,10 @@ export const MarkdownRenderer = ({ content, className }: { content: string, clas
   });
   // Convert remaining standalone \[ ... \] to $$ ... $$
   processedContent = processedContent.replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$');
+
+  // Auto-wrap naked \begin{cases}...\end{cases} or math environments if not wrapped in $ or $$
+  // Also normalize line breaks inside cases so equations don't merge (e.g. \ x - y -> \\ x - y)
+  processedContent = formatMathContent(processedContent);
 
   // Normalize spaces inside inline $ ... $ so remark-math recognizes them (e.g. "$ 1 $" -> "$1$", "$ x = 2 $" -> "$x = 2$")
   // Strip any newlines \n and excess spaces inside $ ... $, and pull trailing punctuation OUT of the inline math block ($0.$ -> $0$.)

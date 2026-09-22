@@ -7,20 +7,43 @@ import { Menu, Sparkles, Key, AlertCircle } from "lucide-react";
 import React, { useState, Suspense, useEffect } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-const EducationalPlan = React.lazy(() => import("./pages/EducationalPlan").then(module => ({ default: module.EducationalPlan })));
-const LessonPlan = React.lazy(() => import("./pages/LessonPlan").then(module => ({ default: module.LessonPlan })));
-const Circulars = React.lazy(() => import("./pages/Circulars").then(module => ({ default: module.Circulars })));
-const HistoryPage = React.lazy(() => import("./pages/HistoryPage").then(module => ({ default: module.HistoryPage })));
-const Worksheets = React.lazy(() => import("./pages/Worksheets").then(module => ({ default: module.Worksheets })));
+
+function safeLazy<T extends React.ComponentType<any>>(
+  factory: () => Promise<{ default: T }>,
+  retries = 2
+): React.LazyExoticComponent<T> {
+  return React.lazy(() => {
+    return new Promise<{ default: T }>((resolve, reject) => {
+      const attempt = (left: number) => {
+        factory()
+          .then(resolve)
+          .catch((error) => {
+            if (left > 0) {
+              setTimeout(() => attempt(left - 1), 700);
+            } else {
+              reject(error);
+            }
+          });
+      };
+      attempt(retries);
+    });
+  });
+}
+
+const EducationalPlan = safeLazy(() => import("./pages/EducationalPlan").then(module => ({ default: module.EducationalPlan })));
+const LessonPlan = safeLazy(() => import("./pages/LessonPlan").then(module => ({ default: module.LessonPlan })));
+const Circulars = safeLazy(() => import("./pages/Circulars").then(module => ({ default: module.Circulars })));
+const HistoryPage = safeLazy(() => import("./pages/HistoryPage").then(module => ({ default: module.HistoryPage })));
+const Worksheets = safeLazy(() => import("./pages/Worksheets").then(module => ({ default: module.Worksheets })));
 import { SettingsModal } from "./components/SettingsModal";
-const ExerciseSolver = React.lazy(() => import('./pages/ExerciseSolver').then(module => ({ default: module.ExerciseSolver })));
-const PdfToWord = React.lazy(() => import('./pages/PdfToWord').then(module => ({ default: module.PdfToWord })));
-const ExamGenerator = React.lazy(() => import('./pages/ExamGenerator').then(module => ({ default: module.ExamGenerator })));
-const StudentExamView = React.lazy(() => import('./pages/StudentExamView').then(module => ({ default: module.StudentExamView })));
-const ClassMap = React.lazy(() => import('./pages/ClassMap').then(module => ({ default: module.ClassMap })));
-const HomeroomManagement = React.lazy(() => import('./pages/HomeroomManagement').then(module => ({ default: module.HomeroomManagement })));
-const WeeklyTimetable = React.lazy(() => import('./pages/WeeklyTimetable').then(module => ({ default: module.WeeklyTimetable })));
-const Gamification = React.lazy(() => import('./pages/Gamification').then(module => ({ default: module.Gamification })));
+const ExerciseSolver = safeLazy(() => import('./pages/ExerciseSolver').then(module => ({ default: module.ExerciseSolver })));
+const PdfToWord = safeLazy(() => import('./pages/PdfToWord').then(module => ({ default: module.PdfToWord })));
+const ExamGenerator = safeLazy(() => import('./pages/ExamGenerator').then(module => ({ default: module.ExamGenerator })));
+const StudentExamView = safeLazy(() => import('./pages/StudentExamView').then(module => ({ default: module.StudentExamView })));
+const ClassMap = safeLazy(() => import('./pages/ClassMap').then(module => ({ default: module.ClassMap })));
+const HomeroomManagement = safeLazy(() => import('./pages/HomeroomManagement').then(module => ({ default: module.HomeroomManagement })));
+const WeeklyTimetable = safeLazy(() => import('./pages/WeeklyTimetable').then(module => ({ default: module.WeeklyTimetable })));
+const Gamification = safeLazy(() => import('./pages/Gamification').then(module => ({ default: module.Gamification })));
 
 
 

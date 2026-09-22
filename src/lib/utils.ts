@@ -264,6 +264,219 @@ export function normalizeInfinity(text: any): string {
   return s;
 }
 
+/**
+ * Xóa bỏ các ký tự $ mồ côi (trailing dollar sign) ở cuối văn bản hoặc nằm sau dấu chấm câu (ví dụ: ".$" hay ". $" -> ".")
+ */
+export function cleanMath(text: string): string {
+  if (!text) return '';
+  let s = String(text);
+  // Xóa bỏ các ký tự $ mồ côi nằm sau dấu chấm câu (., ;, :)
+  s = s.replace(/([\.\;\,])\s*\$+$/g, '$1');
+  s = s.replace(/([\.\;\,])\s*\$+(\s)/g, '$1$2');
+
+  // Nếu chuỗi kết thúc bằng dấu $ nhưng tổng số lượng dấu $ là số lẻ (dấu $ mồ côi chưa đóng) -> cắt bỏ dấu $ thừa
+  const dollarCount = (s.match(/(?<!\\)\$/g) || []).length;
+  if (dollarCount % 2 !== 0 && s.trimEnd().endsWith('$')) {
+    s = s.replace(/\s*\$+$/, '');
+  }
+  return s;
+}
+
+/**
+ * Chuẩn hóa thân môi trường cases (\begin{cases} ... \end{cases}):
+ * 1. Sửa lỗi dính dòng giữa các bất phương trình: ví dụ \ge 1002x hoặc \ge 80x -> 100 \\ 2x, 80 \\ x
+ * 2. Phân tách nếu hai điều kiện cách nhau bởi dấu phẩy (như x \ge 0, y \ge 0)
+ * 3. Thay thế các ký tự gãy dòng `\ ` thành `\\ `
+ * 4. Nếu giữa các phương trình xuống hàng mà thiếu `\\`, tự động bổ sung `\\`
+ * 5. Đảm bảo mọi dòng luôn được phân tách bằng double backslash `\\`
+ */
+export function normalizeCasesBody(body: string): string {
+  if (!body) return '';
+  let s = body;
+
+  // 1. Phân tách nếu hai điều kiện cách nhau bởi dấu phẩy (như x \ge 0, y \ge 0 hoặc x > 0, y > 0)
+  s = s.replace(/([<>=]|\\ge|\\le|\\leq|\\geq|\\neq)\s*(-?\d+)\s*,\s*([a-zA-Z\d\\]+[\s\S]*?(?:[<>=]|\\ge|\\le|\\leq|\\geq|\\neq))/g, '$1 $2 \\\\ $3');
+
+  // 2. Nếu gãy dòng bởi dấu gạch chéo đơn `\ ` trước biến hoặc số -> chuyển thành `\\ `
+  s = s.replace(/(?<!\\)\\\s+([a-zA-Z0-9\-\+\{\(])/g, '\\\\ $1');
+
+  // 3. Nếu giữa các dòng xuống hàng thực sự mà thiếu `\\` -> bổ sung `\\`
+  s = s.replace(/([^\\])\n\s*([a-zA-Z0-9\-\+\{\(\\])/g, '$1 \\\\\n $2');
+
+  // 4. Sửa lỗi dính dòng giữa các bất phương trình/phương trình (như \ge 1002x hoặc \ge 80x):
+  // Khi một số tận cùng là 0 dính vào hệ số/biến của phương trình kế tiếp (ví dụ 1002x -> 100 \\ 2x, 80x -> 80 \\ x)
+  s = s.replace(/([<>=]|\\ge|\\le|\\leq|\\geq|\\neq)\s*(\d*0+)([1-9][a-zA-Z])/g, '$1 $2 \\\\ $3');
+  s = s.replace(/([<>=]|\\ge|\\le|\\leq|\\geq|\\neq)\s*(\d+)([a-zA-Z])/g, '$1 $2 \\\\ $3');
+  s = s.replace(/([<>=]|\\ge|\\le|\\leq|\\geq|\\neq)\s*(\d+)\s*([+-]\s*\d*[a-zA-Z])/g, '$1 $2 \\\\ $3');
+
+  // 5. Chuẩn hóa tất cả các dấu \\ bên trong cases: đảm bảo luôn là double backslash `\\` kèm ngắt dòng đẹp
+  s = s.replace(/(?<!\\)\\\\(?!\\)\s*/g, ' \\\\\n');
+
+  return s.trim();
+}
+
+/**
+ * Định dạng thân aligned cho họ nghiệm phương trình lượng giác:
+ * Mỗi phương trình trên một dòng, nếu có dấu '=' thì căn chỉnh bằng '&='
+ */
+export function formatAlignedTrigBody(body: string): string {
+  if (!body) return '';
+  const normalized = normalizeCasesBody(body);
+  const rawLines = normalized.split('\\\\');
+  const formattedLines = rawLines.map(rawLine => {
+    let line = rawLine.trim();
+    if (!line) return '';
+    // Nếu dòng có '=' và chưa có '&' đứng trước '=', thêm '&' để căn chỉnh dấu bằng đẹp trong aligned
+    if (line.includes('=') && !line.includes('&=')) {
+      line = line.replace(/=\s*/, '&= ');
+    }
+    return line;
+  }).filter(Boolean);
+
+  return formattedLines.join(' \\\\\n');
+}
+
+/**
+ * Chuẩn hóa biểu diễn họ nghiệm phương trình lượng giác:
+ * - Khi biểu diễn họ nghiệm tuyển của phương trình lượng giác (\sin, \cos, \tan, \cot...):
+ *   + BẮT BUỘC sử dụng dấu móc vuông \left[ thay vì dấu móc nhọn \begin{cases}.
+ *   + Cú pháp chuẩn KaTeX:
+ *     $$\left[\begin{aligned} x &= \alpha + k2\pi \\ x &= \pi - \alpha + k2\pi \end{aligned}\right. \quad (k \in \mathbb{Z})$$
+ *   + Giữ nguyên dấu móc nhọn \begin{cases} ... \end{cases} cho hệ phương trình / hệ bất phương trình.
+ */
+export function normalizeTrigSolutions(text: string): string {
+  if (!text) return '';
+  let s = text;
+
+  // 1. Chuyển \left[\begin{cases} ... \end{cases}\right. hoặc \left[\begin{matrix} ... \end{matrix}\right. hoặc \left[\begin{array} ... \end{array}\right.
+  //    thành \left[\begin{aligned} ... \end{aligned}\right.
+  s = s.replace(/\\left\s*\[\s*\\begin\s*\{(?:cases|matrix|array)\*?\}([\s\S]*?)\\end\s*\{(?:cases|matrix|array)\*?\}\s*\\right\.?/g, (_m, body) => {
+    return `\\left[\\begin{aligned}\n${formatAlignedTrigBody(body)}\n\\end{aligned}\\right.`;
+  });
+
+  // 2. Chuyển \begin{cases} ... \end{cases} chứa nghiệm lượng giác (k2\pi, 2k\pi, k\pi, k \in \mathbb{Z}, ...)
+  //    thành dấu móc vuông chuẩn KaTeX: \left[\begin{aligned} ... \end{aligned}\right.
+  s = s.replace(/\\begin\s*\{cases\*?\}([\s\S]*?)\\end\s*\{cases\*?\}/g, (match, body) => {
+    // Nhận diện họ nghiệm lượng giác:
+    // Chứa tham số chu kỳ góc lượng giác: k2\pi, 2k\pi, k\pi, k \in \mathbb{Z}, k \in Z, hoặc \pi / ... + k
+    const isTrigSolution = /(?:k\s*2\s*\\pi|2\s*k\s*\\pi|k\s*\\pi|\b\d*k\pi\b|k\s*\\in\s*(?:\\mathbb\{Z\}|Z)|[+\-]\s*k\s*\\pi|[+\-]\s*k2\\pi)/i.test(body);
+    if (!isTrigSolution) {
+      // GIỮ NGUYÊN \begin{cases} cho hệ phương trình / hệ bất phương trình
+      return match;
+    }
+    return `\\left[\\begin{aligned}\n${formatAlignedTrigBody(body)}\n\\end{aligned}\\right.`;
+  });
+
+  return s;
+}
+
+/**
+ * Kiểm tra xem tại vị trí pos trong chuỗi text có đang nằm trong môi trường toán ($...$ hoặc $$...$$) hay không
+ */
+export function isInsideMath(text: string, pos: number): boolean {
+  const before = text.slice(0, pos);
+  let inInline = false;
+  let inDisplay = false;
+  let i = 0;
+  while (i < before.length) {
+    if (before[i] === '\\' && i + 1 < before.length && before[i+1] === '$') {
+      i += 2;
+      continue;
+    }
+    if (before.slice(i, i + 2) === '$$') {
+      inDisplay = !inDisplay;
+      i += 2;
+      continue;
+    }
+    if (before[i] === '$') {
+      inInline = !inInline;
+      i += 1;
+      continue;
+    }
+    i++;
+  }
+  return inInline || inDisplay;
+}
+
+/**
+ * Tự động bọc $$...$$ cho các môi trường toán trần (naked LaTeX environments) khi chưa có $ hoặc $$ bao bọc:
+ * - \left[\begin{aligned}...\end{aligned}\right. (kèm tham số họ nghiệm lượng giác \quad (k \in \mathbb{Z}))
+ * - \begin{cases}...\end{cases} (hệ phương trình / hệ BPT)
+ * - Các môi trường khác: matrix, pmatrix, bmatrix, vmatrix, array, align, gather...
+ */
+export function wrapNakedMathEnvironments(text: string): string {
+  if (!text) return '';
+  let s = text;
+
+  // 1. Tự động bọc naked \left[\begin{aligned}...\end{aligned}\right.
+  s = s.replace(/(\\left\s*\[\s*\\begin\s*\{aligned\*?\}[\s\S]*?\\end\s*\{aligned\*?\}\s*\\right\.?(?:\s*\\quad\s*\([^\)]+\))?)/g, (match, env, offset) => {
+    if (isInsideMath(s, offset)) return match;
+    return `\n\n$$\n${env.trim()}\n$$\n\n`;
+  });
+
+  // 2. Tự động bọc các môi trường trần khác: cases, matrix, array... (trừ khi nằm sau \left[ hoặc đã nằm trong math)
+  s = s.replace(/(\\begin\s*\{(?:cases|aligned|array|matrix|pmatrix|bmatrix|vmatrix|Vmatrix|split|gather|align)\*?\}[\s\S]*?\\end\s*\{(?:cases|aligned|array|matrix|pmatrix|bmatrix|vmatrix|Vmatrix|split|gather|align)\*?\})/g, (match, env, offset) => {
+    const before = s.slice(Math.max(0, offset - 15), offset);
+    if (/\\left\s*[\(\[\{]$/.test(before) || isInsideMath(s, offset)) return match;
+    return `\n\n$$\n${env.trim()}\n$$\n\n`;
+  });
+
+  return s;
+}
+
+/**
+ * Chuẩn hóa công thức toán trước khi truyền vào MarkdownRenderer:
+ * 1. Tự động phát hiện và chuẩn hóa họ nghiệm phương trình lượng giác sang móc vuông KaTeX: \left[\begin{aligned} ... \end{aligned}\right.
+ * 2. Tự động phát hiện và chuẩn hóa môi trường \begin{cases} ... \end{cases} (cho hệ PT/BPT):
+ *    - Phân tách dính dòng (1002x -> 100 \\ 2x, 80x -> 80 \\ x, v.v.)
+ *    - Chuyển \ thành \\
+ *    - Đảm bảo mỗi dòng có \\ ngắt dòng chuẩn xác
+ * 3. Tự động bọc $$\begin{cases} ... \end{cases}$$ hoặc $$\left[\begin{aligned}...\end{aligned}\right.$$ nếu chưa có $$ hoặc $ bao bọc
+ * 4. Nếu cases bị bọc trong single $...$, nâng cấp lên display block $$...$$ để KaTeX hiển thị ngoặc nhọn lớn và ngắt dòng riêng biệt
+ */
+export function formatMathContent(raw?: string | null): string {
+  if (!raw && raw !== '') return '';
+  let str = String(raw);
+
+  // 1. Chuẩn hóa họ nghiệm lượng giác (đổi \begin{cases} có chứa k2\pi, k\pi, k \in \mathbb{Z}... sang \left[\begin{aligned}...\end{aligned}\right.)
+  str = normalizeTrigSolutions(str);
+
+  // 2. Chuẩn hóa thân môi trường cases còn lại (hệ phương trình / hệ bất phương trình)
+  str = str.replace(/\\begin\s*\{cases\*?\}([\s\S]*?)\\end\s*\{cases\*?\}/g, (_match, inner) => {
+    const fixedInner = normalizeCasesBody(inner);
+    return `\\begin{cases}\n${fixedInner}\n\\end{cases}`;
+  });
+
+  // 3. Nếu cases bị bọc trong single $...$ thì chuyển thành $$...$$ để KaTeX ngắt dòng và ngoặc nhọn chuẩn đẹp
+  str = str.replace(/(?<!\$)\$\s*(\\begin\s*\{cases\*?\}[\s\S]*?\\end\s*\{cases\*?\})\s*\$(?!\$)/g, (_match, env) => {
+    return `\n\n$$\n${env.trim()}\n$$\n\n`;
+  });
+
+  // 4. Tự động bọc naked math environments (bao gồm \left[\begin{aligned}...\end{aligned}\right. và \begin{cases})
+  str = wrapNakedMathEnvironments(str);
+
+  return str;
+}
+
+/**
+ * Chuẩn hóa bọc công thức toán LaTeX:
+ * Tuyệt đối KHÔNG tự động gắn thêm dấu $ vào cuối chuỗi nếu chuỗi đã có cặp dấu $...$ hoàn chỉnh.
+ */
+export function wrapLatex(text: string): string {
+  if (!text) return '';
+  let s = cleanMath(text.trim());
+  // Kiểm tra nếu đã có cặp dấu $...$ hoàn chỉnh hoặc số lượng dấu $ chẵn >= 2
+  const hasMatchedDollars = /(?<!\\)\$[^$\n]+?(?<!\\)\$/.test(s);
+  const dollarCount = (s.match(/(?<!\\)\$/g) || []).length;
+  if (hasMatchedDollars || (dollarCount >= 2 && dollarCount % 2 === 0)) {
+    return cleanMath(s);
+  }
+  if (!s.startsWith('$') && !s.endsWith('$')) {
+    return `$${s}$`;
+  }
+  return cleanMath(s);
+}
+
 export function cleanOptionText(opt: any): string {
   if (!opt && opt !== 0) return '';
   let text = String(opt).trim();
@@ -271,32 +484,65 @@ export function cleanOptionText(opt: any): string {
   // 1. Remove leading option prefixes like "A.", "A)", "A:", "a.", "a)"
   text = text.replace(/^[A-Da-d][\.\:\)]\s*/, '').trim();
 
-  // 2. Remove redundant outer $ or $$ wrapping the entire option (especially if multiline or with spaces)
+  // 2. Remove trailing orphan dollar signs after punctuation (e.g. ". $", ".$", ";$", ",$")
+  text = text.replace(/([\.\;\,])\s*\$+$/g, '$1').trim();
+  text = text.replace(/([\.\;\,])\s*\$+(\s)/g, '$1$2').trim();
+
+  // 3. Remove redundant outer $ or $$ wrapping the entire option (especially if multiline or with spaces)
   // e.g. "$\n\begin{cases}...\end{cases}\n$" or "$ \begin{cases}... $" or "$$ ... $$"
   text = text.replace(/^\s*\${1,2}\s*([\s\S]*?)\s*\${1,2}\s*$/, '$1').trim();
 
-  // 3. If there are still stray leading/trailing dollars or newlines around it
-  text = text.replace(/^\s*\$+\s*/, '').replace(/\s*\$+\s*$/, '').trim();
+  // 4. Remove trailing orphan dollar signs after punctuation again
+  text = text.replace(/([\.\;\,])\s*\$+$/g, '$1').trim();
 
-  // 4. Normalize infinity in all forms
+  // 5. If there is an odd number of dollar signs and the string ends with a dollar sign, remove the trailing orphan dollar
+  let dollarCount = (text.match(/(?<!\\)\$/g) || []).length;
+  if (dollarCount % 2 !== 0 && text.endsWith('$')) {
+    text = text.replace(/\s*\$+$/, '').trim();
+  }
+
+  // 6. Normalize infinity in all forms
   text = normalizeInfinity(text);
 
-  // 5. If it contains a LaTeX block environment (cases, array, matrix, aligned, etc.)
+  // 7. If it contains a LaTeX block environment (cases, array, matrix, aligned, etc.)
   // Wrap it tightly as inline math $...$ so it renders right next to "A." without stray dollars or newlines
+  if (/\\begin\s*\{cases\*?\}/.test(text)) {
+    text = text.replace(/\\begin\s*\{cases\*?\}([\s\S]*?)\\end\s*\{cases\*?\}/g, (_m, b) => `\\begin{cases}\n${normalizeCasesBody(b)}\n\\end{cases}`);
+  }
   if (/\\begin\s*\{(?:cases|aligned|array|matrix|pmatrix|bmatrix|vmatrix|Vmatrix|split|gather|align)\*?\}/.test(text)) {
-    return `$${text.trim()}$`;
+    if (!text.startsWith('$') && !text.endsWith('$')) {
+      return `$${text.trim()}$`;
+    }
+    return text.trim();
   }
 
-  // 6. If it is a mathematical interval or set: e.g. "(-1; 1)", "(0; 1)", "(-\infty; -1)", "(-1; +\infty)", "[0; 5]", "{1; 2}"
+  // 8. If it is a mathematical interval or set: e.g. "(-1; 1)", "(0; 1)", "(-\infty; -1)", "(-1; +\infty)", "[0; 5]", "{1; 2}"
   if (/^[\[\(]\s*[^;,\n]+?[;,]\s*[^;,\n]+?[\]\)]$/.test(text) || /^\{[^}\n]+\}$/.test(text)) {
-    return `$${text}$`;
-  }
-
-  // 7. If it contains standard math symbols (\frac, \sqrt, ^, _, =, <, >, etc.), wrap tightly in $...$
-  if (/(?:[\\^_=><\+\-\*\/]|\d+[a-zA-Z]|[a-zA-Z]\d+)/.test(text) && !/^(đúng|sai|có|không|luôn|tất cả|cả|đáp án|phương án)\b/i.test(text)) {
     if (!text.startsWith('$') && !text.endsWith('$')) {
       return `$${text}$`;
     }
+    return text;
+  }
+
+  // 9. Check if text already has complete $...$ pairs
+  const hasMatchedDollars = /(?<!\\)\$[^$\n]+?(?<!\\)\$/.test(text);
+  dollarCount = (text.match(/(?<!\\)\$/g) || []).length;
+
+  // TUYỆT ĐỐI không tự động gắn thêm dấu $ vào cuối chuỗi nếu chuỗi đã có cặp dấu $...$ hoàn chỉnh!
+  if (!hasMatchedDollars && dollarCount === 0) {
+    const hasVietnameseWords = /[a-zA-Zàáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]{2,}\s+[a-zA-Zàáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]{2,}/i.test(text);
+    if (!hasVietnameseWords && /(?:[\\^_=><\+\-\*\/]|\d+[a-zA-Z]|[a-zA-Z]\d+)/.test(text) && !/^(đúng|sai|có|không|luôn|tất cả|cả|đáp án|phương án|với|hàm số|điểm)\b/i.test(text)) {
+      if (!text.startsWith('$') && !text.endsWith('$')) {
+        text = `$${text}$`;
+      }
+    }
+  }
+
+  // Final cleanup of any trailing orphan dollar or trailing dollar after punctuation
+  text = text.replace(/([\.\;\,])\s*\$+$/g, '$1').trim();
+  const finalDollars = (text.match(/(?<!\\)\$/g) || []).length;
+  if (finalDollars % 2 !== 0 && text.endsWith('$')) {
+    text = text.replace(/\s*\$+$/, '').trim();
   }
 
   return text;
@@ -525,6 +771,21 @@ export const fixMath = (text: any) => {
     t = t.replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$');
     t = t.replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$');
 
+    // 2.01. Normalize trig solutions: convert \begin{cases} with k2\pi, k\pi, k \in \mathbb{Z} to \left[\begin{aligned}...\end{aligned}\right.
+    // while strictly keeping \begin{cases} for systems of equations/inequalities
+    t = normalizeTrigSolutions(t);
+
+    // 2.02. Normalize newlines inside \begin{cases}...\end{cases}:
+    // Ensure equations in cases are separated by LaTeX double-backslash \\ and no merged text
+    t = t.replace(/\\begin\s*\{cases\*?\}([\s\S]*?)\\end\s*\{cases\*?\}/g, (_match, body) => {
+        const fixedBody = normalizeCasesBody(body);
+        return `\\begin{cases}\n${fixedBody}\n\\end{cases}`;
+    });
+
+    // 2.05 Auto-wrap naked math environments (\left[\begin{aligned}...\end{aligned}\right. or \begin{cases}...\end{cases}, etc.)
+    // Safely checks isInsideMath so already-wrapped math environments are never duplicated
+    t = wrapNakedMathEnvironments(t);
+
     // 2.1. Normalize informal not-equal signs (/ =, /=, !=, =/=) to standard LaTeX \neq
     t = t.replace(/=\/=/g, ' \\neq ');
     t = t.replace(/!\s*=\s*/g, ' \\neq ');
@@ -551,12 +812,18 @@ export const fixMath = (text: any) => {
 
     // 2.2. Normalize options formatted with environments or multiline expressions:
     // e.g. "A. $\n\begin{cases}...\end{cases}\n$" or "A. $ \begin{cases}...\end{cases} $" or "<div><strong>A.</strong> $\begin{cases}...</div>"
+    t = t.replace(/(^|\n|<div[^>]*>)\s*([A-D][\.\:\)]|<strong>[A-D][\.\:\)]<\/strong>)\s*\${0,2}\s*(\\left\s*\[\s*\\begin\s*\{aligned\*?\}[\s\S]*?\\end\s*\{aligned\*?\}\s*\\right\.?(?:\s*\\quad\s*\([^\)]+\))?)\s*\${0,2}\s*(<\/div>|$|\n)/g, (m, prefix, label, env, suffix) => {
+        return `${prefix}${label} $${env.trim()}$ ${suffix}`;
+    });
     t = t.replace(/(^|\n|<div[^>]*>)\s*([A-D][\.\:\)]|<strong>[A-D][\.\:\)]<\/strong>)\s*\${0,2}\s*(\\begin\s*\{(?:cases|aligned|array|matrix|pmatrix|bmatrix|vmatrix|Vmatrix|split|gather|align)\*?\}[\s\S]*?\\end\s*\{(?:cases|aligned|array|matrix|pmatrix|bmatrix|vmatrix|Vmatrix|split|gather|align)\*?\})\s*\${0,2}\s*(<\/div>|$|\n)/g, (m, prefix, label, env, suffix) => {
         return `${prefix}${label} $${env.trim()}$ ${suffix}`;
     });
 
     // 2.25. Normalize list items formatted with environments (e.g. "- a) $\begin{cases}...", "a) $\begin{cases}...")
     // Keep them inline so the list item numbering/lettering is not broken by display block newlines
+    t = t.replace(/(^|\n)\s*([-\*]\s+|(?:\d+|[a-d])[\.\:\)]\s+)\${0,2}\s*(\\left\s*\[\s*\\begin\s*\{aligned\*?\}[\s\S]*?\\end\s*\{aligned\*?\}\s*\\right\.?(?:\s*\\quad\s*\([^\)]+\))?)\s*\${0,2}\s*($|\n)/g, (m, prefix, bullet, env, suffix) => {
+        return `${prefix}${bullet}$${env.trim()}$${suffix}`;
+    });
     t = t.replace(/(^|\n)\s*([-\*]\s+|(?:\d+|[a-d])[\.\:\)]\s+)\${0,2}\s*(\\begin\s*\{(?:cases|aligned|array|matrix|pmatrix|bmatrix|vmatrix|Vmatrix|split|gather|align)\*?\}[\s\S]*?\\end\s*\{(?:cases|aligned|array|matrix|pmatrix|bmatrix|vmatrix|Vmatrix|split|gather|align)\*?\})\s*\${0,2}\s*($|\n)/g, (m, prefix, bullet, env, suffix) => {
         return `${prefix}${bullet}$${env.trim()}$${suffix}`;
     });
@@ -571,12 +838,9 @@ export const fixMath = (text: any) => {
         return `${prefix}${label} $${expr.trim()}$ ${suffix}`;
     });
 
-    // 2.5. Standalone environments or BBT wrapped in single/double dollars:
-    // Convert to \n\n$$\n...\n$$\n\n ONLY when NOT inside table row '|', list bullet, or option label
-    t = t.replace(/(^|\n)(?!\s*\||\s*[-\*]|\s*[A-D][\.\:\)]|\s*[a-d][\.\:\)])\s*\${1,2}\s*(\\begin\s*\{(?:cases|aligned|array|matrix|pmatrix|bmatrix|vmatrix|Vmatrix|split|gather|align)\*?\}[\s\S]*?\\end\s*\{(?:cases|aligned|array|matrix|pmatrix|bmatrix|vmatrix|Vmatrix|split|gather|align)\*?\})\s*\${1,2}\s*($|\n)/g, '$1\n\n$$\n$2\n$$\n\n$3');
-
-    // 2.6. Standalone naked LaTeX environments (cases, aligned, array, matrix, etc.) if not already in $$...$$ or $...$
-    t = t.replace(/(^|\n)(?!\s*\||\s*[-\*]|\s*[A-D][\.\:\)]|\s*[a-d][\.\:\)])\s*(\\begin\s*\{(?:cases|aligned|array|matrix|pmatrix|bmatrix|vmatrix|Vmatrix|split|gather|align)\*?\}[\s\S]*?\\end\s*\{(?:cases|aligned|array|matrix|pmatrix|bmatrix|vmatrix|Vmatrix|split|gather|align)\*?\})\s*($|\n)/g, '$1\n\n$$\n$2\n$$\n\n$3');
+    // 2.5. If wrapped in single $...$, upgrade to display block $$...$$ ONLY when NOT inside table row '|', list bullet, or option label
+    t = t.replace(/(^|\n)(?!\s*\||\s*[-\*]|\s*[A-D][\.\:\)]|\s*[a-d][\.\:\)])\s*(?<!\$)\$\s*(\\left\s*\[\s*\\begin\s*\{aligned\*?\}[\s\S]*?\\end\s*\{aligned\*?\}\s*\\right\.?(?:\s*\\quad\s*\([^\)]+\))?)\s*\$(?!\$)\s*($|\n)/g, (_m, p1, p2, p3) => `${p1}\n\n$$\n${p2.trim()}\n$$\n\n${p3}`);
+    t = t.replace(/(^|\n)(?!\s*\||\s*[-\*]|\s*[A-D][\.\:\)]|\s*[a-d][\.\:\)])\s*(?<!\$)\$\s*(\\begin\s*\{(?:cases|array|matrix|pmatrix|bmatrix|vmatrix|Vmatrix|split|gather|align)\*?\}[\s\S]*?\\end\s*\{(?:cases|array|matrix|pmatrix|bmatrix|vmatrix|Vmatrix|split|gather|align)\*?\})\s*\$(?!\$)\s*($|\n)/g, (_m, p1, p2, p3) => `${p1}\n\n$$\n${p2.trim()}\n$$\n\n${p3}`);
 
     // 2.7. Clean stray single $ lines before or after $$...$$
     t = t.replace(/(^|\n)\s*\$\s*\n+(\$\$[\s\S]*?\$\$)/g, '$1$2');
@@ -626,7 +890,7 @@ export const fixMath = (text: any) => {
     });
 
     // 2.9. Protect existing math blocks, code blocks, TikZ, and SVGs while wrapping naked math commands
-    const tokenRegex = /(```[\s\S]*?```|<svg[\s\S]*?<\/svg>|<tikz-diagram[\s\S]*?<\/tikz-diagram>|<svg-wrapper[\s\S]*?<\/svg-wrapper>|\\begin\s*\{tikzpicture\}[\s\S]*?\\end\s*\{tikzpicture\}|\$\$[\s\S]*?\$\$|\$(?:\\\$|[^\$])+?\$)/gi;
+    const tokenRegex = /(```[\s\S]*?```|<svg[\s\S]*?<\/svg>|<tikz-diagram[\s\S]*?<\/tikz-diagram>|<svg-wrapper[\s\S]*?<\/svg-wrapper>|\\begin\s*\{tikzpicture\}[\s\S]*?\\end\s*\{tikzpicture\}|\\begin\s*\{(?:cases|aligned|array|matrix|pmatrix|bmatrix|vmatrix|Vmatrix|split|gather|align)\*?\}[\s\S]*?\\end\s*\{(?:cases|aligned|array|matrix|pmatrix|bmatrix|vmatrix|Vmatrix|split|gather|align)\*?\}|\$\$[\s\S]*?\$\$|\$(?:\\\$|[^\$])+?\$)/gi;
     const parts: { isProtected: boolean; text: string }[] = [];
     let lastIndex = 0;
     let match: RegExpExecArray | null;
@@ -761,9 +1025,10 @@ export function formatMultipleChoiceInMarkdown(content: string): string {
 
     const cleanOption = (s: string) => {
       let trimmed = s.replace(/[;,]+$/, '').trim();
+      trimmed = cleanMath(trimmed);
       // Chuẩn hóa $$ thành $ nếu nội dòng
       trimmed = trimmed.replace(/^\s*\$\$\s*([\s\S]*?)\s*\$\$\s*$/, '$$$1$$').trim();
-      return trimmed;
+      return cleanMath(trimmed);
     };
 
     optA = cleanOption(optA);
@@ -775,5 +1040,100 @@ export function formatMultipleChoiceInMarkdown(content: string): string {
   });
 
   return text;
+}
+
+/**
+ * Nhận diện câu hỏi có ngữ cảnh bối cảnh thực tế đời sống (Chuẩn GDPT 2018)
+ */
+export function isRealWorldQuestion(q?: any): boolean {
+  if (!q) return false;
+  if (q.isRealWorld === true || q.isRealWorld === 'true') return true;
+  
+  const content = String(q.content || q.question || q.text || '');
+  const explanation = String(q.explanation || '');
+  const combined = content + ' ' + explanation;
+  if (!combined.trim()) return false;
+
+  const realWorldRegex = /(thực tế|thực tiễn|đời sống|ứng dụng thực|bác\s+[A-ZÀ-Ỹ]|chú\s+[A-ZÀ-Ỹ]|cô\s+[A-ZÀ-Ỹ]|anh\s+[A-ZÀ-Ỹ]|chị\s+[A-ZÀ-Ỹ]|ông\s+[A-ZÀ-Ỹ]|bà\s+[A-ZÀ-Ỹ]|doanh nghiệp|công ty|nhà máy|phân xưởng|cửa hàng|tiệm|chủ tiệm|sản xuất|lợi nhuận|doanh thu|chi phí|kinh doanh|vốn đầu tư|nghìn đồng|triệu đồng|tỷ đồng|tiền lãi|lãi suất|tiền gửi|ngân hàng|mua bán|tiêu thụ|sản phẩm|ngọn hải đăng|hải đăng|chiều cao của tháp|bóng của tháp|chiều rộng khúc sông|hai bờ sông|hàng hải|tàu thủy|thuyền buồm|ca nô|xuồng|chiếc thuyền|khinh khí cầu|máy bay|bãi đỗ xe|thửa ruộng|khu đất|mảnh đất|mảnh vườn|bể bơi|hồ bơi|hồ nước|thùng chứa|bình chứa|bồn nước|hộp sữa|lon sữa|lon nước|hàng rào|rào chắn|xạ thủ|bắn bia|đo khoảng cách|góc nâng|góc hạ|giác kế|áp suất|nhiệt độ|quãng đường|vận tốc của xe|tiêu thụ nhiên liệu)/i;
+
+  return realWorldRegex.test(combined);
+}
+
+/**
+ * Chuẩn hóa và làm sạch chuỗi nhập đáp án Phần III (Trắc nghiệm trả lời ngắn):
+ * - Chỉ cho phép các ký tự: chữ số (0-9), dấu '-' (chỉ ở đầu) và dấu ',' hoặc '.'
+ * - Tối đa 4 ký tự theo quy định phiếu thi GDPT 2018
+ */
+export function sanitizeShortAnswerInput(val: string): string {
+  if (!val) return '';
+  // Xóa khoảng trắng
+  let s = val.trim();
+  // Giữ lại chỉ 0-9, '-', ',', '.'
+  let clean = '';
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch >= '0' && ch <= '9') {
+      clean += ch;
+    } else if (ch === '-' && clean.length === 0) {
+      // Dấu âm chỉ được ở đầu
+      clean += ch;
+    } else if ((ch === ',' || ch === '.') && !clean.includes('.') && !clean.includes(',')) {
+      // Chỉ cho phép 1 dấu ngăn cách thập phân
+      clean += ch;
+    }
+  }
+  return clean.slice(0, 4);
+}
+
+/**
+ * Kiểm tra tính hợp lệ của đáp án Phần III theo chuẩn GDPT 2018:
+ * - Tối đa 4 ký tự
+ * - Phải là một số (kể cả số âm hoặc số thập phân)
+ * - Không chứa chữ cái, công thức hoặc ký tự lạ
+ */
+export function validateShortAnswer(ans: string): { isValid: boolean; warning?: string } {
+  const trimmed = String(ans || '').trim();
+  if (!trimmed) {
+    return { isValid: false, warning: 'Chưa nhập đáp án.' };
+  }
+  if (trimmed.length > 4) {
+    return { 
+      isValid: false, 
+      warning: `Đáp án vượt quá 4 ký tự (${trimmed.length}/4 ký tự). Chuẩn phiếu thi GDPT 2018 chỉ cho phép tối đa 4 ký tự.` 
+    };
+  }
+  // Kiểm tra có ký tự chữ cái hay công thức LaTeX
+  if (/[a-zA-Z\\$]/.test(trimmed)) {
+    return { 
+      isValid: false, 
+      warning: 'Đáp án Phần III chỉ chấp nhận MỘT SỐ cụ thể (0-9, dấu "-" và ","/"."), không chứa chữ cái hoặc công thức.' 
+    };
+  }
+  // Kiểm tra cấu trúc số hợp lệ: ví dụ "22", "-3.5", "-3,5", "102", "13"
+  const validNumberRegex = /^-?\d+([.,]\d+)?$/;
+  if (!validNumberRegex.test(trimmed)) {
+    return { 
+      isValid: false, 
+      warning: 'Định dạng số không hợp lệ (chỉ chấp nhận số nguyên hoặc số thập phân tối đa 4 ký tự như: 22, -3.5, 102).' 
+    };
+  }
+  return { isValid: true };
+}
+
+/**
+ * So sánh 2 đáp án Phần III (chấp nhận đồng nhất giữa dấu '.' và dấu ','):
+ */
+export function compareShortAnswers(userAns: string, correctAns: string): boolean {
+  if (!userAns || !correctAns) return false;
+  const normUser = String(userAns).trim().toLowerCase().replace(',', '.');
+  const normCorrect = String(correctAns).trim().toLowerCase().replace(',', '.');
+  if (normUser === normCorrect) return true;
+  // So sánh giá trị số float nếu cả hai parse được
+  const numUser = parseFloat(normUser);
+  const numCorrect = parseFloat(normCorrect);
+  if (!isNaN(numUser) && !isNaN(numCorrect)) {
+    return Math.abs(numUser - numCorrect) < 0.0001;
+  }
+  return false;
 }
 

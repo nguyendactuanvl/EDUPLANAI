@@ -1,6 +1,36 @@
 import LZString from 'lz-string';
 import { apiFetch } from './apiFetch';
 
+export const SYSTEM_EXAM_WEBHOOK = "https://script.google.com/macros/s/AKfycbwYHVplKQAUoUVBo6QbjSBnO_TB71eUXeeP2MmQ42nQIVJiUjvmLrrJwvCC-lsCXc7k/exec";
+
+export interface ExamWebhookPayload {
+  examId?: string;
+  examName?: string;
+  studentName?: string;
+  className?: string;
+  score?: number | string;
+  correctCount?: number;
+  totalQuestions?: number;
+  timeSpent?: string;
+  hasEssay?: boolean;
+  essayCount?: number;
+  submittedAt?: string;
+  detailedAnswers?: any[];
+}
+
+export async function sendExamResultToWebhook(payload: ExamWebhookPayload): Promise<void> {
+  try {
+    await fetch(SYSTEM_EXAM_WEBHOOK, {
+      method: 'POST',
+      mode: 'no-cors', // Tránh chặn CORS trên trình duyệt
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  } catch (err) {
+    console.error('Lỗi gửi kết quả thi qua Webhook:', err);
+  }
+}
+
 const KV_STORE_ID = 'jaku8xjm';
 const CHUNK_SIZE = 120; // 120 hex chars per chunk is well within URL path limits and safe across all HTTP proxies
 
@@ -166,3 +196,4 @@ export async function fetchExamFromCloud(examId: string): Promise<any> {
 
   return null;
 }
+

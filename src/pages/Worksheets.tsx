@@ -3,17 +3,13 @@ import { GDPT_2018_SUBJECTS } from '../lib/subjects';
 import LZString from 'lz-string';
 import { exportHtmlToWord } from "../lib/exportUtils";
 import { useState, useRef, useEffect } from "react";
-import { Sparkles, Save, BookOpen, Download, AlertCircle, Edit3, Eye, Printer, Share2, Copy, CheckCircle2, ExternalLink } from "lucide-react";
+import { BookOpen, Download, AlertCircle, Edit3, Eye, Printer, Share2, Copy, CheckCircle2, ExternalLink, Upload } from "lucide-react";
 import { MarkdownRenderer } from "../components/MarkdownRenderer";
 import { ErrorBoundary } from "../components/ErrorBoundary";
-import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
-import rehypeKatex from "rehype-katex";
-import rehypeRaw from "rehype-raw";
+import { UploadTeacherExamModal } from "../components/UploadTeacherExamModal";
 import { saveToHistory, getHistory } from '../lib/history';
 import { HistoryItem } from '../types';
 import { cn, parseApiResponse } from "../lib/utils";
-import { Presentation } from "lucide-react";
 import { printElement } from '../lib/print';
 
 
@@ -33,6 +29,7 @@ export function Worksheets() {
   const [isLoading, setIsLoading] = useState(false);
   const [isGeneratingInteractive, setIsGeneratingInteractive] = useState(false);
   const [shareLink, setShareLink] = useState("");
+  const [isUploadExamModalOpen, setIsUploadExamModalOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
   const exportRef = useRef<HTMLDivElement>(null);
@@ -399,6 +396,17 @@ export function Worksheets() {
               )}
             </button>
           </div>
+
+          <div className="mt-2.5">
+            <button
+              onClick={() => setIsUploadExamModalOpen(true)}
+              className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-sm flex items-center justify-center gap-2 transition-all hover:shadow"
+              title="Tải đề Word/PDF/Text của giáo viên lên để tạo link làm online kèm sửa lỗi"
+            >
+              <Upload className="w-4 h-4" />
+              <span>Tải đề của tôi lên (Word/PDF/Text)</span>
+            </button>
+          </div>
           
           {shareLink && (
             <div className="mt-4 p-4 bg-emerald-50 rounded-xl border border-emerald-200">
@@ -543,6 +551,14 @@ export function Worksheets() {
           )}
         </div>
       </div>
+
+      {/* Teacher Exam Upload & Edit Modal */}
+      <UploadTeacherExamModal
+        isOpen={isUploadExamModalOpen}
+        onClose={() => setIsUploadExamModalOpen(false)}
+        defaultSubject={subject}
+        defaultGrade={selectedGrade}
+      />
     </div>
   );
 }

@@ -11,15 +11,27 @@ import { Link } from 'lucide-react';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import { exportHtmlToWord } from '../lib/exportUtils';
-import { fixMath, cleanQuestionStem, parseApiResponse, cleanOptionText, getPublicAppUrl } from '../lib/utils';
-import { saveExamToCloud } from '../lib/cloudExamStore';
+import { fixMath, cleanQuestionStem, parseApiResponse, cleanOptionText, getPublicAppUrl, isRealWorldQuestion, sanitizeShortAnswerInput, validateShortAnswer, compareShortAnswers } from '../lib/utils';
+import { saveExamToCloud, SYSTEM_EXAM_WEBHOOK } from '../lib/cloudExamStore';
 import { SAMPLE_MATH_QUESTIONS, SAMPLE_MATH_EXAM_NAME, SAMPLE_MATH_DURATION } from '../data/sampleMathExam';
 import { parseRawExamText } from '../lib/examParser';
+import { UploadTeacherExamModal } from "../components/UploadTeacherExamModal";
+import {
+  mixExam,
+  identifyQuestionSection,
+  SECTION_NAMES,
+  SECTION_SHORT_NAMES,
+  generateTNMakerCSV,
+  exportTNMakerExcelFile,
+  getQuestionAnswerString,
+  MixerQuestion
+} from '../lib/examMixer';
 import React, { useState, useRef, useEffect } from "react";
-import { FileCheck, Sparkles, Shuffle, Download, Share2, Plus, Trash2, Printer, UploadCloud, FileSpreadsheet, FileText, X, ExternalLink, Smartphone, Copy, Check, Edit3, ListPlus } from "lucide-react";
+import * as XLSX from 'xlsx';
+import { FileCheck, Sparkles, Shuffle, Download, Share2, Plus, Trash2, Printer, UploadCloud, FileSpreadsheet, FileText, X, ExternalLink, Smartphone, Copy, Check, Edit3, ListPlus, Globe, Compass, RefreshCw, Eye, RotateCw, ZoomIn, ZoomOut, CheckCircle2, XCircle, AlertCircle, Save, MessageSquare, Award, Maximize2, Camera } from "lucide-react";
 
 interface Question {
-  type?: "mc" | "tf" | "sa" | "essay";
+  type?: "mc" | "tf" | "sa" | "essay" | "MULTIPLE_CHOICE" | "TRUE_FALSE" | "SHORT_ANSWER" | "ESSAY";
   explanation?: string;
   id: number;
   content: string;
@@ -28,8 +40,13 @@ interface Question {
   correctAnswer?: string;
   tfStatements?: { statement: string; correct: boolean }[];
   level: string;
+  isRealWorld?: boolean;
   topic?: string;
   subtopic?: string;
+  imageUrl?: string;
+  hasFigure?: boolean;
+  section?: 1 | 2 | 3 | 4;
+  originalId?: number;
 }
 
 interface MatrixConfig {
@@ -46,6 +63,10 @@ interface MatrixConfig {
   qEnabled: any;
   levels: any;
   outputConfig: any;
+  realWorldConfig?: {
+    enabled: boolean;
+    level: "standard" | "high" | "max";
+  };
   matrix: string;
   customPrompt: string;
   timestamp: number;
@@ -92,35 +113,22 @@ const MultiPointInput = ({ count, value, onChange, disabled }: { count: number, 
 };
 
 export function ExamGenerator() {
-const handleExportCSV = () => {
+  const handleExportCSV = () => {
     if (shuffledExams.length === 0) return;
-    let csvContent = "\uFEFF"; // BOM for UTF-8
-    csvContent += "Câu," + shuffledExams.map(e => e.code).join(",") + "\n";
-    const numQuestions = shuffledExams[0].questions.length;
-    for (let i = 0; i < numQuestions; i++) {
-        const row: any[] = [i + 1];
-        for (const exam of shuffledExams) {
-            const q = exam.questions[i];
-            let ans = "";
-            if (q.type === 'mc') {
-                ans = String.fromCharCode(65 + (q.correctOptionIndex || 0));
-            } else if (q.type === 'tf' && q.tfStatements) {
-                ans = q.tfStatements.map(s => s.correct ? 'D' : 'S').join('');
-            } else {
-                ans = (q.correctAnswer || '').replace(/<[^>]*>?/gm, '').substring(0, 10);
-            }
-            row.push(ans);
-        }
-        csvContent += row.join(",") + "\n";
-    }
+    const csvContent = generateTNMakerCSV(shuffledExams as any[]);
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `Dap_An_${examName.replace(/\s+/g, '_')}.csv`);
+    link.setAttribute("download", `Dap_An_TNMaker_${(examName || 'De_Thi').replace(/\s+/g, '_')}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handleExportTNMakerExcel = () => {
+    if (shuffledExams.length === 0) return;
+    exportTNMakerExcelFile(shuffledExams as any[], examName);
   };
 
   const handlePrintBubbleSheet = () => {
@@ -188,19 +196,201 @@ const handleExportCSV = () => {
   };
   const [activeTab, setActiveTab] = useState<"matrix" | "exam" | "shuffle" | "banks" | "results">("matrix");
   const [examResults, setExamResults] = useState<any[]>([]);
+  const [resultsLoading, setResultsLoading] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Review & Grading state
+  const [selectedResultForReview, setSelectedResultForReview] = useState<any | null>(null);
+  const [essayGradingScore, setEssayGradingScore] = useState<string>('');
+  const [teacherFeedback, setTeacherFeedback] = useState<string>('');
+  const [previewModalImage, setPreviewModalImage] = useState<string | null>(null);
+  const [imageRotation, setImageRotation] = useState<number>(0);
+  const [imageZoom, setImageZoom] = useState<number>(1);
+
+  const openReviewModal = (result: any) => {
+    setSelectedResultForReview(result);
+    setEssayGradingScore(result.essayScore !== undefined ? String(result.essayScore) : '');
+    setTeacherFeedback(result.teacherFeedback || '');
+  };
+
+  const handleSaveGrading = () => {
+    if (!selectedResultForReview) return;
+    const numScore = essayGradingScore.trim() === '' ? undefined : Number(essayGradingScore);
+    const updated = {
+      ...selectedResultForReview,
+      essayScore: numScore,
+      teacherFeedback: teacherFeedback.trim(),
+      isGraded: true,
+      gradedAt: new Date().toISOString()
+    };
+    setSelectedResultForReview(updated);
+
+    // Update in examResults
+    const newResults = examResults.map((item: any) => {
+      const match = (item === selectedResultForReview) ||
+        (item.id && selectedResultForReview.id && item.id === selectedResultForReview.id) ||
+        (item.studentName === selectedResultForReview.studentName && String(item.examId) === String(selectedResultForReview.examId) && (item.timestamp === selectedResultForReview.timestamp || item.submittedAt === selectedResultForReview.submittedAt));
+      return match ? updated : item;
+    });
+    setExamResults(newResults);
+
+    // Save to localStorage
+    try {
+      const local = JSON.parse(localStorage.getItem('eduplan_exam_results') || '[]');
+      let found = false;
+      const localUpdated = local.map((item: any) => {
+        const match = (item.id && selectedResultForReview.id && item.id === selectedResultForReview.id) ||
+          (item.studentName === selectedResultForReview.studentName && String(item.examId) === String(selectedResultForReview.examId));
+        if (match) {
+          found = true;
+          return { ...item, essayScore: numScore, teacherFeedback: teacherFeedback.trim(), isGraded: true, gradedAt: new Date().toISOString() };
+        }
+        return item;
+      });
+      if (!found) {
+        localUpdated.push(updated);
+      }
+      localStorage.setItem('eduplan_exam_results', JSON.stringify(localUpdated));
+    } catch (e) {
+      console.warn("Lỗi lưu điểm tự luận:", e);
+    }
+
+    setToastMessage(`Đã lưu điểm và nhận xét cho bài làm của ${selectedResultForReview.studentName || 'học sinh'}!`);
+  };
+
+  useEffect(() => {
+    if (toastMessage) {
+      const timer = setTimeout(() => setToastMessage(null), 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [toastMessage]);
+
+  const fetchResults = async () => {
+    setResultsLoading(true);
+    let local: any[] = [];
+    // 1. Đọc localStorage dự phòng trước
+    try {
+      local = JSON.parse(localStorage.getItem('eduplan_exam_results') || '[]');
+      if (Array.isArray(local) && local.length > 0) {
+        local.sort((a: any, b: any) => new Date(b.submittedAt || b.timestamp || 0).getTime() - new Date(a.submittedAt || a.timestamp || 0).getTime());
+        setExamResults(local);
+      }
+    } catch (e) {
+      console.warn("Lỗi đọc local results:", e);
+    }
+
+    // 2. Gọi API lấy dữ liệu thực tế từ Google Sheet Webhook và hợp nhất
+    try {
+      const res = await fetch(SYSTEM_EXAM_WEBHOOK);
+      if (res.ok) {
+        const cloudData = await res.json();
+        if (Array.isArray(cloudData) && cloudData.length > 0) {
+          const merged = [...local];
+          cloudData.forEach((cloudItem: any) => {
+            const index = merged.findIndex((m: any) =>
+              (m.studentName && cloudItem.studentName && m.studentName.trim().toLowerCase() === cloudItem.studentName.trim().toLowerCase() && String(m.examId) === String(cloudItem.examId)) ||
+              (m.id && cloudItem.id && m.id === cloudItem.id)
+            );
+            if (index === -1) {
+              merged.push(cloudItem);
+            } else {
+              merged[index] = {
+                ...cloudItem,
+                ...merged[index],
+                timestamp: cloudItem.timestamp || merged[index].timestamp || (merged[index].submittedAt ? new Date(merged[index].submittedAt).toLocaleString('vi-VN') : ''),
+                details: cloudItem.details || merged[index].details
+              };
+            }
+          });
+          setExamResults(merged);
+        }
+      }
+    } catch (error) {
+      console.error("Lỗi tải kết quả từ máy chủ:", error);
+    } finally {
+      setResultsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchResults();
+  }, []);
 
   useEffect(() => {
     if (activeTab === 'results') {
-      try {
-        const results = JSON.parse(localStorage.getItem('eduplan_exam_results') || '[]');
-        // sort by newest first
-        results.sort((a: any, b: any) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
-        setExamResults(results);
-      } catch (e) {
-        console.error(e);
-      }
+      fetchResults();
     }
   }, [activeTab]);
+
+  const exportResultsToExcel = () => {
+    if (!examResults || examResults.length === 0) {
+      setToastMessage("Chưa có lượt nộp bài nào để xuất file!");
+      return;
+    }
+
+    try {
+      const dataToExport = examResults.map((res: any, index: number) => {
+        const timeFormatted = typeof res.timeSpent === 'number'
+          ? `${Math.floor(res.timeSpent / 60)} phút ${res.timeSpent % 60} giây`
+          : (res.timeSpent || '');
+
+        const timeSubmitted = res.timestamp || (res.submittedAt ? new Date(res.submittedAt).toLocaleString('vi-VN') : '');
+        const examCode = res.examId || res.examName || "Đề thi Online";
+        const correctCount = res.details 
+          ? res.details 
+          : (res.correct !== undefined ? `${res.correct}` : '');
+
+        return {
+          "STT": index + 1,
+          "Mã đề": examCode,
+          "Thời gian nộp": timeSubmitted,
+          "Họ và tên": res.studentName || "Học sinh ẩn danh",
+          "Lớp": res.className || res.studentClass || "",
+          "Điểm số": res.score !== undefined ? Number(res.score) : 0,
+          "Số câu đúng": correctCount,
+          "Thời gian làm bài": timeFormatted
+        };
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+
+      worksheet['!cols'] = [
+        { wch: 6 },  // STT
+        { wch: 16 }, // Mã đề
+        { wch: 22 }, // Thời gian nộp
+        { wch: 28 }, // Họ và tên
+        { wch: 12 }, // Lớp
+        { wch: 10 }, // Điểm số
+        { wch: 14 }, // Số câu đúng
+        { wch: 22 }  // Thời gian làm bài
+      ];
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Bảng điểm");
+
+      const now = new Date();
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      const dateStr = `${pad(now.getDate())}_${pad(now.getMonth() + 1)}_${now.getFullYear()}`;
+      const fileName = `Bang_Diem_Online_${dateStr}.xlsx`;
+
+      try {
+        XLSX.writeFile(workbook, fileName);
+      } catch (errWrite) {
+        // Fallback UTF-8 BOM CSV
+        const csvContent = "\uFEFF" + XLSX.utils.sheet_to_csv(worksheet);
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.setAttribute("download", `Bang_Diem_Online_${dateStr}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    } catch (err: any) {
+      console.error("Lỗi xuất Excel:", err);
+      alert("Đã xảy ra lỗi khi tạo file Excel: " + (err?.message || ""));
+    }
+  };
   const [subject, setSubject] = useState("Toán");
   const [grade, setGrade] = useState("9");
   const [totalQuestions, setTotalQuestions] = useState(20);
@@ -256,7 +446,20 @@ const handleExportCSV = () => {
   };
   const [qEnabled, setQEnabled] = useState({ mc: true, tf: true, sa: true, essay: true });
   const [levels, setLevels] = useState({ nb: 40, th: 30, vd: 20, vdc: 10 });
-  const [outputConfig, setOutputConfig] = useState({ answers: true, matrix: true, spec: true, shuffleQuestions: true, shuffleOptions: true, detailedSolution: true });
+  const [outputConfig, setOutputConfig] = useState({
+    answers: true,
+    matrix: true,
+    spec: true,
+    shuffleQuestions: true,
+    shuffleOptions: true,
+    groupBySection: true,
+    detailedSolution: true
+  });
+  const [showAnswerMatrix, setShowAnswerMatrix] = useState(true);
+  
+  // Tùy chọn Ưu tiên câu hỏi bối cảnh thực tế (Chuẩn GDPT 2018)
+  const [enableRealWorld, setEnableRealWorld] = useState<boolean>(true);
+  const [realWorldLevel, setRealWorldLevel] = useState<"standard" | "high" | "max">("standard");
   
   const [savedConfigs, setSavedConfigs] = useState<MatrixConfig[]>(() => {
     try {
@@ -273,6 +476,10 @@ const handleExportCSV = () => {
       name,
       schoolLevel, subject, grade, duration, examType, numCodes,
       qCounts, qPoints, qEnabled, levels, outputConfig, matrix, customPrompt,
+      realWorldConfig: {
+        enabled: enableRealWorld,
+        level: realWorldLevel
+      },
       timestamp: Date.now()
     };
     const updated = [...savedConfigs, newConfig];
@@ -296,6 +503,10 @@ const handleExportCSV = () => {
       setQEnabled(conf.qEnabled);
       setLevels(conf.levels);
       setOutputConfig(conf.outputConfig);
+      if (conf.realWorldConfig) {
+        setEnableRealWorld(conf.realWorldConfig.enabled !== false);
+        setRealWorldLevel(conf.realWorldConfig.level || "standard");
+      }
       setMatrix(conf.matrix);
       setCustomPrompt(conf.customPrompt);
     }
@@ -355,6 +566,7 @@ const [examName, setExamName] = useState("");
   const [shareLink, setShareLink] = useState("");
   const [sharePin, setSharePin] = useState("");
   const [showBubbleSheetModal, setShowBubbleSheetModal] = useState(false);
+  const [showTeacherUploadModal, setShowTeacherUploadModal] = useState(false);
   const [showAddQuestionModal, setShowAddQuestionModal] = useState(false);
   const [showImportTextModal, setShowImportTextModal] = useState(false);
   const [importRawText, setImportRawText] = useState("");
@@ -399,6 +611,14 @@ const [examName, setExamName] = useState("");
 
     const maxId = questions.reduce((max, q) => Math.max(max, q.id || 0), 0);
     let createdQ: Question;
+
+    if (newQuestionType === "sa") {
+      const val = validateShortAnswer(newQuestionAnswer);
+      if (!val.isValid) {
+        alert(`Lỗi đáp án Trả lời ngắn (Phần III):\n${val.warning || "Vui lòng nhập đáp án là một số tối đa 4 ký tự."}`);
+        return;
+      }
+    }
 
     if (newQuestionType === "mc") {
       createdQ = {
@@ -494,6 +714,23 @@ ${pin ? `🔑 Hoặc vào trang: ${publicBase} và nhập Mã phòng thi: ${pin}
         essay: qEnabled.essay ? qCounts.essay : 0
       };
 
+      let realWorldPrompt = "";
+      if (enableRealWorld) {
+        const levelText = 
+          realWorldLevel === "high" ? "Tăng cường (~50% câu thực tế)" :
+          realWorldLevel === "max" ? "Chuyên đề thực tế (~70% - 100% câu thực tế)" :
+          "Tiêu chuẩn (~30% câu thực tế)";
+        
+        realWorldPrompt = `
+ƯU TIÊN CÂU HỎI BỐI CẢNH THỰC TIỄN (CHUẨN GDPT 2018):
+- Mức độ ưu tiên: ${levelText}.
+- Thiết kế các câu hỏi có ngữ cảnh đời sống thực tế rõ ràng (kinh doanh, sản xuất xưởng cơ khí/may mặc, đo đạc hàng hải, đo chiều cao tháp/sông, bài toán chi tiêu/lãi suất).
+- Tránh các bài toán thuần túy đại số khô khan nếu chủ đề có khả năng ứng dụng thực tế cao (nhất là Hệ bất phương trình bậc nhất hai ẩn và Hệ thức lượng trong tam giác).
+- Đối với Phần III (Trả lời ngắn): Đặt câu hỏi thực tế yêu cầu tính một đại lượng cụ thể (mét, nghìn đồng, số sản phẩm, số giờ...) và làm tròn theo đúng yêu cầu để đáp số là một số nguyên hoặc số thập phân tối đa 4 ký tự.
+- ĐẶC BIỆT: Đối với mỗi câu hỏi có ngữ cảnh thực tế đời sống, hãy thêm trường "isRealWorld": true vào đối tượng câu hỏi.
+`.trim();
+      }
+
       const advancedPrompt = `
 Thang điểm yêu cầu:
 ${qEnabled.mc ? `- Trắc nghiệm lựa chọn: ${qPoints.mc} điểm/câu` : ""}
@@ -512,7 +749,14 @@ ${outputConfig.answers ? "- Có đáp án chi tiết." : ""}
 ${outputConfig.spec ? "- Kèm theo bảng đặc tả." : ""}
 ${outputConfig.matrix ? "- Kèm theo ma trận đề." : ""}
 
-${customPrompt}
+${realWorldPrompt ? `${realWorldPrompt}\n\n` : ""}${qEnabled.sa ? `RÀNG BUỘC ĐẶC BIỆT KHI RA CÂU HỎI PHẦN III (TRẢ LỜI NGẮN) CHO CHỦ ĐỀ TẬP HỢP:
+- TUYỆT ĐỐI KHÔNG ra đề yêu cầu "Tìm tập hợp", "Viết kết quả dưới dạng khoảng/đoạn/nửa khoảng" hay biểu diễn nghiệm dưới dạng tập hợp.
+- BẮT BUỘC câu hỏi phải có đáp số là một con số cụ thể, ví dụ:
+  + "Tập hợp $A \\cap B$ có bao nhiêu phần tử là số nguyên?"
+  + "Biết $A \\cap B = (a; b)$. Tính giá trị của biểu thức $T = a + b$ (hoặc $T = 2a - b$)?"
+  + "Tính độ dài khoảng/đoạn..."
+- Đảm bảo đáp số luôn là một số nguyên hoặc số thập phân có độ dài tối đa 4 ký tự.
+\n` : ""}${customPrompt}
 `.trim();
 
       let finalPrompt = advancedPrompt;
@@ -530,7 +774,11 @@ ${customPrompt}
           qCounts: activeQCounts,
           matrixFile: matrixBase64,
           selectedTopics,
-          detailedSolution: outputConfig.detailedSolution
+          detailedSolution: outputConfig.detailedSolution,
+          realWorldConfig: {
+            enabled: enableRealWorld,
+            level: realWorldLevel
+          }
         })
       });
 
@@ -571,28 +819,14 @@ ${customPrompt}
 
   const handleShuffle = () => {
     if (questions.length === 0) return;
-    const newExams = [];
-    for (let i = 0; i < Math.min(numCodes, 24); i++) {
-      const code = (101 + i).toString();
-      const shuffledQ = [...questions].sort(() => Math.random() - 0.5).map((q, index) => {
-        if (q.type === 'mc' && q.options) {
-          const optionObjects = q.options.map((opt, i) => ({ text: cleanOptionText(opt), isCorrect: i === q.correctOptionIndex }));
-          const shuffledOptions = optionObjects.sort(() => Math.random() - 0.5);
-          return {
-            ...q,
-            id: index + 1,
-            options: shuffledOptions.map(o => o.text),
-            correctOptionIndex: shuffledOptions.findIndex(o => o.isCorrect)
-          };
-        }
-        return {
-          ...q,
-          id: index + 1
-        };
-      });
-      newExams.push({ code, questions: shuffledQ });
-    }
-    setShuffledExams(newExams);
+    const mixed = mixExam(questions as any[], {
+      numCodes: Math.min(Math.max(1, numCodes), 24),
+      groupBySection: outputConfig.groupBySection !== false,
+      shuffleQuestions: outputConfig.shuffleQuestions !== false,
+      shuffleOptions: outputConfig.shuffleOptions !== false,
+      startCode: 101
+    });
+    setShuffledExams(mixed as any[]);
     setActiveTab("shuffle");
   };
 
@@ -753,6 +987,12 @@ ${customPrompt}
               className="px-6 py-3 font-bold text-sm whitespace-nowrap text-blue-600 hover:text-blue-800 flex items-center gap-2"
             >
               <FileText className="w-4 h-4" /> Tải Phiếu Tô 2025
+            </button>
+            <button 
+              onClick={() => setShowTeacherUploadModal(true)}
+              className="px-5 py-3 font-bold text-sm whitespace-nowrap text-indigo-600 hover:text-indigo-800 flex items-center gap-2 bg-indigo-50/60 rounded-t-lg border-b-2 border-indigo-600"
+            >
+              <UploadCloud className="w-4 h-4" /> Tải đề của tôi lên (Word/PDF/Text)
             </button>
           </div>
 
@@ -1005,17 +1245,184 @@ ${customPrompt}
                   )}
                 </div>
 
-                {/* 5. THÀNH PHẦN ĐẦU RA */}
+                {/* 5. CÂU HỎI ỨNG DỤNG THỰC TẾ (CHUẨN GDPT 2018) */}
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm">5</span> CÂU HỎI ỨNG DỤNG THỰC TẾ (CHUẨN GDPT 2018)
+                    </h3>
+                    <span className="text-xs font-semibold px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full flex items-center gap-1">
+                      <Globe className="w-3.5 h-3.5" /> GDPT 2018
+                    </span>
+                  </div>
+
+                  {/* Switch / Checkbox */}
+                  <div className="flex items-start justify-between p-4 bg-blue-50/60 border border-blue-200 rounded-xl mb-4 transition-all">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 bg-blue-600 text-white rounded-lg mt-0.5 shrink-0 shadow-xs">
+                        <Compass className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <label htmlFor="enable-real-world-toggle" className="font-bold text-slate-800 text-sm cursor-pointer select-none">
+                          Ưu tiên câu hỏi bối cảnh thực tế (Chuẩn GDPT 2018)
+                        </label>
+                        <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                          Tự động lồng ghép các bài toán thực tiễn: tối ưu hóa chi phí/lợi nhuận bằng hệ BPT bậc nhất hai ẩn, bài toán đo đạc góc/khoảng cách bằng hệ thức lượng, thống kê, tài chính...
+                        </p>
+                      </div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-4 mt-1">
+                      <input
+                        id="enable-real-world-toggle"
+                        type="checkbox"
+                        checked={enableRealWorld}
+                        onChange={e => setEnableRealWorld(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+
+                  {/* Khi kích hoạt tùy chọn */}
+                  {enableRealWorld && (
+                    <div className="space-y-4 pt-1">
+                      <div>
+                        <div className="flex justify-between items-center mb-2">
+                          <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                            Tỷ lệ câu hỏi bối cảnh thực tế mong muốn:
+                          </label>
+                          <span className="text-xs font-bold text-blue-700 bg-blue-100/90 px-2.5 py-0.5 rounded-full">
+                            {realWorldLevel === 'standard' && 'Tiêu chuẩn (~30% câu thực tế)'}
+                            {realWorldLevel === 'high' && 'Tăng cường (~50% câu thực tế)'}
+                            {realWorldLevel === 'max' && 'Chuyên đề thực tế (~70% - 100% câu thực tế)'}
+                          </span>
+                        </div>
+
+                        {/* 3 Thẻ Lựa chọn Nhanh */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <button
+                            type="button"
+                            onClick={() => setRealWorldLevel("standard")}
+                            className={`p-3.5 rounded-xl border text-left transition-all relative ${
+                              realWorldLevel === "standard"
+                                ? "border-blue-500 bg-blue-50/70 ring-2 ring-blue-500/20 shadow-xs"
+                                : "border-slate-200 hover:border-slate-300 bg-white"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="font-bold text-sm text-slate-800">Tiêu chuẩn</span>
+                              <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                                realWorldLevel === "standard" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"
+                              }`}>~30%</span>
+                            </div>
+                            <p className="text-xs text-slate-500 leading-snug">
+                              Mặc định: Phân bổ hài hòa giữa bài toán thuần túy và bài toán đời sống thường nhật.
+                            </p>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setRealWorldLevel("high")}
+                            className={`p-3.5 rounded-xl border text-left transition-all relative ${
+                              realWorldLevel === "high"
+                                ? "border-blue-500 bg-blue-50/70 ring-2 ring-blue-500/20 shadow-xs"
+                                : "border-slate-200 hover:border-slate-300 bg-white"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="font-bold text-sm text-slate-800">Tăng cường</span>
+                              <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                                realWorldLevel === "high" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"
+                              }`}>~50%</span>
+                            </div>
+                            <p className="text-xs text-slate-500 leading-snug">
+                              Tùy chọn cao: Khoảng một nửa số câu gắn với kinh doanh, sản xuất, đo đạc khoảng cách.
+                            </p>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setRealWorldLevel("max")}
+                            className={`p-3.5 rounded-xl border text-left transition-all relative ${
+                              realWorldLevel === "max"
+                                ? "border-blue-500 bg-blue-50/70 ring-2 ring-blue-500/20 shadow-xs"
+                                : "border-slate-200 hover:border-slate-300 bg-white"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="font-bold text-sm text-slate-800">Chuyên đề thực tế</span>
+                              <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                                realWorldLevel === "max" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"
+                              }`}>~70% - 100%</span>
+                            </div>
+                            <p className="text-xs text-slate-500 leading-snug">
+                              Tùy chọn tối đa: Tập trung vào bài toán ứng dụng thực tiễn, tối ưu chi phí và mô hình hóa.
+                            </p>
+                          </button>
+                        </div>
+
+                        {/* Thanh trượt tỷ lệ (Slider) */}
+                        <div className="mt-4 pt-3 border-t border-slate-100">
+                          <div className="flex items-center justify-between text-xs text-slate-500 mb-1.5">
+                            <span className="font-medium">Thanh điều chỉnh mức độ:</span>
+                            <span className="font-semibold text-blue-600">
+                              {realWorldLevel === 'standard' && "Mức 1: Tiêu chuẩn (~30%)"}
+                              {realWorldLevel === 'high' && "Mức 2: Tăng cường (~50%)"}
+                              {realWorldLevel === 'max' && "Mức 3: Chuyên đề thực tế (~70% - 100%)"}
+                            </span>
+                          </div>
+                          <input
+                            type="range"
+                            min="1"
+                            max="3"
+                            step="1"
+                            value={realWorldLevel === 'standard' ? 1 : realWorldLevel === 'high' ? 2 : 3}
+                            onChange={e => {
+                              const val = Number(e.target.value);
+                              if (val === 1) setRealWorldLevel("standard");
+                              else if (val === 2) setRealWorldLevel("high");
+                              else setRealWorldLevel("max");
+                            }}
+                            className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                          />
+                          <div className="flex justify-between text-[11px] text-slate-400 mt-1.5 px-1">
+                            <span className="cursor-pointer hover:text-blue-600" onClick={() => setRealWorldLevel("standard")}>30% (Tiêu chuẩn)</span>
+                            <span className="cursor-pointer hover:text-blue-600 text-center" onClick={() => setRealWorldLevel("high")}>50% (Tăng cường)</span>
+                            <span className="cursor-pointer hover:text-blue-600 text-right" onClick={() => setRealWorldLevel("max")}>70% - 100% (Chuyên đề)</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 6. THÀNH PHẦN ĐẦU RA */}
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-12">
                   <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-4">
-                    <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm">5</span> THÀNH PHẦN ĐẦU RA
+                    <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm">6</span> THÀNH PHẦN ĐẦU RA
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm text-slate-700">
+                     <label className="flex items-center gap-2 cursor-pointer col-span-1 sm:col-span-2 bg-emerald-50/70 p-3 rounded-lg border border-emerald-200">
+                       <input
+                         type="checkbox"
+                         checked={outputConfig.groupBySection !== false}
+                         onChange={e => setOutputConfig({ ...outputConfig, groupBySection: e.target.checked })}
+                         className="w-4 h-4 text-emerald-600 rounded border-slate-300 shrink-0"
+                       />
+                       <div>
+                         <span className="font-semibold text-emerald-950">
+                           Cố định nhóm theo từng Phần (Chuẩn GDPT):
+                         </span>
+                         <span className="ml-1 text-slate-600 text-xs">
+                           Chỉ trộn câu hỏi trong nội bộ từng phần (Phần I, Phần II, Phần III, Phần IV), không làm xáo trộn lẫn lộn giữa các phần.
+                         </span>
+                       </div>
+                     </label>
+                     <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={outputConfig.shuffleOptions} onChange={e=>setOutputConfig({...outputConfig, shuffleOptions: e.target.checked})} className="w-4 h-4 text-blue-600 rounded border-slate-300" /> Đảo thứ tự phương án A, B, C, D trong từng câu hỏi trắc nghiệm</label>
+                     <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={outputConfig.shuffleQuestions} onChange={e=>setOutputConfig({...outputConfig, shuffleQuestions: e.target.checked})} className="w-4 h-4 text-blue-600 rounded border-slate-300" /> Trộn thứ tự câu giữa các mã đề (trong nội bộ từng phần)</label>
                      <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={outputConfig.answers} onChange={e=>setOutputConfig({...outputConfig, answers: e.target.checked})} className="w-4 h-4 text-blue-600 rounded border-slate-300" /> Đáp án và thang điểm</label>
                      <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={outputConfig.matrix} onChange={e=>setOutputConfig({...outputConfig, matrix: e.target.checked})} className="w-4 h-4 text-blue-600 rounded border-slate-300" /> Ma trận đề kiểm tra</label>
                      <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={outputConfig.spec} onChange={e=>setOutputConfig({...outputConfig, spec: e.target.checked})} className="w-4 h-4 text-blue-600 rounded border-slate-300" /> Bản đặc tả đề kiểm tra</label>
-                     <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={outputConfig.shuffleOptions} onChange={e=>setOutputConfig({...outputConfig, shuffleOptions: e.target.checked})} className="w-4 h-4 text-blue-600 rounded border-slate-300" /> Trộn thứ tự phương án trắc nghiệm</label>
-                     <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={outputConfig.shuffleQuestions} onChange={e=>setOutputConfig({...outputConfig, shuffleQuestions: e.target.checked})} className="w-4 h-4 text-blue-600 rounded border-slate-300" /> Trộn thứ tự câu giữa các mã đề</label>
                      <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={outputConfig.detailedSolution} onChange={e=>setOutputConfig({...outputConfig, detailedSolution: e.target.checked})} className="w-4 h-4 text-blue-600 rounded border-slate-300" /> Lời giải chi tiết</label>
                   </div>
                   <div className="mt-8 flex flex-col gap-4">
@@ -1096,6 +1503,18 @@ ${customPrompt}
                        <div className="flex justify-between items-center border-b border-slate-100 pb-3">
                           <span className="text-sm text-slate-600">Số mã đề</span>
                           <span className="font-bold text-slate-800">{numCodes}</span>
+                       </div>
+                       <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                          <span className="text-sm text-slate-600">Bối cảnh thực tế</span>
+                          <span className={`font-semibold text-xs px-2 py-0.5 rounded ${
+                             enableRealWorld ? 'text-blue-700 bg-blue-50 border border-blue-200' : 'text-slate-400 bg-slate-100'
+                          }`}>
+                             {enableRealWorld ? (
+                               realWorldLevel === 'high' ? 'Tăng cường (~50%)' :
+                               realWorldLevel === 'max' ? 'Chuyên đề (~70-100%)' :
+                               'Tiêu chuẩn (~30%)'
+                             ) : 'Đang tắt'}
+                          </span>
                        </div>
                        <div className="flex justify-between items-center border-b border-slate-100 pb-3">
                           <span className="text-sm text-slate-600">Học liệu</span>
@@ -1551,13 +1970,35 @@ ${customPrompt}
 
                   <div className="border border-slate-200 rounded-lg p-6 space-y-6 bg-white" id="original-exam">
 
-                    <h2 className="text-xl font-bold text-center mb-6">{examName}</h2>
+                    <div className="flex flex-wrap items-center justify-between gap-3 mb-6 pb-4 border-b border-slate-100">
+                      <h2 className="text-xl font-bold text-slate-800">{examName}</h2>
+                      {(() => {
+                        const rwCount = questions.filter(q => isRealWorldQuestion(q)).length;
+                        return (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs px-2.5 py-1 bg-slate-100 text-slate-700 rounded-full font-medium">
+                              Tổng: {questions.length} câu
+                            </span>
+                            {rwCount > 0 && (
+                              <span className="text-xs px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full font-semibold flex items-center gap-1">
+                                <Compass className="w-3.5 h-3.5" /> {rwCount} câu thực tế ({Math.round(rwCount / questions.length * 100)}%)
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
                     {questions.map((q, idx) => (
                       <div key={idx} className="pb-4 border-b border-slate-100 last:border-0">
                         <div className="font-medium text-slate-800 mb-3 flex items-start gap-2">
                           <span className="font-bold whitespace-nowrap mt-1">Câu {idx + 1}:</span> 
                           <MarkdownRenderer className="markdown-body inline-block" content={fixMath(cleanQuestionStem(q.content || (q as any).question || (q as any).text || '', q.options, q.tfStatements))} /> 
                           <span className="text-xs text-emerald-600 font-normal mt-1 shrink-0">[{q.level}]</span>
+                          {isRealWorldQuestion(q) && (
+                            <span className="text-xs font-semibold px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded mt-1 shrink-0 flex items-center gap-1 shadow-2xs" title="Câu hỏi có ngữ cảnh ứng dụng thực tế (Chuẩn GDPT 2018)">
+                              [Thực tế]
+                            </span>
+                          )}
                           <button onClick={() => saveToBank(q)} className="text-xs px-2 py-1 bg-blue-50 text-blue-600 rounded border border-blue-200 hover:bg-blue-100 shrink-0 no-print" title="Lưu vào Ngân hàng CH">+ Lưu NH</button>
                           <button onClick={() => {
                             if (confirm("Xóa câu hỏi này khỏi đề?")) {
@@ -1611,24 +2052,119 @@ ${customPrompt}
 
           {activeTab === "shuffle" && (
             <div className="space-y-6">
+              {/* CẤU HÌNH TRỘN ĐỀ BƯỚC 3 */}
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                  <div>
+                    <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
+                      <Shuffle className="w-5 h-5 text-emerald-600" />
+                      Cấu hình & Tạo Mã Đề Hoán Vị (Bước 3)
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Hệ thống tự động phân loại {questions.length} câu hỏi theo từng phần chuẩn GDPT và xáo trộn độc lập.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
+                      <label className="text-xs font-semibold text-slate-600 whitespace-nowrap">Số lượng mã đề:</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="24"
+                        value={numCodes}
+                        onChange={e => setNumCodes(Math.min(24, Math.max(1, Number(e.target.value))))}
+                        className="w-14 px-2 py-1 text-center font-bold text-sm border border-slate-300 rounded bg-white text-slate-800 focus:ring-1 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <button
+                      onClick={handleShuffle}
+                      disabled={questions.length === 0}
+                      className="px-4 py-2 bg-emerald-600 text-white font-semibold text-sm rounded-lg hover:bg-emerald-700 flex items-center gap-2 shadow-sm transition-all disabled:opacity-50"
+                    >
+                      <Shuffle className="w-4 h-4" /> {shuffledExams.length > 0 ? "Trộn lại đề" : "Thực hiện Trộn Đề"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-2.5 pt-1">
+                  <label className="flex items-start gap-3 p-3 rounded-lg border border-emerald-200 bg-emerald-50/50 cursor-pointer transition-colors hover:bg-emerald-50">
+                    <input
+                      type="checkbox"
+                      checked={outputConfig.groupBySection !== false}
+                      onChange={e => setOutputConfig({ ...outputConfig, groupBySection: e.target.checked })}
+                      className="w-4 h-4 text-emerald-600 rounded border-slate-300 mt-0.5 shrink-0"
+                    />
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-slate-900 text-sm">
+                          Cố định nhóm theo từng Phần (Chuẩn GDPT)
+                        </span>
+                        <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">
+                          BẬT MẶC ĐỊNH
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-600 mt-0.5">
+                        Chỉ trộn câu hỏi trong nội bộ từng phần (Phần I, Phần II, Phần III, Phần IV), không làm xáo trộn lẫn lộn giữa các phần.
+                      </p>
+                    </div>
+                  </label>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <label className="flex items-center gap-2.5 p-2.5 rounded-lg border border-slate-200 bg-slate-50/50 cursor-pointer hover:bg-slate-50">
+                      <input
+                        type="checkbox"
+                        checked={outputConfig.shuffleOptions !== false}
+                        onChange={e => setOutputConfig({ ...outputConfig, shuffleOptions: e.target.checked })}
+                        className="w-4 h-4 text-blue-600 rounded border-slate-300 shrink-0"
+                      />
+                      <span className="text-xs font-medium text-slate-800">
+                        Đảo thứ tự phương án A, B, C, D trong từng câu hỏi trắc nghiệm
+                      </span>
+                    </label>
+
+                    <label className="flex items-center gap-2.5 p-2.5 rounded-lg border border-slate-200 bg-slate-50/50 cursor-pointer hover:bg-slate-50">
+                      <input
+                        type="checkbox"
+                        checked={outputConfig.shuffleQuestions !== false}
+                        onChange={e => setOutputConfig({ ...outputConfig, shuffleQuestions: e.target.checked })}
+                        className="w-4 h-4 text-blue-600 rounded border-slate-300 shrink-0"
+                      />
+                      <span className="text-xs font-medium text-slate-800">
+                        Đảo thứ tự câu hỏi giữa các mã đề (trong nội bộ từng phần)
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
               {shuffledExams.length === 0 ? (
-                <div className="text-center py-12 text-slate-500">Chưa có mã đề nào được trộn.</div>
+                <div className="text-center py-12 text-slate-500 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                  <Shuffle className="w-10 h-10 text-slate-400 mx-auto mb-2 opacity-50" />
+                  <p className="font-semibold text-slate-700">Chưa có mã đề nào được trộn.</p>
+                  <p className="text-sm text-slate-500 mt-1">Bấm nút "Thực hiện Trộn Đề" ở trên để sinh các mã đề hoán vị theo chuẩn GDPT.</p>
+                </div>
               ) : (
                 <>
                   <div className="flex flex-wrap gap-4 items-center justify-between bg-emerald-50 border border-emerald-100 p-4 rounded-lg">
                     <div>
-                      <h3 className="font-bold text-emerald-800">Đã trộn thành công {shuffledExams.length} mã đề</h3>
-                      <p className="text-sm text-emerald-600 mt-1">Sẵn sàng in ấn, xuất file hoặc chia sẻ cho học sinh làm bài Online.</p>
+                      <h3 className="font-bold text-emerald-800">Đã trộn thành công {shuffledExams.length} mã đề ({shuffledExams.map(e => e.code).join(', ')})</h3>
+                      <p className="text-sm text-emerald-600 mt-1">Sẵn sàng in ấn, xuất file Word/PDF, xuất bảng đáp án TNMaker hoặc chia sẻ cho học sinh làm bài Online.</p>
                     </div>
                     
                     <div className="flex flex-wrap gap-2 sm:gap-3">
-                      <button onClick={handleShare} className="px-3 sm:px-4 py-2 bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-700 flex items-center gap-2">
+                      <button onClick={handleShare} className="px-3 sm:px-4 py-2 bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-700 flex items-center gap-2 shadow-sm">
                         <Share2 className="w-4 h-4" /> <span className="hidden sm:inline">Chia sẻ Online</span>
                       </button>
-                      <button onClick={handleExportCSV} className="px-3 sm:px-4 py-2 bg-white border border-emerald-600 text-emerald-700 font-medium rounded-lg hover:bg-emerald-50 flex items-center gap-2">
+                      <button onClick={handleExportTNMakerExcel} className="px-3 sm:px-4 py-2 bg-white border border-emerald-600 text-emerald-700 font-medium rounded-lg hover:bg-emerald-50 flex items-center gap-2 shadow-sm" title="Xuất file Excel đầy đủ ma trận đáp án, form TNMaker và bảng tra câu gốc">
                         <FileSpreadsheet className="w-4 h-4" /> <span className="hidden sm:inline">Excel Đáp Án (TNMaker)</span>
                       </button>
-                      <button onClick={() => setShowBubbleSheetModal(true)} className="px-3 sm:px-4 py-2 bg-white border border-emerald-600 text-emerald-700 font-medium rounded-lg hover:bg-emerald-50 flex items-center gap-2">
+                      <button onClick={handleExportCSV} className="px-3 sm:px-4 py-2 bg-white border border-slate-300 text-slate-700 font-medium rounded-lg hover:bg-slate-50 flex items-center gap-2 shadow-sm" title="Xuất CSV cho app chấm TNMaker">
+                        <Download className="w-4 h-4" /> <span className="hidden sm:inline">CSV TNMaker</span>
+                      </button>
+                      <button onClick={() => setShowAnswerMatrix(!showAnswerMatrix)} className="px-3 sm:px-4 py-2 bg-white border border-blue-500 text-blue-700 font-medium rounded-lg hover:bg-blue-50 flex items-center gap-2 shadow-sm">
+                        <FileSpreadsheet className="w-4 h-4" /> <span className="hidden sm:inline">{showAnswerMatrix ? "Ẩn Ma Trận" : "Xem Ma Trận"}</span>
+                      </button>
+                      <button onClick={() => setShowBubbleSheetModal(true)} className="px-3 sm:px-4 py-2 bg-white border border-emerald-600 text-emerald-700 font-medium rounded-lg hover:bg-emerald-50 flex items-center gap-2 shadow-sm">
                         <FileText className="w-4 h-4" /> <span className="hidden sm:inline">In Phiếu Tô</span>
                       </button>
                     </div>
@@ -1718,6 +2254,103 @@ ${customPrompt}
                     </div>
                   )}
 
+                  {/* BẢNG ĐÁP ÁN MA TRẬN & TRA CỨU HOÁN VỊ TỔNG HỢP */}
+                  {showAnswerMatrix && (
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 space-y-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                        <div className="flex items-center gap-2">
+                          <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+                          <div>
+                            <h3 className="font-bold text-slate-800 text-base">
+                              Bảng Đáp Án Ma Trận & Tra Cứu Hoán Vị (Tất cả {shuffledExams.length} mã đề)
+                            </h3>
+                            <p className="text-xs text-slate-500">
+                              Phân loại theo từng Phần chuẩn GDPT. Đáp án đồng bộ chính xác 100% với đề thi và file xuất TNMaker.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={handleExportTNMakerExcel}
+                            className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-300 rounded-md hover:bg-emerald-100 text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
+                          >
+                            <Download className="w-3.5 h-3.5" /> Xuất File Excel (.xlsx)
+                          </button>
+                          <button
+                            onClick={handleExportCSV}
+                            className="px-3 py-1.5 bg-slate-50 text-slate-700 border border-slate-300 rounded-md hover:bg-slate-100 text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
+                          >
+                            <FileText className="w-3.5 h-3.5" /> File CSV TNMaker
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="overflow-x-auto max-h-[500px] border border-slate-200 rounded-lg">
+                        <table className="w-full border-collapse border border-slate-300 text-xs sm:text-sm text-center">
+                          <thead className="bg-slate-100 font-bold text-slate-800 sticky top-0 shadow-sm z-10">
+                            <tr>
+                              <th className="border border-slate-300 p-2 w-14 bg-slate-100">Câu</th>
+                              <th className="border border-slate-300 p-2 text-left min-w-[160px] bg-slate-100">Phân loại Phần</th>
+                              {shuffledExams.map(exam => (
+                                <th key={exam.code} className="border border-slate-300 p-2 bg-emerald-50 text-emerald-900 font-bold">
+                                  Mã {exam.code}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {Array.from({ length: shuffledExams[0]?.questions.length || 0 }).map((_, qIdx) => {
+                              const firstQ = shuffledExams[0].questions[qIdx];
+                              const section = firstQ.section || identifyQuestionSection(firstQ);
+                              const prevQ = qIdx > 0 ? shuffledExams[0].questions[qIdx - 1] : null;
+                              const isFirstOfSection = qIdx === 0 || ((prevQ?.section || (prevQ && identifyQuestionSection(prevQ))) !== section);
+
+                              return (
+                                <React.Fragment key={qIdx}>
+                                  {isFirstOfSection && (
+                                    <tr className="bg-blue-50/80 font-bold text-blue-900 text-xs text-left">
+                                      <td colSpan={2 + shuffledExams.length} className="border border-slate-300 p-2 uppercase">
+                                        {SECTION_NAMES[section as 1|2|3|4] || `PHẦN ${section}`}
+                                      </td>
+                                    </tr>
+                                  )}
+                                  <tr className="hover:bg-slate-50 transition-colors">
+                                    <td className="border border-slate-300 p-2 font-bold text-slate-700 bg-slate-50/60">
+                                      Câu {qIdx + 1}
+                                    </td>
+                                    <td className="border border-slate-300 p-2 text-left text-xs text-slate-600">
+                                      {SECTION_SHORT_NAMES[section as 1|2|3|4] || `Phần ${section}`}
+                                    </td>
+                                    {shuffledExams.map(exam => {
+                                      const q = exam.questions[qIdx];
+                                      const ansStr = getQuestionAnswerString(q);
+                                      const isMC = (q.section === 1 || q.type === 'mc');
+
+                                      return (
+                                        <td
+                                          key={exam.code}
+                                          className={`border border-slate-300 p-2 font-bold font-mono ${
+                                            isMC
+                                              ? 'text-emerald-700 bg-emerald-50/40'
+                                              : q.section === 2
+                                              ? 'text-blue-700 bg-blue-50/20 text-xs'
+                                              : 'text-indigo-700 text-xs'
+                                          }`}
+                                        >
+                                          {ansStr}
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                </React.Fragment>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="space-y-8">
                     {shuffledExams.map((exam, index) => (
                       <div key={index} className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white">
@@ -1737,7 +2370,9 @@ ${customPrompt}
                                                 correctOptionIndex: q.correctOptionIndex,
                                                 correct: q.correct,
                                                 correctAnswer: q.correctAnswer,
-                                                tfStatements: q.tfStatements?.map((tf: any) => ({ statement: embedTikzSvgsInText(tf.statement || ''), correct: tf.correct }))
+                                                tfStatements: q.tfStatements?.map((tf: any) => ({ statement: embedTikzSvgsInText(tf.statement || ''), correct: tf.correct })),
+                                                imageUrl: q.imageUrl,
+                                                hasFigure: q.hasFigure
                                             }))
                                         }
                                     ]
@@ -1802,7 +2437,9 @@ ${customPrompt}
                                                 correctOptionIndex: q.correctOptionIndex,
                                                 correct: q.correct,
                                                 correctAnswer: q.correctAnswer,
-                                                tfStatements: q.tfStatements?.map((tf: any) => ({ statement: embedTikzSvgsInText(tf.statement || ''), correct: tf.correct }))
+                                                tfStatements: q.tfStatements?.map((tf: any) => ({ statement: embedTikzSvgsInText(tf.statement || ''), correct: tf.correct })),
+                                                imageUrl: q.imageUrl,
+                                                hasFigure: q.hasFigure
                                             }))
                                         }
                                     ]
@@ -1890,11 +2527,30 @@ ${customPrompt}
                             </table>
 
                             {/* Question List */}
-                            {exam.questions.map((q, idx) => (
-                              <div key={idx} className="question-block" style={{ marginBottom: '12pt', pageBreakInside: 'avoid' }}>
-                                <div style={{ fontSize: '12pt', marginBottom: '3pt' }}>
-                                  <strong>Câu {idx + 1}:</strong> <MarkdownRenderer className="markdown-body inline-block" content={fixMath(cleanQuestionStem(q.content || (q as any).question || (q as any).text || '', q.options, q.tfStatements))} />
-                                </div>
+                            {exam.questions.map((q, idx) => {
+                              const currentSec = (q as any).section || identifyQuestionSection(q);
+                              const prevSec = idx > 0 ? ((exam.questions[idx - 1] as any).section || identifyQuestionSection(exam.questions[idx - 1])) : null;
+                              const isNewSection = currentSec && currentSec !== prevSec;
+
+                              return (
+                                <React.Fragment key={idx}>
+                                  {isNewSection && (
+                                    <div style={{ marginTop: idx > 0 ? '16pt' : '8pt', marginBottom: '8pt', pageBreakAfter: 'avoid' }}>
+                                      <div style={{ fontSize: '11.5pt', fontWeight: 'bold', textTransform: 'uppercase', color: '#0f172a' }}>
+                                        {SECTION_NAMES[currentSec as 1|2|3|4] || `PHẦN ${currentSec}`}
+                                      </div>
+                                      <div style={{ fontSize: '10pt', fontStyle: 'italic', color: '#334155', marginTop: '2pt', marginBottom: '4pt' }}>
+                                        {currentSec === 1 && "Thí sinh trả lời từ câu hỏi này. Mỗi câu hỏi chỉ chọn một phương án trả lời."}
+                                        {currentSec === 2 && "Trong mỗi ý a), b), c), d) ở mỗi câu, thí sinh chọn đúng hoặc sai."}
+                                        {currentSec === 3 && "Thí sinh ghi câu trả lời/kết quả tính toán vào phiếu trả lời (Mỗi câu là một số có tối đa 4 ký tự)."}
+                                        {currentSec === 4 && "Thí sinh trình bày lời giải chi tiết vào giấy làm bài."}
+                                      </div>
+                                    </div>
+                                  )}
+                                  <div className="question-block" style={{ marginBottom: '12pt', pageBreakInside: 'avoid' }}>
+                                    <div style={{ fontSize: '12pt', marginBottom: '3pt' }}>
+                                      <strong>Câu {idx + 1}:</strong> <MarkdownRenderer className="markdown-body inline-block" content={fixMath(cleanQuestionStem(q.content || (q as any).question || (q as any).text || '', q.options, q.tfStatements))} />
+                                    </div>
                                 {q.type === 'mc' && q.options && (() => {
                                   const cleanedOpts = q.options.map((opt: string) => cleanOptionText(opt));
                                   const maxLen = Math.max(...cleanedOpts.map((o: string) => (o || '').length));
@@ -1977,7 +2633,9 @@ ${customPrompt}
                                   </div>
                                 )}
                               </div>
-                            ))}
+                            </React.Fragment>
+                          );
+                        })}
 
                             {/* End of test note */}
                             <div style={{ textAlign: 'center', marginTop: '20pt', marginBottom: '4pt', fontWeight: 'bold', fontSize: '11.5pt', letterSpacing: '1px' }}>
@@ -2016,15 +2674,19 @@ ${customPrompt}
                                       <tr>
                                         {slice.map((q, colIndex) => {
                                           let ans = "";
-                                          if (q.type === 'mc') {
+                                          if (q.type === 'mc' || (q as any).section === 1) {
                                             ans = String.fromCharCode(65 + (q.correctOptionIndex || 0));
-                                          } else if (q.type === 'tf' && q.tfStatements) {
+                                          } else if ((q.type === 'tf' || (q as any).section === 2) && q.tfStatements) {
                                             ans = q.tfStatements.map(s => s.correct ? 'Đ' : 'S').join('');
+                                          } else if (q.type === 'sa' || (q as any).section === 3) {
+                                            ans = (q.correctAnswer || '').replace(/<[^>]*>?/gm, '').trim();
+                                          } else {
+                                            ans = "TL";
                                           }
                                           return (
                                             <td key={'a-' + colIndex} style={{ border: '1px solid black', padding: '5pt 2pt', fontWeight: 'bold' }}>
                                               {q.type !== 'mc' && q.type !== 'tf' ? (
-                                                <MarkdownRenderer className="markdown-body inline-block" content={fixMath(q.correctAnswer || '')} />
+                                                <MarkdownRenderer className="markdown-body inline-block" content={fixMath(ans)} />
                                               ) : ans}
                                             </td>
                                           );
@@ -2052,24 +2714,57 @@ ${customPrompt}
         
         {activeTab === "results" && (
           <div className="space-y-6">
-            <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-              <h3 className="font-bold text-lg text-slate-800">Thống Kê Kết Quả Làm Bài (Online)</h3>
-              <button 
-                onClick={() => {
-                  if (confirm("Bạn có chắc muốn xóa toàn bộ lịch sử kết quả thi trên thiết bị này?")) {
-                    localStorage.removeItem('eduplan_exam_results');
-                    setExamResults([]);
-                  }
-                }}
-                className="px-4 py-2 bg-red-50 text-red-600 rounded hover:bg-red-100 flex items-center gap-2 text-sm font-medium"
-              >
-                <Trash2 className="w-4 h-4" /> Xóa lịch sử
-              </button>
+            <div className="flex flex-wrap justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm gap-3">
+              <div>
+                <h3 className="font-bold text-lg text-slate-800">Thống Kê Kết Quả Làm Bài (Online)</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Tự động đồng bộ qua Webhook Google Sheets trung tâm và lưu trữ trên hệ thống
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={fetchResults}
+                  disabled={resultsLoading}
+                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg flex items-center gap-2 text-sm font-semibold shadow-xs transition-colors disabled:opacity-60 cursor-pointer"
+                  title="Cập nhật điểm mới nhất của học sinh vừa nộp từ Webhook Google Sheets"
+                >
+                  <RefreshCw className={`w-4 h-4 text-emerald-600 ${resultsLoading ? 'animate-spin' : ''}`} />
+                  <span>{resultsLoading ? 'Đang tải...' : '🔄 Làm mới dữ liệu'}</span>
+                </button>
+                <button 
+                  onClick={exportResultsToExcel}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg flex items-center gap-2 text-sm font-semibold shadow-xs transition-colors cursor-pointer"
+                >
+                  <FileSpreadsheet className="w-4 h-4" /> Xuất file Excel bảng điểm
+                </button>
+                <button 
+                  onClick={() => {
+                    if (confirm("Bạn có chắc muốn xóa toàn bộ lịch sử kết quả thi trên thiết bị này?")) {
+                      localStorage.removeItem('eduplan_exam_results');
+                      setExamResults([]);
+                    }
+                  }}
+                  className="px-3.5 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 flex items-center gap-1.5 text-sm font-medium transition-colors cursor-pointer"
+                >
+                  <Trash2 className="w-4 h-4" /> Xóa lịch sử
+                </button>
+              </div>
             </div>
             
-            {examResults.length === 0 ? (
+            {resultsLoading && examResults.length === 0 ? (
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-12 text-center flex flex-col items-center justify-center gap-3">
+                <RefreshCw className="w-8 h-8 text-emerald-600 animate-spin" />
+                <p className="text-slate-600 font-medium text-sm">Đang tải danh sách kết quả nộp bài từ Google Sheets...</p>
+              </div>
+            ) : examResults.length === 0 ? (
               <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-12 text-center">
-                <p className="text-slate-500">Chưa có kết quả làm bài nào được ghi nhận trên thiết bị này.</p>
+                <p className="text-slate-500">Chưa có kết quả làm bài nào được ghi nhận trên hệ thống.</p>
+                <button
+                  onClick={fetchResults}
+                  className="mt-3 px-4 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-sm font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <RefreshCw className="w-4 h-4" /> Bấm để tải dữ liệu từ Google Sheets
+                </button>
               </div>
             ) : (
               <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -2078,46 +2773,94 @@ ${customPrompt}
                     <thead>
                       <tr className="bg-slate-50 border-b border-slate-200 text-sm">
                         <th className="p-4 font-semibold text-slate-700">Thời gian nộp</th>
-                        <th className="p-4 font-semibold text-slate-700">Đề thi</th>
+                        <th className="p-4 font-semibold text-slate-700">Mã đề / Đề thi</th>
                         <th className="p-4 font-semibold text-slate-700">Học sinh</th>
                         <th className="p-4 font-semibold text-slate-700">Lớp</th>
                         <th className="p-4 font-semibold text-slate-700">Điểm số</th>
-                        <th className="p-4 font-semibold text-slate-700 text-center">Chi tiết</th>
+                        <th className="p-4 font-semibold text-slate-700 text-center">Số câu đúng</th>
+                        <th className="p-4 font-semibold text-slate-700 text-center">Trạng thái Tự luận</th>
                         <th className="p-4 font-semibold text-slate-700">Thời gian làm</th>
+                        <th className="p-4 font-semibold text-slate-700 text-center">Thao tác</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {examResults.map((result: any, idx: number) => (
-                        <tr key={idx} className="hover:bg-slate-50">
-                          <td className="p-4 text-sm text-slate-600">
-                            {new Date(result.submittedAt).toLocaleString('vi-VN')}
-                          </td>
-                          <td className="p-4 text-sm font-medium text-slate-800">
-                            {result.examName}
-                          </td>
-                          <td className="p-4 text-sm font-medium text-blue-700">
-                            {result.studentName}
-                          </td>
-                          <td className="p-4 text-sm text-slate-600">
-                            {result.studentClass || '-'}
-                          </td>
-                          <td className="p-4 font-bold text-emerald-600">
-                            {result.score} / 10
-                          </td>
-                          <td className="p-4 text-sm">
-                            <div className="flex gap-2 justify-center text-xs font-medium">
-                              <span className="text-emerald-600 bg-emerald-50 px-2 py-1 rounded" title="Đúng">✓ {result.correct || 0}</span>
-                              <span className="text-red-600 bg-red-50 px-2 py-1 rounded" title="Sai">✗ {result.incorrect || 0}</span>
-                              {(result.unanswered > 0) && (
-                                <span className="text-slate-500 bg-slate-100 px-2 py-1 rounded" title="Bỏ qua">- {result.unanswered}</span>
+                      {examResults.map((result: any, idx: number) => {
+                        const timeSubmitted = result.timestamp || (result.submittedAt ? new Date(result.submittedAt).toLocaleString('vi-VN') : '-');
+                        const examLabel = result.examId ? `Mã ${result.examId}` : (result.examName || "Đề thi Online");
+                        const studentLabel = result.studentName || "Học sinh ẩn danh";
+                        const classLabel = result.className || result.studentClass || "-";
+                        const scoreVal = result.score !== undefined ? `${result.score} / 10` : "-";
+                        const correctLabel = result.details
+                          ? result.details
+                          : (result.correct !== undefined ? `✓ ${result.correct}` : '-');
+                        const timeSpentLabel = typeof result.timeSpent === 'number'
+                          ? `${Math.floor(result.timeSpent / 60)} phút ${result.timeSpent % 60} giây`
+                          : (result.timeSpent || '-');
+
+                        const photoCount = result.essaySubmissions?.reduce((acc: number, curr: any) => acc + (curr.images?.length || 0), 0) || 0;
+                        const essayCount = result.essaySubmissions?.length || 0;
+
+                        return (
+                          <tr key={idx} className="hover:bg-slate-50">
+                            <td className="p-4 text-sm text-slate-600 whitespace-nowrap">
+                              {timeSubmitted}
+                            </td>
+                            <td className="p-4 text-sm font-medium text-slate-800">
+                              {examLabel}
+                            </td>
+                            <td className="p-4 text-sm font-medium text-blue-700">
+                              {studentLabel}
+                            </td>
+                            <td className="p-4 text-sm text-slate-600">
+                              {classLabel}
+                            </td>
+                            <td className="p-4">
+                              <div className="flex flex-col">
+                                <span className="font-bold text-emerald-600 text-sm sm:text-base">{scoreVal}</span>
+                                {result.essayScore !== undefined && (
+                                  <span className="text-[11px] font-semibold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200 inline-block w-fit mt-0.5">
+                                    ⭐ Tự luận: {result.essayScore}đ
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="p-4 text-sm text-center">
+                              <span className="text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md font-medium text-xs border border-emerald-200">
+                                {correctLabel}
+                              </span>
+                            </td>
+                            <td className="p-4 text-sm text-center">
+                              {result.hasEssay || essayCount > 0 ? (
+                                <div className="flex flex-col items-center gap-1">
+                                  <span className="px-2.5 py-1 bg-purple-100 text-purple-800 rounded-full font-bold text-xs inline-flex items-center gap-1 border border-purple-200 shadow-2xs">
+                                    📝 Có nộp tự luận ({photoCount} ảnh)
+                                  </span>
+                                  {result.isGraded && (
+                                    <span className="text-[11px] text-emerald-700 font-semibold inline-flex items-center gap-1">
+                                      <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Đã chấm
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-slate-400 text-xs italic">-</span>
                               )}
-                            </div>
-                          </td>
-                          <td className="p-4 text-sm text-slate-500 whitespace-nowrap">
-                            {Math.floor((result.timeSpent || 0) / 60)} phút {(result.timeSpent || 0) % 60} giây
-                          </td>
-                        </tr>
-                      ))}
+                            </td>
+                            <td className="p-4 text-sm text-slate-500 whitespace-nowrap">
+                              {timeSpentLabel}
+                            </td>
+                            <td className="p-4 text-sm text-center whitespace-nowrap">
+                              <button
+                                onClick={() => openReviewModal(result)}
+                                className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold inline-flex items-center gap-1.5 transition-all shadow-xs hover:shadow-md cursor-pointer active:scale-95"
+                                title="Xem toàn bộ bài làm trắc nghiệm & chấm ảnh bài làm tự luận"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                <span>👁 Xem bài làm & Chấm tự luận</span>
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -2125,6 +2868,522 @@ ${customPrompt}
             )}
           </div>
         )}
+
+      {/* MODAL REVIEW BÀI LÀM & CHẤM TỰ LUẬN */}
+      {selectedResultForReview && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-hidden animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[94vh] flex flex-col overflow-hidden border border-slate-200">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-indigo-50/40 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-base sm:text-lg shadow-sm">
+                  {selectedResultForReview.studentName ? selectedResultForReview.studentName.charAt(0).toUpperCase() : 'HS'}
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-base sm:text-lg font-bold text-slate-900">
+                      Bài làm: {selectedResultForReview.studentName || 'Học sinh ẩn danh'}
+                    </h3>
+                    <span className="px-2.5 py-0.5 bg-blue-100 text-blue-800 rounded-full text-xs font-semibold">
+                      Lớp: {selectedResultForReview.className || selectedResultForReview.studentClass || 'N/A'}
+                    </span>
+                    <span className="px-2.5 py-0.5 bg-purple-100 text-purple-800 rounded-full text-xs font-semibold">
+                      Mã đề: {selectedResultForReview.examId || 'Online'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-2">
+                    <span>🕒 Nộp lúc: {selectedResultForReview.timestamp || (selectedResultForReview.submittedAt ? new Date(selectedResultForReview.submittedAt).toLocaleString('vi-VN') : '-')}</span>
+                    <span>•</span>
+                    <span>⏱️ Thời gian làm bài: {typeof selectedResultForReview.timeSpent === 'number' ? `${Math.floor(selectedResultForReview.timeSpent / 60)} phút ${selectedResultForReview.timeSpent % 60} giây` : (selectedResultForReview.timeSpent || '-')}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedResultForReview(null)}
+                className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-xl transition-colors cursor-pointer"
+                title="Đóng cửa sổ"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Quick Scoring & Teacher Grading Bar */}
+            <div className="bg-slate-50 border-b border-slate-200 p-4 sm:p-5">
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
+                {/* Trắc nghiệm stats */}
+                <div className="md:col-span-4 bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
+                  <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+                    Điểm trắc nghiệm (Máy chấm)
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-2xl font-black text-emerald-600">
+                      {selectedResultForReview.score ?? 0}
+                    </span>
+                    <span className="text-xs text-slate-500 font-semibold">/ 10 điểm</span>
+                  </div>
+                  <div className="text-xs text-slate-600 mt-1 font-medium">
+                    Số câu đúng: <span className="text-emerald-700 font-bold">{selectedResultForReview.details || (selectedResultForReview.correct !== undefined ? `${selectedResultForReview.correct} câu` : '-')}</span>
+                  </div>
+                </div>
+
+                {/* Chấm Tự luận & Lời phê trực tiếp */}
+                <div className="md:col-span-8 bg-purple-50/70 border border-purple-200 rounded-xl p-3.5 space-y-3 shadow-2xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 text-purple-900 font-bold text-xs sm:text-sm">
+                      <Award className="w-4 h-4 text-purple-600" />
+                      <span>CHẤM TỰ LUẬN & LỜI PHÊ CỦA GIÁO VIÊN:</span>
+                    </div>
+                    {selectedResultForReview.isGraded && (
+                      <span className="text-[11px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <Check className="w-3 h-3 text-emerald-600" /> Đã lưu điểm
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                    <div>
+                      <label className="block text-xs font-bold text-purple-900 mb-1">
+                        ⭐ Điểm tự luận:
+                      </label>
+                      <input
+                        type="number"
+                        step="0.25"
+                        min="0"
+                        max="10"
+                        value={essayGradingScore}
+                        onChange={(e) => setEssayGradingScore(e.target.value)}
+                        placeholder="VD: 2.5"
+                        className="w-full px-3 py-2 bg-white border border-purple-300 rounded-lg text-sm font-bold text-purple-900 focus:ring-2 focus:ring-purple-500 outline-none shadow-2xs"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-bold text-purple-900 mb-1">
+                        💬 Nhận xét của giáo viên:
+                      </label>
+                      <input
+                        type="text"
+                        value={teacherFeedback}
+                        onChange={(e) => setTeacherFeedback(e.target.value)}
+                        placeholder="Nhận xét cách trình bày, lỗi sai hoặc lời khen cho học sinh..."
+                        className="w-full px-3 py-2 bg-white border border-purple-300 rounded-lg text-sm text-slate-800 focus:ring-2 focus:ring-purple-500 outline-none shadow-2xs"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="text-xs text-purple-900 font-medium">
+                      {essayGradingScore.trim() !== '' && (
+                        <span>
+                          Tổng kết: <strong className="text-slate-900">{selectedResultForReview.score ?? 0} (TN)</strong> + <strong className="text-purple-700">{essayGradingScore} (TL)</strong>
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={handleSaveGrading}
+                      className="px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-95"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      <span>Lưu kết quả chấm & Nhận xét</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Scrollable Body */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-8">
+              {/* SECTION: PHẦN TỰ LUẬN */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between pb-2 border-b-2 border-purple-200">
+                  <div className="flex items-center gap-2">
+                    <span className="w-7 h-7 rounded-lg bg-purple-600 text-white flex items-center justify-center font-bold text-xs">IV</span>
+                    <h4 className="text-base font-bold text-slate-900">
+                      PHẦN TỰ LUẬN: ĐỀ BÀI, BÀI GIẢI & ẢNH CHỤP BÀI LÀM
+                    </h4>
+                  </div>
+                  <span className="text-xs font-bold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-md border border-purple-200">
+                    {selectedResultForReview.essaySubmissions?.length || 0} câu tự luận
+                  </span>
+                </div>
+
+                {selectedResultForReview.essaySubmissions && selectedResultForReview.essaySubmissions.length > 0 ? (
+                  <div className="space-y-6">
+                    {selectedResultForReview.essaySubmissions.map((item: any, eIdx: number) => {
+                      const photos: string[] = item.images || [];
+                      return (
+                        <div key={eIdx} className="bg-white border-2 border-purple-100 rounded-2xl p-5 shadow-2xs space-y-4">
+                          {/* Câu tự luận header & đề bài */}
+                          <div>
+                            <span className="inline-block px-3 py-1 bg-purple-100 text-purple-900 font-bold text-xs rounded-lg mb-2">
+                              Câu tự luận {item.questionIndex || eIdx + 1}
+                            </span>
+                            <div className="text-slate-900 font-medium text-sm sm:text-base leading-relaxed bg-slate-50/70 p-3.5 rounded-xl border border-slate-200">
+                              <MarkdownRenderer content={item.questionContent || 'Đề bài câu hỏi tự luận'} />
+                            </div>
+                            {item.imageUrl && (
+                              <div className="mt-3 max-w-sm rounded-lg overflow-hidden border border-slate-200">
+                                <img src={item.imageUrl} alt="Hình minh họa đề bài" className="w-full object-contain" />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Bài giải học sinh gõ phím */}
+                          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-1.5">
+                            <p className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                              <span>✍️ Bài giải học sinh nhập trực tiếp (nếu có):</span>
+                            </p>
+                            {item.textAnswer && item.textAnswer.trim().length > 0 ? (
+                              <div className="text-sm font-sans text-slate-800 whitespace-pre-wrap bg-white p-3 rounded-lg border border-slate-200">
+                                {item.textAnswer}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-slate-400 italic">Học sinh không gõ phím nội dung bài giải.</p>
+                            )}
+                          </div>
+
+                          {/* Toàn bộ Ảnh bài làm tự luận do học sinh chụp */}
+                          <div className="space-y-2 pt-1">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                                <Camera className="w-4 h-4 text-purple-600" />
+                                <span>Ảnh bài làm tự luận chụp trên giấy ({photos.length} ảnh):</span>
+                              </p>
+                              {photos.length > 0 && (
+                                <span className="text-[11px] text-purple-700 font-medium bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
+                                  💡 Bấm vào ảnh để phóng to & xoay ảnh rõ nét
+                                </span>
+                              )}
+                            </div>
+
+                            {photos.length > 0 ? (
+                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 pt-1">
+                                {photos.map((imgUrl: string, pIdx: number) => (
+                                  <div
+                                    key={pIdx}
+                                    onClick={() => {
+                                      setPreviewModalImage(imgUrl);
+                                      setImageRotation(0);
+                                      setImageZoom(1);
+                                    }}
+                                    className="group relative border-2 border-purple-200 hover:border-purple-600 rounded-xl overflow-hidden bg-slate-100 aspect-3/4 flex items-center justify-center cursor-pointer shadow-2xs hover:shadow-md transition-all"
+                                  >
+                                    <img
+                                      src={imgUrl}
+                                      alt={`Ảnh bài làm trang ${pIdx + 1}`}
+                                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                                    />
+                                    <div className="absolute top-2 left-2 bg-purple-900/80 text-white text-[10px] font-bold px-2 py-0.5 rounded-md shadow-xs">
+                                      Trang {pIdx + 1}
+                                    </div>
+                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1 text-white">
+                                      <Maximize2 className="w-6 h-6 drop-shadow" />
+                                      <span className="text-xs font-semibold drop-shadow">Phóng to & Xoay</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-center text-xs text-slate-500 italic">
+                                Học sinh không tải lên ảnh chụp bài làm cho câu này.
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="p-6 bg-slate-50 border border-slate-200 rounded-xl text-center text-sm text-slate-500">
+                    Bài thi này không có câu hỏi tự luận hoặc học sinh chưa gửi bài tự luận.
+                  </div>
+                )}
+              </div>
+
+              {/* SECTION: PHẦN I, II, III (TRẮC NGHIỆM) */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between pb-2 border-b-2 border-blue-200">
+                  <div className="flex items-center gap-2">
+                    <span className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-xs">I-III</span>
+                    <h4 className="text-base font-bold text-slate-900">
+                      PHẦN TRẮC NGHIỆM: CHI TIẾT CÂU HỎI VÀ ĐÁP ÁN HỌC SINH ĐÃ CHỌN
+                    </h4>
+                  </div>
+                </div>
+
+                {selectedResultForReview.questionsSnapshot && selectedResultForReview.questionsSnapshot.length > 0 ? (
+                  <div className="space-y-5">
+                    {selectedResultForReview.questionsSnapshot.filter((q: any) => {
+                      const type = String(q.type || '').toUpperCase();
+                      return type !== 'ESSAY' && q.type !== 'essay';
+                    }).map((q: any, qIdx: number) => {
+                      const type = String(q.type || '').toUpperCase();
+                      const isMC = type === 'MC' || type === 'MULTIPLE_CHOICE' || (!q.type && q.options);
+                      const isTF = type === 'TF' || type === 'TRUE_FALSE';
+                      const isSA = type === 'SA' || type === 'SHORT_ANSWER';
+
+                      // Đánh giá đúng sai
+                      let status: 'correct' | 'wrong' | 'unanswered' = 'unanswered';
+                      if (isMC) {
+                        if (q.studentAnswer !== undefined) {
+                          status = q.studentAnswer === q.correctOptionIndex ? 'correct' : 'wrong';
+                        }
+                      } else if (isTF) {
+                        if (q.tfStatements && q.studentAnswer) {
+                          const allCorrect = q.tfStatements.every((stmt: any, sIdx: number) => {
+                            const isTrue = stmt.correct === true || String(stmt.correct).toLowerCase() === 'true';
+                            return q.studentAnswer[sIdx] === isTrue;
+                          });
+                          status = allCorrect ? 'correct' : 'wrong';
+                        }
+                      } else if (isSA) {
+                        if (q.studentAnswer && String(q.studentAnswer).trim().length > 0) {
+                          status = compareShortAnswers(String(q.studentAnswer), String(q.correctAnswer || '')) ? 'correct' : 'wrong';
+                        }
+                      }
+
+                      return (
+                        <div key={qIdx} className={`border rounded-2xl p-4 sm:p-5 bg-white shadow-2xs space-y-3 ${
+                          status === 'correct' ? 'border-emerald-200' : status === 'wrong' ? 'border-rose-200' : 'border-slate-200'
+                        }`}>
+                          {/* Question header */}
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-800 text-sm">
+                                Câu {q.index || qIdx + 1}:
+                              </span>
+                              <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-100 text-slate-700">
+                                {isMC ? 'Trắc nghiệm 4 lựa chọn' : isTF ? 'Đúng / Sai' : isSA ? 'Trả lời ngắn' : 'Câu hỏi'}
+                              </span>
+                            </div>
+
+                            {status === 'correct' ? (
+                              <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 rounded-full font-bold text-xs flex items-center gap-1">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Đúng
+                              </span>
+                            ) : status === 'wrong' ? (
+                              <span className="px-2.5 py-0.5 bg-rose-100 text-rose-800 rounded-full font-bold text-xs flex items-center gap-1">
+                                <XCircle className="w-3.5 h-3.5 text-rose-600" /> Chưa đúng
+                              </span>
+                            ) : (
+                              <span className="px-2.5 py-0.5 bg-slate-100 text-slate-600 rounded-full font-medium text-xs">
+                                Chưa trả lời
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Question Stem */}
+                          <div className="text-slate-900 text-sm leading-relaxed">
+                            <MarkdownRenderer content={q.content || ''} />
+                          </div>
+
+                          {/* Options display */}
+                          {isMC && q.options && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                              {q.options.map((opt: string, optIdx: number) => {
+                                const isChosen = q.studentAnswer === optIdx;
+                                const isCorrect = q.correctOptionIndex === optIdx;
+                                let borderCls = "border-slate-200 bg-white";
+                                if (isChosen && isCorrect) {
+                                  borderCls = "border-emerald-500 bg-emerald-50 text-emerald-900 font-semibold";
+                                } else if (isChosen && !isCorrect) {
+                                  borderCls = "border-rose-400 bg-rose-50 text-rose-900 font-semibold";
+                                } else if (!isChosen && isCorrect) {
+                                  borderCls = "border-emerald-300 bg-emerald-50/40 text-emerald-800";
+                                }
+
+                                return (
+                                  <div key={optIdx} className={`p-2.5 border rounded-xl text-xs sm:text-sm flex items-start gap-2 ${borderCls}`}>
+                                    <span className="font-bold w-5">{String.fromCharCode(65 + optIdx)}.</span>
+                                    <div className="flex-1">
+                                      <MarkdownRenderer content={cleanOptionText(opt)} />
+                                    </div>
+                                    {isChosen && (
+                                      <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-900 text-white ml-auto">
+                                        HS chọn
+                                      </span>
+                                    )}
+                                    {isCorrect && !isChosen && (
+                                      <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-emerald-600 text-white ml-auto">
+                                        Đáp án đúng
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {/* True / False display */}
+                          {isTF && q.tfStatements && (
+                            <div className="space-y-1.5 pt-1">
+                              {q.tfStatements.map((stmt: any, sIdx: number) => {
+                                const studentAns = q.studentAnswer ? q.studentAnswer[sIdx] : undefined;
+                                const isCorrectVal = stmt.correct === true || String(stmt.correct).toLowerCase() === 'true';
+                                const isMatch = studentAns === isCorrectVal;
+
+                                return (
+                                  <div key={sIdx} className="p-2.5 rounded-lg border border-slate-200 bg-slate-50/60 flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm">
+                                    <div className="flex items-start gap-1.5 flex-1 min-w-[200px]">
+                                      <span className="font-bold">{String.fromCharCode(97 + sIdx)})</span>
+                                      <MarkdownRenderer content={stmt.statement || stmt.text || ''} />
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs text-slate-600">
+                                        HS chọn: <strong className={isMatch ? 'text-emerald-700' : 'text-rose-700'}>
+                                          {studentAns === true ? 'Đúng' : studentAns === false ? 'Sai' : 'Chưa chọn'}
+                                        </strong>
+                                      </span>
+                                      <span className="text-xs text-slate-500">
+                                        (Đáp án: <strong className="text-emerald-800">{isCorrectVal ? 'Đúng' : 'Sai'}</strong>)
+                                      </span>
+                                      {studentAns !== undefined && (
+                                        isMatch ? (
+                                          <Check className="w-4 h-4 text-emerald-600" />
+                                        ) : (
+                                          <X className="w-4 h-4 text-rose-600" />
+                                        )
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {/* Short Answer display */}
+                          {isSA && (
+                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1 text-xs sm:text-sm">
+                              <div>
+                                <span className="text-slate-500 font-medium">Học sinh trả lời: </span>
+                                <strong className={`font-mono ${status === 'correct' ? 'text-emerald-700' : 'text-rose-700'}`}>
+                                  {q.studentAnswer ? String(q.studentAnswer) : '(Chưa điền đáp án)'}
+                                </strong>
+                              </div>
+                              <div>
+                                <span className="text-slate-500 font-medium">Đáp án chuẩn của đề: </span>
+                                <strong className="font-mono text-emerald-800">{q.correctAnswer || ''}</strong>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Explanation */}
+                          {q.explanation && (
+                            <div className="text-xs text-slate-600 bg-blue-50/50 p-2.5 rounded-lg border border-blue-100 mt-2">
+                              <p className="font-bold text-blue-900 mb-0.5">💡 Lời giải chi tiết:</p>
+                              <MarkdownRenderer content={q.explanation} />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="p-6 bg-slate-50 border border-slate-200 rounded-xl text-center text-sm text-slate-500">
+                    Chi tiết từng câu hỏi trắc nghiệm không khả dụng trên thiết bị này. Dữ liệu tổng kết: Điểm số <strong>{selectedResultForReview.score}/10</strong>, Kết quả đúng: <strong>{selectedResultForReview.details || selectedResultForReview.correct || '-'}</strong>.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+              <div className="text-xs text-slate-500">
+                Nhấn [Lưu kết quả chấm] ở thanh phía trên sau khi chấm điểm tự luận.
+              </div>
+              <button
+                onClick={() => setSelectedResultForReview(null)}
+                className="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-semibold transition-colors cursor-pointer"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* LIGHTBOX PHÓNG TO & XOAY ẢNH BÀI LÀM TỰ LUẬN */}
+      {previewModalImage && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[70] flex flex-col items-center justify-between p-3 sm:p-5 animate-in fade-in duration-200 select-none">
+          {/* Top Control Bar */}
+          <div className="w-full max-w-5xl flex items-center justify-between text-white pb-3 border-b border-white/20">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-sm sm:text-base">📸 Xem ảnh bài làm tự luận của học sinh</span>
+              <span className="text-xs text-slate-300 hidden sm:inline">
+                (Góc xoay: {imageRotation}°, Thu phóng: {Math.round(imageZoom * 100)}%)
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {/* Rotate Button */}
+              <button
+                onClick={() => setImageRotation((prev) => (prev + 90) % 360)}
+                className="px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer text-emerald-300 hover:text-emerald-200"
+                title="Xoay ảnh 90 độ theo chiều kim đồng hồ"
+              >
+                <RotateCw className="w-4 h-4 text-emerald-400" />
+                <span>Xoay 90°</span>
+              </button>
+
+              {/* Zoom Out */}
+              <button
+                onClick={() => setImageZoom((prev) => Math.max(0.5, prev - 0.25))}
+                className="p-1.5 bg-white/20 hover:bg-white/30 rounded-lg text-xs transition-colors cursor-pointer text-white"
+                title="Thu nhỏ"
+              >
+                <ZoomOut className="w-4 h-4" />
+              </button>
+
+              {/* Reset Zoom */}
+              <button
+                onClick={() => { setImageZoom(1); setImageRotation(0); }}
+                className="px-2.5 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg text-xs font-mono font-bold transition-colors cursor-pointer text-white"
+                title="Đặt lại góc xoay và độ thu phóng chuẩn"
+              >
+                100%
+              </button>
+
+              {/* Zoom In */}
+              <button
+                onClick={() => setImageZoom((prev) => Math.min(3, prev + 0.25))}
+                className="p-1.5 bg-white/20 hover:bg-white/30 rounded-lg text-xs transition-colors cursor-pointer text-white"
+                title="Phóng to"
+              >
+                <ZoomIn className="w-4 h-4" />
+              </button>
+
+              {/* Close Button */}
+              <button
+                onClick={() => setPreviewModalImage(null)}
+                className="p-1.5 bg-red-600/80 hover:bg-red-600 rounded-lg text-xs transition-colors cursor-pointer ml-2"
+                title="Đóng xem ảnh"
+              >
+                <X className="w-5 h-5 text-white" />
+              </button>
+            </div>
+          </div>
+
+          {/* Center Image Canvas */}
+          <div className="flex-1 w-full max-w-5xl flex items-center justify-center overflow-auto p-2 sm:p-4">
+            <img
+              src={previewModalImage}
+              alt="Bài làm tự luận"
+              style={{
+                transform: `rotate(${imageRotation}deg) scale(${imageZoom})`,
+                transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                maxHeight: '78vh',
+                maxWidth: '85vw',
+                objectFit: 'contain'
+              }}
+              className="rounded-lg shadow-2xl shadow-black/80"
+            />
+          </div>
+
+          {/* Bottom Footer info */}
+          <div className="text-center text-xs text-slate-400 pt-2">
+            💡 Mẹo: Bấm nút <strong>Xoay 90°</strong> nếu ảnh bài giải bị chụp ngang/nghiêng; bấm <strong>Phóng to</strong> để xem rõ nét từng nét chữ của học sinh.
+          </div>
+        </div>
+      )}
       
       {showBubbleSheetModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -2303,16 +3562,73 @@ ${customPrompt}
                 </div>
               )}
 
-              {(newQuestionType === "sa" || newQuestionType === "essay") && (
+              {newQuestionType === "sa" && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-indigo-900 uppercase">
+                      Đáp án số (Tối đa 4 ký tự - Chuẩn GDPT 2018)
+                    </label>
+                    <span className="text-xs font-mono text-slate-500">
+                      Đã nhập: <strong className={newQuestionAnswer.length === 4 ? 'text-amber-600' : 'text-indigo-600'}>{newQuestionAnswer.length}/4</strong>
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="text"
+                      maxLength={4}
+                      value={newQuestionAnswer}
+                      onChange={e => setNewQuestionAnswer(sanitizeShortAnswerInput(e.target.value))}
+                      placeholder="Ví dụ: 22, -3.5, 102"
+                      className="w-36 text-center text-lg font-mono font-bold tracking-widest px-3 py-2 border-2 border-indigo-300 rounded-lg text-indigo-800 bg-indigo-50/30 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                    {/* Mô phỏng 4 ô vuông */}
+                    <div className="flex items-center gap-1">
+                      {[0, 1, 2, 3].map(slotIdx => {
+                        const ch = newQuestionAnswer[slotIdx];
+                        return (
+                          <div
+                            key={slotIdx}
+                            className={`w-7 h-9 border rounded flex items-center justify-center font-mono font-bold text-sm ${
+                              ch
+                                ? 'border-indigo-600 bg-indigo-50 text-indigo-800'
+                                : 'border-dashed border-slate-300 bg-white text-slate-300'
+                            }`}
+                          >
+                            {ch || '•'}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <span className="text-xs text-slate-500 hidden sm:inline">
+                      Chỉ chấp nhận số (0-9), dấu (-) và (, hoặc .)
+                    </span>
+                  </div>
+                  {(() => {
+                    if (!newQuestionAnswer) return null;
+                    const val = validateShortAnswer(newQuestionAnswer);
+                    if (!val.isValid && val.warning) {
+                      return (
+                        <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 flex items-center gap-1.5">
+                          <span>⚠️</span>
+                          <span>{val.warning}</span>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+              )}
+
+              {newQuestionType === "essay" && (
                 <div>
                   <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
-                    {newQuestionType === "sa" ? "Đáp án số / ngắn gọn" : "Lời giải vắn tắt / Thang điểm"}
+                    Lời giải vắn tắt / Thang điểm
                   </label>
                   <input
                     type="text"
                     value={newQuestionAnswer}
                     onChange={e => setNewQuestionAnswer(e.target.value)}
-                    placeholder={newQuestionType === "sa" ? "Ví dụ: 2 hoặc -0.5" : "Đáp số và barem điểm..."}
+                    placeholder="Đáp số và barem điểm..."
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
                   />
                 </div>
@@ -2425,6 +3741,23 @@ Lời giải: Tiệm cận ngang là $y = 1$ nên ý c sai.`);
               </button>
             </div>
           </div>
+        </div>
+      )}
+      {showTeacherUploadModal && (
+        <UploadTeacherExamModal
+          isOpen={showTeacherUploadModal}
+          onClose={() => setShowTeacherUploadModal(false)}
+        />
+      )}
+
+      {/* Floating Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl border border-slate-700 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-200">
+          <span className="text-amber-400 text-lg">⚠️</span>
+          <span className="text-sm font-medium">{toastMessage}</span>
+          <button onClick={() => setToastMessage(null)} className="ml-2 text-slate-400 hover:text-white cursor-pointer">
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
     </div>

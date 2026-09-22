@@ -2,6 +2,7 @@ export interface SampleQuestion {
   id: number;
   type: "mc" | "tf" | "sa" | "essay";
   level: string;
+  isRealWorld?: boolean;
   topic?: string;
   subtopic?: string;
   content: string;
@@ -277,6 +278,7 @@ export const SAMPLE_MATH_QUESTIONS: SampleQuestion[] = [
     id: 18,
     type: "sa",
     level: "Vận dụng cao",
+    isRealWorld: true,
     topic: "Thống kê & Xác suất",
     subtopic: "Biến cố độc lập",
     content: "Một xạ thủ bắn độc lập $3$ viên đạn vào một bia. Xác suất bắn trúng ở mỗi lần bắn là $p = 0{,}8$. Tính xác suất để có đúng $2$ viên đạn trúng bia.",
@@ -299,6 +301,7 @@ export const SAMPLE_MATH_QUESTIONS: SampleQuestion[] = [
     id: 20,
     type: "essay",
     level: "Vận dụng cao",
+    isRealWorld: true,
     topic: "Hàm số và Đồ thị",
     subtopic: "Bài toán thực tế tối ưu hóa",
     content: "Một người làm vườn muốn rào một khu đất hình chữ nhật có diện tích $200\\text{ m}^2$ sát một bờ tường thẳng (bờ tường không cần rào). Ba cạnh còn lại được rào bằng lưới thép. Tìm chiều dài và chiều rộng của khu đất để tổng chiều dài hàng rào lưới thép là ngắn nhất. Tính chiều dài ngắn nhất đó.",
