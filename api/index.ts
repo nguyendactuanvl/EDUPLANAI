@@ -1492,20 +1492,84 @@ app.all("/api/generate-worksheet", async (req, res) => {
   
     return keepAliveExecute(req, res, async () => {
 
-      const { lesson, subject, grade, type } = req.body;
+      const { 
+        lesson, 
+        subject, 
+        grade, 
+        type, 
+        layoutStyle = 'a4_print',
+        numMC,
+        numEssay,
+        includeRealWorld = true,
+        answerMode = 'full'
+      } = req.body;
       
+      let stylePrompt = '';
+      if (layoutStyle === 'infographic') {
+        stylePrompt = `
+YÊU CẦU PHONG CÁCH: INFOGRAPHIC / PHOTOGRAPHIC (Hình ảnh minh họa & Màu sắc hiện đại)
+- Trình bày dạng các Thẻ bài học (Card UI) với các khối kiến thức phân chia trực quan, sinh động.
+- Sử dụng các tiêu đề thẻ bắt mắt và icon cảm xúc:
+  + 💡 **GHI NHỚ NHANH**: Các định nghĩa, tính chất cốt lõi dưới dạng bullet points súc tích.
+  + ⚡ **BÍ KÍP THỰC CHIẾN & CÔNG THỨC VÀNG**: Đóng khung các công thức quan trọng nhất.
+  + ⚠️ **BẪY SAI LẦM THƯỜNG GẶP**: Những lỗi sai học sinh hay mắc phải và mẹo phòng tránh.
+  + 🖼️ **KHUNG MINH HỌA TRỰC QUAN**: Đưa các gợi ý mô tả hình vẽ hoặc đồ thị minh họa thực tế vào trong khối [HÌNH VẼ MINH HỌA: ...].
+- Hệ thống bài tập:
+  + Phân chia rõ các dạng: [Cơ bản], [Vận dụng], [Toán thực tế cuộc sống].
+  + Mỗi bài toán thực tế có thêm: 🧠 **Gợi ý tư duy nhanh** (1 câu ngắn định hướng cách tư duy trước khi giải).`;
+      } else if (layoutStyle === 'poster') {
+        stylePrompt = `
+YÊU CẦU PHONG CÁCH: POSTER TÓM TẮT TƯ DUY (Cheat Sheet / Summary Poster khổ lớn)
+- Bố cục cô đọng tối đa, tiêu đề chính thật lớn và nổi bật, phù hợp làm poster dán góc học tập hoặc lưu điện thoại.
+- TOÀN BỘ CÔNG THỨC TRỌNG TÂM được gom vào các khối HERO BOX đóng khung nổi bật với ký hiệu 📌, ⭐, 🔑.
+- SƠ ĐỒ HÓA CÁC BƯỚC GIẢI TOÁN: Quy trình giải một bài toán mẫu được sơ đồ hóa rõ ràng thành: Bước 1 ➔ Bước 2 ➔ Bước 3 ➔ Kết luận.
+- BỔ SUNG MẸO BẤM MÁY TÍNH CASIO & BÍ KÍP TÍNH NHANH (nếu có).
+- Hệ thống 3-5 bài tập cốt lõi tiêu biểu nhất, kèm sơ đồ tư duy hướng dẫn cách tiếp cận.`;
+      } else if (layoutStyle === 'mindmap') {
+        stylePrompt = `
+YÊU CẦU PHONG CÁCH: MINDMAP / SƠ ĐỒ NHÁNH
+- Cấu trúc kiến thức phân cấp từ CHỦ ĐỀ TRUNG TÂM tỏa ra các nhánh lý thuyết, phương pháp và ví dụ:
+  + 🌳 **CHỦ ĐỀ TRUNG TÂM**: "${lesson}"
+  + ├── 🌿 **Nhánh 1: Khái niệm & Lý thuyết cốt lõi**
+  + ├── ⚡ **Nhánh 2: Công thức then chốt & Định lý**
+  + ├── 🎯 **Nhánh 3: Các dạng bài tập điển hình** (kèm ví dụ giải nhanh và phương pháp mẫu)
+  + └── ⚠️ **Nhánh 4: Lưu ý & Bẫy sai lầm cần tránh**
+- Dùng thụt dòng, ký hiệu phân cấp cây sơ đồ trực quan và bullet point để tạo cảm giác bản đồ tư duy sinh động.`;
+      } else {
+        stylePrompt = `
+YÊU CẦU PHONG CÁCH: A4 CHUẨN IN ẤN (Đen trắng / Tiết kiệm mực - Bố cục chính quy)
+- Bố cục trang giấy chuẩn mực cho học sinh in ra làm bài:
+  + Phần đầu: Bảng thông tin học sinh (Trường, Lớp, Họ và tên học sinh, Điểm số, Lời phê của giáo viên).
+  + Phần I: TÓM TẮT LÝ THUYẾT (Ngắn gọn, bảng biểu sắc nét, kẻ khung tiết kiệm mực in).
+  + Phần II: CÂU HỎI TRẮC NGHIỆM (Đánh số câu rõ ràng, 4 phương án A, B, C, D phân bố gọn gàng).
+  + Phần III: BÀI TẬP TỰ LUẬN (Có dòng kẻ chấm chấm "......................................................" hoặc khung trống phù hợp để học sinh làm bài trực tiếp trên giấy in).`;
+      }
+
+      let exercisePrompt = `Hình thức bài tập: ${type || "Kết hợp trắc nghiệm và tự luận"}.`;
+      if (numMC !== undefined || numEssay !== undefined) {
+        exercisePrompt += `\nCấu trúc số lượng câu dự kiến: ${numMC ? `${numMC} câu trắc nghiệm` : ''}${numMC && numEssay ? ', ' : ''}${numEssay ? `${numEssay} câu tự luận` : ''}${includeRealWorld ? ', có lồng ghép bài toán liên hệ thực tế cuộc sống.' : '.'}`;
+      }
+
+      let answerPrompt = '';
+      if (answerMode === 'none') {
+        answerPrompt = 'TUYỆT ĐỐI KHÔNG kèm đáp án hay lời giải ở cuối phiếu (phiếu học tập chỉ dành riêng cho học sinh làm bài).';
+      } else if (answerMode === 'summary') {
+        answerPrompt = 'Ở cuối tài liệu, hãy cung cấp bảng đáp số/đáp án ngắn gọn (dạng bảng đáp án trắc nghiệm và kết số tự luận), phân cách bằng tiêu đề "--- BẢNG ĐÁP ÁN NHANH ---".';
+      } else {
+        answerPrompt = 'Ở cuối tài liệu, hãy cung cấp phần Hướng dẫn giải chi tiết từng câu, phân cách bằng tiêu đề "--- HƯỚNG DẪN CHẤM / ĐÁP ÁN CHI TIẾT ---".';
+      }
+
       const prompt = `Bạn là một giáo viên xuất sắc môn ${subject || "chung"}. Hãy tạo một Phiếu học tập (Worksheet) thật chuyên nghiệp, trực quan cho học sinh lớp ${grade}, bài học/chủ đề: "${lesson}".
       
-      YÊU CẦU:
-      1. Phần đầu: Tiêu đề phiếu học tập, Họ và tên học sinh, Lớp, Ngày.
-      2. Tóm tắt kiến thức trọng tâm (ngắn gọn, dễ hiểu, dùng bảng biểu nếu cần).
-      3. Hệ thống bài tập:
-         - Hình thức: ${type || "Kết hợp trắc nghiệm và tự luận"}.
-         - Phân hóa từ cơ bản đến vận dụng.
-      4. Trình bày rõ ràng, để lại khoảng trống hợp lý giả định học sinh sẽ làm trực tiếp vào phiếu.
-      ${MATH_FORMATTING_RULES}
-      5. ĐÁP ÁN: Ở cuối tài liệu, hãy cung cấp phần Hướng dẫn giải/Đáp án, phân cách bằng tiêu đề "--- HƯỚNG DẪN CHẤM / ĐÁP ÁN ---".
-      6. BẮT BUỘC kiểm tra và SỬA LỖI CHÍNH TẢ tiếng Việt thật cẩn thận trước khi trả kết quả.`;
+${stylePrompt}
+
+YÊU CẦU CHUNG:
+1. Phân hóa từ cơ bản đến vận dụng, bám sát chương trình GDPT 2018.
+2. ${exercisePrompt}
+3. Trình bày rõ ràng, để lại khoảng trống hợp lý giả định học sinh sẽ làm trực tiếp vào phiếu.
+${MATH_FORMATTING_RULES}
+4. ĐÁP ÁN: ${answerPrompt}
+5. BẮT BUỘC kiểm tra và SỬA LỖI CHÍNH TẢ tiếng Việt thật cẩn thận trước khi trả kết quả.`;
 
       const response = await generateWithFallback(req, {
         contents: prompt,

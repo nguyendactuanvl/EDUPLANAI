@@ -6,8 +6,11 @@ export const SYSTEM_EXAM_WEBHOOK = "https://script.google.com/macros/s/AKfycbwYH
 export interface ExamWebhookPayload {
   examId?: string;
   examName?: string;
+  examType?: string;
+  duration?: string | number;
   studentName?: string;
   className?: string;
+  studentClass?: string;
   score?: number | string;
   correctCount?: number;
   totalQuestions?: number;
@@ -15,19 +18,66 @@ export interface ExamWebhookPayload {
   hasEssay?: boolean;
   essayCount?: number;
   submittedAt?: string;
-  detailedAnswers?: any[];
+  detailedAnswers?: any;
+  essayImages?: any;
 }
 
 export async function sendExamResultToWebhook(payload: ExamWebhookPayload): Promise<void> {
   try {
+    const formattedPayload = {
+      ...payload,
+      detailedAnswers: typeof payload.detailedAnswers === 'string'
+        ? payload.detailedAnswers
+        : JSON.stringify(payload.detailedAnswers || []),
+      essayImages: typeof payload.essayImages === 'string'
+        ? payload.essayImages
+        : JSON.stringify(payload.essayImages || [])
+    };
     await fetch(SYSTEM_EXAM_WEBHOOK, {
       method: 'POST',
       mode: 'no-cors', // Tránh chặn CORS trên trình duyệt
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(formattedPayload)
     });
   } catch (err) {
     console.error('Lỗi gửi kết quả thi qua Webhook:', err);
+  }
+}
+
+/**
+ * Lưu đề thi hoặc phiếu bài tập lên Webhook Google Apps Script với cơ chế theo dõi redirect 302
+ * và kiểm tra response text trước khi parse JSON để tránh dính HTML
+ */
+export async function saveExamToWebhook(payload: any): Promise<any> {
+  try {
+    const response = await fetch(SYSTEM_EXAM_WEBHOOK, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8', // Dùng text/plain để tránh bị lỗi CORS preflight với Apps Script
+      },
+      body: JSON.stringify(payload),
+      redirect: 'follow', // Bắt buộc để theo dõi chuyển hướng 302 từ Google Script sang Googleusercontent
+    });
+
+    const rawText = await response.text();
+
+    // Kiểm tra xem dữ liệu trả về có bị dính HTML không
+    if (rawText.trim().startsWith('<') || rawText.includes('<!DOCTYPE html>')) {
+      console.error("Server trả về trang HTML thay vì JSON:", rawText);
+      throw new Error("Dịch vụ tạo đề tạm thời gián đoạn hoặc API Key chưa được nạp đúng. Vui lòng kiểm tra lại cấu hình API.");
+    }
+
+    let data;
+    try {
+      data = JSON.parse(rawText);
+    } catch (e) {
+      console.error("Lỗi parse JSON:", rawText);
+      throw new Error("Phản hồi từ máy chủ không đúng định dạng dữ liệu.");
+    }
+    return data;
+  } catch (err: any) {
+    console.warn("Lưu đề lên Webhook:", err?.message || err);
+    throw err;
   }
 }
 

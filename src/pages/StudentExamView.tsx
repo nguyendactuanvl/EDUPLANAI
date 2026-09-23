@@ -7,7 +7,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { apiFetch } from '../lib/apiFetch';
 import LZString from 'lz-string';
-import { fixMath, cleanMath, cleanQuestionStem, cleanOptionText, formatMathContent, sanitizeShortAnswerInput, validateShortAnswer, compareShortAnswers } from "../lib/utils";
+import { fixMath, cleanMath, cleanQuestionStem, cleanOptionText, formatMathContent, sanitizeShortAnswerInput, validateShortAnswer, compareShortAnswers, sanitizeAndPolishMath, sanitizeExamQuestion } from "../lib/utils";
 import { fetchExamFromCloud, SYSTEM_EXAM_WEBHOOK } from "../lib/cloudExamStore";
 
 export function StudentExamView({ examId, examRawData }: { examId?: string, examRawData?: string }) {
@@ -259,14 +259,18 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
     });
 
     const detailedAnswers: Array<{
+      questionIndex: number;
       questionNumber: number;
+      questionText: string;
+      questionContent: string;
+      options?: string[];
+      studentAnswer: string;
       studentChoice: string;
+      correctAnswer: string;
       correctChoice: string;
       isCorrect: boolean;
       type: string;
       hasAnswered: boolean;
-      questionContent?: string;
-      options?: string[];
       tfDetails?: Array<{
         sub: string;
         statement: string;
@@ -276,6 +280,7 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
         hasAnswered: boolean;
       }>;
       explanation?: string;
+      solution?: string;
       essayText?: string;
       essayImages?: string[];
     }> = [];
@@ -287,21 +292,30 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
       const qType = String(q.type || '').toUpperCase();
       const qNum = idx + 1;
       const content = q.content || q.question || q.text || '';
-      const explanation = q.explanation || '';
+      const explanation = q.explanation || q.solution || '';
       
       if (q.type === 'essay' || qType === 'ESSAY') {
         const textAns = String(answers[idx] || '').trim();
         const imgs = essayImages[idx] || [];
         const hasAns = textAns.length > 0 || imgs.length > 0;
+        const studentAns = textAns || (imgs.length > 0 ? `[Đã đính kèm ${imgs.length} ảnh]` : 'Chưa trả lời');
+        const studentChoice = textAns || (imgs.length > 0 ? `[Đã đính kèm ${imgs.length} ảnh]` : 'Chưa làm');
+        const correctAns = q.correctAnswer || q.explanation || 'Tự luận (GV chấm)';
         detailedAnswers.push({
+          questionIndex: qNum,
           questionNumber: qNum,
-          studentChoice: textAns || (imgs.length > 0 ? `[Đã đính kèm ${imgs.length} ảnh]` : 'Chưa làm'),
-          correctChoice: q.correctAnswer || q.explanation || 'Tự luận (GV chấm)',
+          questionText: content,
+          questionContent: content,
+          options: q.options || [],
+          studentAnswer: studentAns,
+          studentChoice: studentChoice,
+          correctAnswer: correctAns,
+          correctChoice: correctAns,
           isCorrect: false,
           type: 'essay',
           hasAnswered: hasAns,
-          questionContent: content,
           explanation,
+          solution: explanation,
           essayText: textAns,
           essayImages: imgs
         });
@@ -312,18 +326,23 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
         const optLetter = (ans !== undefined && ans >= 0 && ans <= 3) ? String.fromCharCode(65 + ans) : '';
         const corrLetter = (q.correctOptionIndex !== undefined && q.correctOptionIndex >= 0 && q.correctOptionIndex <= 3) 
           ? String.fromCharCode(65 + q.correctOptionIndex) 
-          : (String(q.correctAnswer || 'A').toUpperCase().charAt(0));
+          : (String(q.correctAnswer || q.answer || 'A').toUpperCase().charAt(0));
 
         detailedAnswers.push({
+          questionIndex: qNum,
           questionNumber: qNum,
+          questionText: content,
+          questionContent: content,
+          options: q.options || [],
+          studentAnswer: optLetter || 'Chưa trả lời',
           studentChoice: optLetter || 'Chưa làm',
+          correctAnswer: corrLetter,
           correctChoice: corrLetter,
           isCorrect,
           type: 'mc',
           hasAnswered: ans !== undefined,
-          questionContent: content,
-          options: q.options || [],
-          explanation
+          explanation,
+          solution: explanation
         });
       } else if (q.type === 'tf' || qType === 'TRUE_FALSE') {
         if (q.tfStatements && q.tfStatements.length > 0) {
@@ -357,15 +376,21 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
            const correctChoiceStr = tfDetails.map(t => `${t.sub}:${t.correctChoice === 'Đúng' ? 'Đ' : 'S'}`).join(' ');
 
            detailedAnswers.push({
+             questionIndex: qNum,
              questionNumber: qNum,
+             questionText: content,
+             questionContent: content,
+             options: q.options || [],
+             studentAnswer: answered ? studentChoiceStr : 'Chưa trả lời',
              studentChoice: answered ? studentChoiceStr : 'Chưa làm',
+             correctAnswer: correctChoiceStr,
              correctChoice: correctChoiceStr,
              isCorrect,
              type: 'tf',
              hasAnswered: answered,
-             questionContent: content,
              tfDetails,
-             explanation
+             explanation,
+             solution: explanation
            });
         } else {
            const isTrue = q.correct === true || String(q.correct).toLowerCase() === 'true' || String(q.correctAnswer).toLowerCase().includes('đúng');
@@ -373,31 +398,43 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
            else if (ans !== undefined) { isWrong = true; }
 
            detailedAnswers.push({
+             questionIndex: qNum,
              questionNumber: qNum,
+             questionText: content,
+             questionContent: content,
+             options: q.options || [],
+             studentAnswer: ans === true ? 'Đúng' : ans === false ? 'Sai' : 'Chưa trả lời',
              studentChoice: ans === true ? 'Đúng' : ans === false ? 'Sai' : 'Chưa làm',
+             correctAnswer: isTrue ? 'Đúng' : 'Sai',
              correctChoice: isTrue ? 'Đúng' : 'Sai',
              isCorrect,
              type: 'tf',
              hasAnswered: ans !== undefined,
-             questionContent: content,
-             explanation
+             explanation,
+             solution: explanation
            });
         }
       } else if (q.type === 'sa' || qType === 'SHORT_ANSWER') {
-         const correctAns = String(q.correctAnswer || q.correct || '').trim();
+         const correctAns = String(q.correctAnswer || q.correct || q.answer || '').trim();
          const studentAns = String(ans || '').trim();
          if (correctAns && compareShortAnswers(studentAns, correctAns)) { totalScore += 1; isCorrect = true; }
          else if (ans !== undefined && studentAns !== '') { isWrong = true; }
 
          detailedAnswers.push({
+           questionIndex: qNum,
            questionNumber: qNum,
+           questionText: content,
+           questionContent: content,
+           options: q.options || [],
+           studentAnswer: studentAns || 'Chưa trả lời',
            studentChoice: studentAns || 'Chưa làm',
+           correctAnswer: correctAns,
            correctChoice: correctAns,
            isCorrect,
            type: 'sa',
            hasAnswered: studentAns.length > 0,
-           questionContent: content,
-           explanation
+           explanation,
+           solution: explanation
          });
       }
       
@@ -475,23 +512,32 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
     // Tự động gửi điểm qua Webhook trung tâm
     try {
       const formattedTimeSpent = `${Math.floor(timeSpent / 60)} phút ${timeSpent % 60} giây`;
+      const currentExamId = currentExam.id || currentExam.code || examId || 'online_exam';
+      const calculatedScore = Number(finalScore.toFixed(2));
+      const uploadedEssayImages: string[] = Object.values(essayImages).flat();
+
+      const submitPayload = {
+        examId: currentExamId,
+        examName: examTitle,
+        examType: examType || 'Đề kiểm tra',
+        duration: isUnlimited ? 'Không giới hạn' : `${examDuration} phút`,
+        studentName: studentInfo.name || 'Học sinh ẩn danh',
+        className: studentInfo.class || '',
+        studentClass: studentInfo.class || '',
+        score: calculatedScore,
+        correctCount: fullCorrectCount,
+        totalQuestions: currentExam.questions.length,
+        timeSpent: formattedTimeSpent,
+        // BẮT BUỘC ÉP KIỂU CHUỖI JSON ĐỂ SHEET LƯU AN TOÀN VÀO CỘT H
+        detailedAnswers: JSON.stringify(detailedAnswers),
+        essayImages: JSON.stringify(uploadedEssayImages || [])
+      };
+
       fetch(SYSTEM_EXAM_WEBHOOK, {
         method: 'POST',
         mode: 'no-cors', // Tránh chặn CORS trên trình duyệt
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          examId: currentExam.id || currentExam.code || examId || 'online_exam',
-          examName: examTitle,
-          examType: examType || 'Đề kiểm tra',
-          duration: isUnlimited ? 'Không giới hạn' : `${examDuration} phút`,
-          studentName: studentInfo.name,
-          className: studentInfo.class,
-          score: Number(finalScore.toFixed(2)),
-          correctCount: fullCorrectCount,
-          totalQuestions: objectiveQuestions.length,
-          timeSpent: formattedTimeSpent,
-          detailedAnswers: detailedAnswers
-        })
+        body: JSON.stringify(submitPayload)
       }).catch(err => {
         console.warn("Lỗi gửi Webhook điểm thi:", err);
       });
@@ -746,7 +792,8 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
             : rawStem;
 
           const trimmedStem = stemWithoutOptions.replace(/^(?:Câu|Bài)\s*\d+[\s\.\:\-–—\(\)\[\]A-Za-zÀ-ỹ]*[:\.]\s*/i, '').trim();
-          const questionContent = trimmedStem || stemWithoutOptions || question.question || question.content || '';
+          const rawStemContent = trimmedStem || stemWithoutOptions || question.question || question.content || '';
+          const questionContent = sanitizeExamQuestion(rawStemContent);
 
           return (
             <div key={idx} className={`bg-white p-6 rounded-xl shadow-sm border ${isSubmitted && showRedBorder ? 'border-red-200' : isSubmitted ? 'border-emerald-200' : 'border-slate-200'}`}>
@@ -784,13 +831,13 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
                 </div>
               )}
               
-              <div className="space-y-3">
+              <div className="w-full space-y-2">
                 {/* MULTIPLE CHOICE */}
                 {isMC && q.options?.map((opt: string, oIdx: number) => {
                   const isSelected = answers[idx] === oIdx;
                   const isCorrect = oIdx === q.correctOptionIndex;
                   
-                  let btnClass = "w-full text-left p-4 rounded-xl border transition-colors flex items-center gap-3 ";
+                  let btnClass = "w-full min-h-[44px] flex items-center px-4 py-2 text-left rounded-lg border transition-colors break-words overflow-hidden gap-3 ";
                   if (!isSubmitted) {
                     btnClass += isSelected ? "bg-emerald-50 border-emerald-500 text-emerald-900" : "bg-white border-slate-200 hover:border-emerald-300 hover:bg-slate-50 text-slate-700";
                   } else {
@@ -806,12 +853,12 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
                       disabled={isSubmitted}
                       className={btnClass}
                     >
-                      <div className={`w-6 h-6 rounded-full border flex items-center justify-center shrink-0 ${isSelected && !isSubmitted ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-slate-300'}`}>
+                      <div className={`w-6 h-6 rounded-full border flex items-center justify-center shrink-0 font-bold text-xs ${isSelected && !isSubmitted ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-slate-300'}`}>
                         {String.fromCharCode(65 + oIdx)}
                       </div>
-                      <span className="flex-1"><MarkdownRenderer className="markdown-body inline-block" content={fixMath(cleanOptionText(opt))} /></span>
-                      {isSubmitted && isCorrect && <CheckCircle2 className="w-5 h-5 text-emerald-600" />}
-                      {isSubmitted && isSelected && !isCorrect && <XCircle className="w-5 h-5 text-red-600" />}
+                      <span className="flex-1 break-words overflow-hidden text-left"><MarkdownRenderer className="markdown-body inline-block" content={cleanOptionText(opt)} /></span>
+                      {isSubmitted && isCorrect && <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />}
+                      {isSubmitted && isSelected && !isCorrect && <XCircle className="w-5 h-5 text-red-600 shrink-0" />}
                     </button>
                   );
                 })}
@@ -826,13 +873,14 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
                       const subLabel = ['a)', 'b)', 'c)', 'd)'][sIdx] || `${String.fromCharCode(97 + sIdx)})`;
                       let cleanStmt = (stmt.statement || '').trim();
                       cleanStmt = cleanStmt.replace(/^[a-d][\.\:\)]\s*/i, '');
+                      cleanStmt = sanitizeAndPolishMath(cleanStmt);
                       
                       return (
                         <div key={sIdx} className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-xl border border-slate-200 bg-slate-50">
                           <div className="flex-1 flex items-start gap-2.5">
                             <span className="font-bold text-emerald-800 shrink-0 mt-0.5">{subLabel}</span>
                             <div className="flex-1">
-                              <MarkdownRenderer className="markdown-body inline-block" content={fixMath(cleanStmt)} />
+                              <MarkdownRenderer className="markdown-body inline-block" content={cleanStmt} />
                             </div>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
@@ -963,7 +1011,7 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
                       <div className="mt-2 text-sm flex items-center gap-2 flex-wrap p-3 rounded-lg bg-emerald-50/70 border border-emerald-200">
                         <span className="text-emerald-900 font-bold">Đáp án chuẩn:</span>
                         <div className="font-mono font-bold text-base text-emerald-700 bg-white px-3 py-1 rounded border border-emerald-300">
-                          <MarkdownRenderer content={formatMathContent(q.correctAnswer || q.correct || '')} />
+                          <MarkdownRenderer content={sanitizeAndPolishMath(q.correctAnswer || q.correct || '')} />
                         </div>
                         {isCorrectQuestion ? (
                           <span className="text-xs font-semibold text-emerald-700 flex items-center gap-1">
@@ -1060,7 +1108,7 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
                           Hướng dẫn chấm / Đáp án chuẩn tự luận:
                         </span>
                         <div className="text-slate-800 text-sm">
-                          <MarkdownRenderer className="markdown-body inline-block" content={fixMath(cleanMath(q.correctAnswer || q.explanation || q.correct || ''))} />
+                          <MarkdownRenderer className="markdown-body inline-block" content={sanitizeAndPolishMath(q.correctAnswer || q.explanation || q.correct || '')} />
                         </div>
                       </div>
                     )}
@@ -1071,7 +1119,7 @@ export function StudentExamView({ examId, examRawData }: { examId?: string, exam
                 {isSubmitted && q.explanation && !isEssay && (
                    <div className="mt-4 p-4 bg-slate-100 rounded-lg border border-slate-200">
                      <span className="text-slate-500 font-semibold block mb-2">Giải thích:</span>
-                     <MarkdownRenderer className="markdown-body inline-block" content={fixMath(q.explanation || '')} />
+                     <MarkdownRenderer className="markdown-body inline-block" content={sanitizeAndPolishMath(q.explanation || '')} />
                    </div>
                 )}
               </div>

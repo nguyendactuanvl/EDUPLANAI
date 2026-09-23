@@ -213,9 +213,91 @@ export function ExamGenerator() {
   // Helper để lấy danh sách chi tiết từng câu từ kết quả nộp bài
   const getDetailedAnswersFromResult = (result: any): any[] => {
     if (!result) return [];
-    if (result.detailedAnswers && Array.isArray(result.detailedAnswers) && result.detailedAnswers.length > 0) {
-      return result.detailedAnswers;
+
+    // Tìm nguồn dữ liệu chi tiết từng câu (từ detailedAnswers, details, detailed_answers, hoặc chiTiet)
+    let rawList: any = null;
+    if (result.detailedAnswers !== undefined && result.detailedAnswers !== null) {
+      rawList = result.detailedAnswers;
+    } else if (result.details !== undefined && result.details !== null) {
+      rawList = result.details;
+    } else if (result.detailed_answers !== undefined && result.detailed_answers !== null) {
+      rawList = result.detailed_answers;
+    } else if (result.chiTiet !== undefined && result.chiTiet !== null) {
+      rawList = result.chiTiet;
     }
+
+    // Xử lý parse an toàn nếu dữ liệu lưu dạng JSON chuỗi (ví dụ từ cột H của Google Sheets Webhook)
+    let parsedList: any[] = [];
+    if (Array.isArray(rawList)) {
+      parsedList = rawList;
+    } else if (typeof rawList === 'string' && rawList.trim().length > 0) {
+      try {
+        let parsed = JSON.parse(rawList);
+        if (typeof parsed === 'string') {
+          // Xử lý chuỗi JSON bị stringify 2 lần
+          parsed = JSON.parse(parsed);
+        }
+        if (Array.isArray(parsed)) {
+          parsedList = parsed;
+        }
+      } catch (e) {
+        console.warn("Lỗi parse JSON detailedAnswers từ Google Sheet:", e);
+      }
+    }
+
+    // Nếu đã có danh sách, chuẩn hóa đồng bộ 2 bộ key (questionIndex/Text/studentAnswer/correctAnswer và questionNumber/Content/studentChoice/correctChoice)
+    if (parsedList.length > 0) {
+      return parsedList.map((item: any, idx: number) => {
+        const qNum = item.questionIndex || item.questionNumber || idx + 1;
+        const qContent = item.questionText || item.questionContent || item.content || item.question || '';
+        const sChoice = item.studentAnswer !== undefined 
+          ? String(item.studentAnswer) 
+          : (item.studentChoice !== undefined ? String(item.studentChoice) : 'Chưa làm');
+        const cChoice = item.correctAnswer !== undefined 
+          ? String(item.correctAnswer) 
+          : (item.correctChoice !== undefined ? String(item.correctChoice) : '');
+
+        const isCorr = typeof item.isCorrect === 'boolean' 
+          ? item.isCorrect 
+          : Boolean(sChoice && cChoice && sChoice.trim().toUpperCase() === cChoice.trim().toUpperCase());
+
+        const hasAns = item.hasAnswered !== undefined 
+          ? Boolean(item.hasAnswered) 
+          : Boolean(sChoice && sChoice !== 'Chưa trả lời' && sChoice !== 'Chưa làm' && sChoice.trim() !== '');
+
+        let type = String(item.type || '').toLowerCase();
+        if (!type) {
+          if (item.tfDetails || (item.tfStatements && item.tfStatements.length > 0)) type = 'tf';
+          else if (item.essayImages?.length || item.essayText) type = 'essay';
+          else if (item.options && item.options.length > 0) type = 'mc';
+          else type = 'mc';
+        }
+
+        const expl = item.explanation || item.solution || '';
+
+        return {
+          ...item,
+          questionIndex: qNum,
+          questionNumber: qNum,
+          questionText: qContent,
+          questionContent: qContent,
+          studentAnswer: sChoice,
+          studentChoice: sChoice,
+          correctAnswer: cChoice,
+          correctChoice: cChoice,
+          isCorrect: isCorr,
+          hasAnswered: hasAns,
+          type,
+          options: item.options || [],
+          explanation: expl,
+          solution: expl,
+          tfDetails: item.tfDetails,
+          essayText: item.essayText || (type === 'essay' && !sChoice.startsWith('[Đã đính kèm') && sChoice !== 'Chưa làm' && sChoice !== 'Chưa trả lời' ? sChoice : ''),
+          essayImages: Array.isArray(item.essayImages) ? item.essayImages : []
+        };
+      });
+    }
+
     // Fallback 1: Trích xuất từ questionsSnapshot nếu có
     if (result.questionsSnapshot && Array.isArray(result.questionsSnapshot) && result.questionsSnapshot.length > 0) {
       return result.questionsSnapshot.map((q: any, idx: number) => {
@@ -227,16 +309,21 @@ export function ExamGenerator() {
 
         if (isEssay) {
           return {
+            questionIndex: q.index || idx + 1,
             questionNumber: q.index || idx + 1,
             type: 'essay',
+            studentAnswer: q.studentAnswer || (q.studentImages?.length ? `[Đã đính kèm ${q.studentImages.length} ảnh]` : 'Chưa làm'),
             studentChoice: q.studentAnswer || (q.studentImages?.length ? `[Đã đính kèm ${q.studentImages.length} ảnh]` : 'Chưa làm'),
+            correctAnswer: q.correctAnswer || q.explanation || 'Tự luận (GV chấm)',
             correctChoice: q.correctAnswer || q.explanation || 'Tự luận (GV chấm)',
             isCorrect: false,
             hasAnswered: Boolean((q.studentAnswer && String(q.studentAnswer).trim()) || (q.studentImages && q.studentImages.length > 0)),
+            questionText: q.content,
             questionContent: q.content,
             essayText: q.studentAnswer,
             essayImages: q.studentImages || [],
-            explanation: q.explanation
+            explanation: q.explanation,
+            solution: q.explanation
           };
         }
 
@@ -260,15 +347,20 @@ export function ExamGenerator() {
           const correctChoiceStr = tfDetails.map((t: any) => `${t.sub}:${t.correctChoice === 'Đúng' ? 'Đ' : 'S'}`).join(' ');
 
           return {
+            questionIndex: q.index || idx + 1,
             questionNumber: q.index || idx + 1,
             type: 'tf',
+            studentAnswer: hasAny ? studentChoiceStr : 'Chưa làm',
             studentChoice: hasAny ? studentChoiceStr : 'Chưa làm',
+            correctAnswer: correctChoiceStr,
             correctChoice: correctChoiceStr,
             isCorrect: isAllCorrect,
             hasAnswered: hasAny,
+            questionText: q.content,
             questionContent: q.content,
             tfDetails,
-            explanation: q.explanation
+            explanation: q.explanation,
+            solution: q.explanation
           };
         }
 
@@ -277,14 +369,19 @@ export function ExamGenerator() {
           const correctAns = String(q.correctAnswer || '').trim();
           const isCorrect = Boolean(correctAns && compareShortAnswers(studentAns, correctAns));
           return {
+            questionIndex: q.index || idx + 1,
             questionNumber: q.index || idx + 1,
             type: 'sa',
+            studentAnswer: studentAns || 'Chưa làm',
             studentChoice: studentAns || 'Chưa làm',
+            correctAnswer: correctAns,
             correctChoice: correctAns,
             isCorrect,
             hasAnswered: studentAns.length > 0,
+            questionText: q.content,
             questionContent: q.content,
-            explanation: q.explanation
+            explanation: q.explanation,
+            solution: q.explanation
           };
         }
 
@@ -293,15 +390,20 @@ export function ExamGenerator() {
         const corrLetter = (q.correctOptionIndex !== undefined && q.correctOptionIndex >= 0 && q.correctOptionIndex <= 3) ? String.fromCharCode(65 + q.correctOptionIndex) : '';
         const isCorrect = q.studentAnswer !== undefined && q.studentAnswer === q.correctOptionIndex;
         return {
+          questionIndex: q.index || idx + 1,
           questionNumber: q.index || idx + 1,
           type: 'mc',
+          studentAnswer: optLetter || 'Chưa làm',
           studentChoice: optLetter || 'Chưa làm',
+          correctAnswer: corrLetter,
           correctChoice: corrLetter,
           isCorrect,
           hasAnswered: q.studentAnswer !== undefined,
+          questionText: q.content,
           questionContent: q.content,
           options: q.options || [],
-          explanation: q.explanation
+          explanation: q.explanation,
+          solution: q.explanation
         };
       });
     }
@@ -313,13 +415,19 @@ export function ExamGenerator() {
       keys.forEach((k, idx) => {
         const qNum = parseInt(k, 10) + 1 || idx + 1;
         const ans = result.answers[k];
+        const choice = typeof ans === 'number' && ans >= 0 && ans <= 3 ? String.fromCharCode(65 + ans) : String(ans || 'Chưa làm');
         list.push({
+          questionIndex: qNum,
           questionNumber: qNum,
           type: 'mc',
-          studentChoice: typeof ans === 'number' && ans >= 0 && ans <= 3 ? String.fromCharCode(65 + ans) : String(ans || 'Chưa làm'),
+          studentAnswer: choice,
+          studentChoice: choice,
+          correctAnswer: '',
           correctChoice: '',
           isCorrect: false,
-          hasAnswered: ans !== undefined
+          hasAnswered: ans !== undefined,
+          questionText: `Câu ${qNum}`,
+          questionContent: `Câu ${qNum}`
         });
       });
       return list;
@@ -420,7 +528,9 @@ export function ExamGenerator() {
                 ...cloudItem,
                 ...merged[index],
                 timestamp: cloudItem.timestamp || merged[index].timestamp || (merged[index].submittedAt ? new Date(merged[index].submittedAt).toLocaleString('vi-VN') : ''),
-                details: cloudItem.details || merged[index].details
+                details: cloudItem.details || merged[index].details,
+                detailedAnswers: cloudItem.detailedAnswers || merged[index].detailedAnswers || cloudItem.details || merged[index].details,
+                essayImages: cloudItem.essayImages || merged[index].essayImages
               };
             }
           });
@@ -2193,7 +2303,7 @@ ${realWorldPrompt ? `${realWorldPrompt}\n\n` : ""}${qEnabled.sa ? `RÀNG BUỘC 
                       <div key={idx} className="pb-4 border-b border-slate-100 last:border-0">
                         <div className="font-medium text-slate-800 mb-3 flex items-start gap-2">
                           <span className="font-bold whitespace-nowrap mt-1">Câu {idx + 1}:</span> 
-                          <MarkdownRenderer className="markdown-body inline-block" content={fixMath(cleanQuestionStem(q.content || (q as any).question || (q as any).text || '', q.options, q.tfStatements))} /> 
+                          <MarkdownRenderer className="markdown-body inline-block" content={cleanQuestionStem(q.content || (q as any).question || (q as any).text || '', q.options, q.tfStatements)} /> 
                           <span className="text-xs text-emerald-600 font-normal mt-1 shrink-0">[{q.level}]</span>
                           {isRealWorldQuestion(q) && (
                             <span className="text-xs font-semibold px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded mt-1 shrink-0 flex items-center gap-1 shadow-2xs" title="Câu hỏi có ngữ cảnh ứng dụng thực tế (Chuẩn GDPT 2018)">
@@ -2224,14 +2334,12 @@ ${realWorldPrompt ? `${realWorldPrompt}\n\n` : ""}${qEnabled.sa ? `RÀNG BUỘC 
                         )}
                         {q.type === 'mc' && q.options && (() => {
                           const cleanedOpts = q.options.map((opt: string) => cleanOptionText(opt));
-                          const maxLen = Math.max(...cleanedOpts.map((o: string) => (o || '').length));
-                          const cols = maxLen <= 25 ? 'grid-cols-2 lg:grid-cols-4' : maxLen <= 60 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1';
                           return (
-                            <div className={`grid ${cols} gap-2.5 pl-2 mt-2 mb-3`}>
+                            <div className="w-full space-y-2 pl-2 mt-2 mb-3">
                               {cleanedOpts.map((opt, oIdx) => (
-                                <div key={oIdx} className={`flex items-baseline gap-2 p-2 rounded-lg border transition-colors ${oIdx === q.correctOptionIndex ? 'bg-emerald-50 border-emerald-300 font-medium text-emerald-950' : 'bg-slate-50/50 border-slate-200/80 text-slate-800'}`}>
-                                  <span className="shrink-0 font-semibold select-none min-w-[1.5rem]">{String.fromCharCode(65 + oIdx)}.</span>
-                                  <span className="flex-1"><MarkdownRenderer className="markdown-body inline-block" content={fixMath(opt)} /></span>
+                                <div key={oIdx} className={`w-full min-h-[44px] flex items-center px-4 py-2 text-left rounded-lg border transition-colors break-words overflow-hidden ${oIdx === q.correctOptionIndex ? 'bg-emerald-50 border-emerald-300 font-medium text-emerald-950' : 'bg-slate-50/50 border-slate-200/80 text-slate-800'}`}>
+                                  <span className="shrink-0 font-semibold select-none min-w-[1.75rem]">{String.fromCharCode(65 + oIdx)}.</span>
+                                  <span className="flex-1 break-words overflow-hidden"><MarkdownRenderer className="markdown-body inline-block" content={fixMath(opt)} /></span>
                                 </div>
                               ))}
                             </div>
@@ -2756,7 +2864,7 @@ ${realWorldPrompt ? `${realWorldPrompt}\n\n` : ""}${qEnabled.sa ? `RÀNG BUỘC 
                                   )}
                                   <div className="question-block" style={{ marginBottom: '12pt', pageBreakInside: 'avoid' }}>
                                     <div style={{ fontSize: '12pt', marginBottom: '3pt' }}>
-                                      <strong>Câu {idx + 1}:</strong> <MarkdownRenderer className="markdown-body inline-block" content={fixMath(cleanQuestionStem(q.content || (q as any).question || (q as any).text || '', q.options, q.tfStatements))} />
+                                      <strong>Câu {idx + 1}:</strong> <MarkdownRenderer className="markdown-body inline-block" content={cleanQuestionStem(q.content || (q as any).question || (q as any).text || '', q.options, q.tfStatements)} />
                                     </div>
                                 {q.type === 'mc' && q.options && (() => {
                                   const cleanedOpts = q.options.map((opt: string) => cleanOptionText(opt));
@@ -3420,7 +3528,20 @@ ${realWorldPrompt ? `${realWorldPrompt}\n\n` : ""}${qEnabled.sa ? `RÀNG BUỘC 
                       // Đối với tự luận: trích xuất ảnh và bài gõ
                       const essaySubmission = selectedResultForReview.essaySubmissions?.find((es: any) => es.questionIndex === qNum);
                       const essayText = item.essayText || essaySubmission?.textAnswer || (typeof item.studentChoice === 'string' && !item.studentChoice.startsWith('[Đã đính kèm') ? item.studentChoice : '');
-                      const essayPhotos: string[] = (item.essayImages && item.essayImages.length > 0) ? item.essayImages : (essaySubmission?.images || []);
+                      
+                      let rootImages: string[] = [];
+                      if (selectedResultForReview.essayImages) {
+                        if (Array.isArray(selectedResultForReview.essayImages)) rootImages = selectedResultForReview.essayImages;
+                        else if (typeof selectedResultForReview.essayImages === 'string') {
+                          try {
+                            const parsed = JSON.parse(selectedResultForReview.essayImages);
+                            if (Array.isArray(parsed)) rootImages = parsed;
+                          } catch (e) {}
+                        }
+                      }
+                      const essayPhotos: string[] = (item.essayImages && item.essayImages.length > 0) 
+                        ? item.essayImages 
+                        : (essaySubmission?.images && essaySubmission.images.length > 0 ? essaySubmission.images : rootImages);
 
                       return (
                         <div
@@ -3507,11 +3628,13 @@ ${realWorldPrompt ? `${realWorldPrompt}\n\n` : ""}${qEnabled.sa ? `RÀNG BUỘC 
 
                               {/* Danh sách 4 phương án A, B, C, D với nhãn nổi bật */}
                               {item.options && item.options.length > 0 && (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                                <div className="w-full space-y-2 pt-1">
                                   {item.options.map((opt: string, optIdx: number) => {
                                     const optLetter = String.fromCharCode(65 + optIdx);
-                                    const isChosen = item.studentChoice === optLetter;
-                                    const isCorrect = item.correctChoice === optLetter;
+                                    const sChoiceTrim = String(item.studentChoice || item.studentAnswer || '').trim().toUpperCase();
+                                    const cChoiceTrim = String(item.correctChoice || item.correctAnswer || '').trim().toUpperCase();
+                                    const isChosen = sChoiceTrim === optLetter || sChoiceTrim.startsWith(optLetter + '.') || sChoiceTrim.startsWith(optLetter + ':') || sChoiceTrim.startsWith(optLetter + ' ');
+                                    const isCorrect = cChoiceTrim === optLetter || cChoiceTrim.startsWith(optLetter + '.') || cChoiceTrim.startsWith(optLetter + ':') || cChoiceTrim.startsWith(optLetter + ' ');
 
                                     let optBoxStyle = "border-slate-200 bg-white text-slate-700";
                                     if (isChosen && isCorrect) {
@@ -3523,20 +3646,20 @@ ${realWorldPrompt ? `${realWorldPrompt}\n\n` : ""}${qEnabled.sa ? `RÀNG BUỘC 
                                     }
 
                                     return (
-                                      <div key={optIdx} className={`p-2.5 border rounded-xl text-xs sm:text-sm flex items-start gap-2 ${optBoxStyle}`}>
-                                        <span className="font-bold w-5">{optLetter}.</span>
-                                        <div className="flex-1">
+                                      <div key={optIdx} className={`w-full min-h-[44px] flex items-center px-4 py-2 text-left rounded-lg border transition-colors break-words overflow-hidden text-xs sm:text-sm gap-2 ${optBoxStyle}`}>
+                                        <span className="font-bold shrink-0 min-w-[1.5rem]">{optLetter}.</span>
+                                        <div className="flex-1 break-words overflow-hidden">
                                           <MarkdownRenderer content={cleanOptionText(opt)} />
                                         </div>
                                         {isChosen && (
-                                          <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ml-auto whitespace-nowrap ${
+                                          <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ml-auto shrink-0 whitespace-nowrap ${
                                             isCorrect ? 'bg-emerald-700 text-white' : 'bg-rose-700 text-white'
                                           }`}>
                                             HS chọn
                                           </span>
                                         )}
                                         {isCorrect && !isChosen && (
-                                          <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-emerald-600 text-white ml-auto whitespace-nowrap">
+                                          <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-emerald-600 text-white ml-auto shrink-0 whitespace-nowrap">
                                             Đáp án đúng
                                           </span>
                                         )}
@@ -4267,4 +4390,3 @@ Lời giải: Tiệm cận ngang là $y = 1$ nên ý c sai.`);
     </div>
   );
 }
-

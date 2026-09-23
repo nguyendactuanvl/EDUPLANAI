@@ -44,6 +44,7 @@ const ClassMap = safeLazy(() => import('./pages/ClassMap').then(module => ({ def
 const HomeroomManagement = safeLazy(() => import('./pages/HomeroomManagement').then(module => ({ default: module.HomeroomManagement })));
 const WeeklyTimetable = safeLazy(() => import('./pages/WeeklyTimetable').then(module => ({ default: module.WeeklyTimetable })));
 const Gamification = safeLazy(() => import('./pages/Gamification').then(module => ({ default: module.Gamification })));
+const MathTools = safeLazy(() => import('./pages/MathTools').then(module => ({ default: module.MathTools })));
 
 
 
@@ -158,6 +159,7 @@ export default function App() {
               {activeTab === "khdh" && <LessonPlan />}
               {activeTab === "worksheets" && <Worksheets />}
               {activeTab === "exercise" && <ExerciseSolver />}
+              {activeTab === "math_tools" && <MathTools />}
               {activeTab === "gamification" && <Gamification />}
               {activeTab === "classmap" && <ClassMap />}
               {activeTab === "homeroom" && <HomeroomManagement />}
@@ -175,3 +177,4 @@ export default function App() {
     </div>
   );
 }
+

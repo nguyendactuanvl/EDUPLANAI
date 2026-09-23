@@ -44,7 +44,7 @@ import {
 import { saveExamToCloud } from '../lib/cloudExamStore';
 import { apiFetch } from '../lib/apiFetch';
 import { GDPT_2018_SUBJECTS } from '../lib/subjects';
-import { formatMathContent, sanitizeShortAnswerInput, validateShortAnswer } from '../lib/utils';
+import { formatMathContent, sanitizeShortAnswerInput, validateShortAnswer, sanitizeExamQuestion } from '../lib/utils';
 
 export { formatMathContent };
 
@@ -619,12 +619,15 @@ export function UploadTeacherExamModal({
               id: i + 1,
               type: q.type || 'mc',
               level: q.level || 'Thông hiểu',
-              content: q.content,
-              options: q.options || ["Phương án A", "Phương án B", "Phương án C", "Phương án D"],
+              content: sanitizeExamQuestion(q.content),
+              options: (q.options || ["Phương án A", "Phương án B", "Phương án C", "Phương án D"]).map((opt: string) => sanitizeExamQuestion(opt)),
               correctOptionIndex: q.correctOptionIndex ?? 0,
-              correctAnswer: q.correctAnswer,
-              tfStatements: q.tfStatements,
-              explanation: q.explanation || '',
+              correctAnswer: q.correctAnswer ? sanitizeExamQuestion(q.correctAnswer) : q.correctAnswer,
+              tfStatements: q.tfStatements ? q.tfStatements.map((tf: any) => ({
+                ...tf,
+                statement: sanitizeExamQuestion(tf.statement || '')
+              })) : undefined,
+              explanation: q.explanation ? sanitizeExamQuestion(q.explanation) : '',
               imageUrl: q.imageUrl,
               hasFigure: q.hasFigure
             }))

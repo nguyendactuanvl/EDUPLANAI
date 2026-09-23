@@ -1350,4 +1350,78 @@ export async function exportHtmlToWord(
   }
 }
 
+/**
+ * Chụp ảnh element hiển thị (Poster/Infographic/Worksheet) xuất ra file PNG chất lượng cao (2x scale)
+ */
+export async function exportElementToImage(
+  element: HTMLElement | null,
+  filename: string = "Poster_PhieuHocTap.png"
+): Promise<void> {
+  if (!element) return;
+
+  const clone = element.cloneNode(true) as HTMLElement;
+  const container = document.createElement('div');
+  container.style.position = 'absolute';
+  container.style.left = '-9999px';
+  container.style.top = '-9999px';
+  const naturalWidth = element.offsetWidth > 850 ? element.offsetWidth : 850;
+  container.style.width = `${naturalWidth}px`;
+  container.style.background = '#ffffff';
+
+  container.appendChild(clone);
+  document.body.appendChild(container);
+
+  // Clean OKLCH and complex modern CSS colors so html2canvas renders without errors
+  const cleanColors = (el: HTMLElement) => {
+    if (el.nodeType !== Node.ELEMENT_NODE) return;
+    const computed = window.getComputedStyle(el);
+    const props = [
+      'color', 'backgroundColor', 'borderColor', 
+      'borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor',
+      'textDecorationColor', 'outlineColor', 'fill', 'stroke'
+    ];
+    props.forEach(prop => {
+      const val = computed[prop as any];
+      if (val && (val.includes('oklch') || val.includes('oklab') || val.includes('color('))) {
+        try {
+          const cvs = document.createElement('canvas');
+          cvs.width = 1; cvs.height = 1;
+          const ctx = cvs.getContext('2d');
+          if (ctx) {
+            ctx.fillStyle = val;
+            ctx.fillRect(0, 0, 1, 1);
+            const d = ctx.getImageData(0, 0, 1, 1).data;
+            el.style[prop as any] = `rgba(${d[0]}, ${d[1]}, ${d[2]}, ${d[3] / 255})`;
+          }
+        } catch (e) {}
+      }
+    });
+    Array.from(el.children).forEach(child => cleanColors(child as HTMLElement));
+  };
+
+  try {
+    cleanColors(clone);
+    const canvas = await html2canvas(clone, {
+      scale: 2, // HiDPI 2x scale for sharp posters/text
+      useCORS: true,
+      logging: false,
+      backgroundColor: '#ffffff'
+    });
+    
+    canvas.toBlob((blob) => {
+      if (blob) {
+        const finalName = filename.endsWith('.png') ? filename : `${filename}.png`;
+        saveAs(blob, finalName);
+      }
+    }, 'image/png');
+  } catch (err) {
+    console.error('Lỗi khi xuất ảnh Poster:', err);
+    throw err;
+  } finally {
+    if (document.body.contains(container)) {
+      document.body.removeChild(container);
+    }
+  }
+}
+
 

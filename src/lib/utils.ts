@@ -521,6 +521,50 @@ export const convertOmmlToLatex = (content: string): string => {
 };
 
 /**
+ * Chuẩn hóa dấu tiếng Việt (Unicode NFD -> NFC) và triệt tiêu dấu thanh bị gãy rụng:
+ */
+export const cleanVietnameseUnicode = (str: string): string => {
+  if (!str) return '';
+  let res = str;
+
+  // 1. Chuẩn hóa sang Unicode Dựng Sẵn (NFC)
+  res = res.normalize('NFC');
+
+  // 2. Triệt tiêu các ký tự dấu thanh bị gãy rụng đứng cạnh chữ cái
+  res = res
+    .replace(/([a-zA-Z\u00C0-\u1EF9])[\s]*[`´'](?=[a-zA-Z\u00C0-\u1EF9\s]|$)/g, '$1')
+    .replace(/Â[`']/g, 'Ầ')
+    .replace(/Â´/g, 'Ấ')
+    .replace(/Ă´/g, 'Ắ')
+    .replace(/Ă[`']/g, 'Ằ')
+    .replace(/ô´/g, 'ố')
+    .replace(/ô[`']/g, 'ồ')
+    .replace(/ê´/g, 'ế')
+    .replace(/ê[`']/g, 'ề')
+    .replace(/ề[`']/g, 'ề')
+    .replace(/ế´/g, 'ế')
+    .replace(/ố´/g, 'ố')
+    .replace(/ố[`']/g, 'ồ')
+    .replace(/PHÂ\s*`\s*N/gi, 'PHẦN')
+    .replace(/THỐ\s*´\s*NG/gi, 'THỐNG')
+    .replace(/TRĂ\s*´\s*C/gi, 'TRẮC')
+    .replace(/NHIÊ\s*`\s*U/gi, 'NHIỀU')
+    .replace(/nhấ\s*´\s*t/gi, 'nhất')
+    .replace(/đề\s*`/gi, 'đề')
+    .replace(/tố\s*´/gi, 'tố')
+    .replace(/Số\s*´/gi, 'Số')
+    .replace(/biế\s*´\s*n/gi, 'biến');
+
+  // 3. Xử lý thiếu gạch đầu mệnh đề phủ định (\overline{P}, \overline{Q}, ...)
+  res = res
+    .replace(/([PQAB])[\u0304\u0305]/g, '$\\overline{$1}$')
+    .replace(/\\bar\{([A-Za-z])\}/g, '\\overline{$1}')
+    .replace(/(?<!\\)\b(bar|overline)\s*\{([A-Za-z])\}/g, '\\overline{$2}');
+
+  return res;
+};
+
+/**
  * Chuẩn hóa văn bản & công thức toán trước khi render:
  * 1. Sửa lỗi chính tả văn bản thông dụng (ví dụ: "và o các khoảng trống" -> "vào các khoảng trống")
  * 2. Tự động tách liên từ "và", "hoặc", "với" bị dính giữa 2 công thức (vd: )vàB =, ]vàB =)
@@ -530,7 +574,7 @@ export const convertOmmlToLatex = (content: string): string => {
  */
 export const polishMathText = (content: string): string => {
   if (!content) return '';
-  let text = content;
+  let text = cleanVietnameseUnicode(content);
 
   // 1. Sửa lỗi chính tả văn bản thông dụng
   text = text.replace(/và\s+o\s+các\s+khoảng\s+trống/gi, 'vào các khoảng trống');
@@ -585,6 +629,140 @@ export const polishMathText = (content: string): string => {
 export const sanitizeAndFormatMath = polishMathText;
 
 /**
+ * XỬ LÝ TỔNG QUÁT & TRIỆT ĐỂ 100% LỖI DÍNH CHỮ TIẾNG VIỆT IN NGHIÊNG VÀ LỘ LỆNH LATEX TRÊN TRANG LÀM BÀI ONLINE
+ * Tokenizer & Sanitizer bảo vệ tiếng Việt cho đề thi toán
+ */
+export const sanitizeExamQuestion = (rawContent: string): string => {
+  if (!rawContent) return '';
+  let content = rawContent.trim();
+
+  // BƯỚC 1: GIẢI CỨU CHUỖI NẾU BỊ BỌC NHẦM CẢ CÂU TRONG DẤU $ HOẶC $$
+  // Nếu chuỗi bắt đầu và kết thúc bằng $ hoặc $$ nhưng bên trong có nhiều từ tiếng Việt
+  if ((content.startsWith('$$') && content.endsWith('$$') && content.length > 4) ||
+      (content.startsWith('$') && content.endsWith('$') && content.length > 2)) {
+    const isDouble = content.startsWith('$$');
+    const inner = isDouble ? content.slice(2, -2).trim() : content.slice(1, -1).trim();
+    // Nếu có chứa tiếng Việt có dấu -> tháo bỏ cặp $ hoặc $$ ngoài cùng
+    if (/[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(inner)) {
+      content = inner;
+    }
+  }
+
+  // BƯỚC 2: BẢO VỆ CÁC KHỐI MATH HỢP LỆ TRƯỚC HẾT
+  // Để không bao giờ chèn thêm $ hoặc xé rách công thức đã nằm trong $$...$$ hoặc $...$
+  const mathTokens: string[] = [];
+
+  // 2.1 Bảo vệ $$...$$
+  content = content.replace(/\$\$([\s\S]*?)\$\$/g, (match, inner) => {
+    // Nếu khối $$ lỡ bao trùm cả câu tiếng Việt dài mà không có \text
+    if (/[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]{4,}/i.test(inner) && !/\\text\{/.test(inner)) {
+      return inner;
+    }
+    mathTokens.push(match);
+    return `___MATH_BLOCK_${mathTokens.length - 1}___`;
+  });
+
+  // 2.2 Bảo vệ $...$
+  content = content.replace(/(?<!\$)\$(?!\$)([^\$\n]+?)(?<!\$)\$(?!\$)/g, (match, inner) => {
+    // Nếu khối $ lỡ bọc nhầm cả câu tiếng Việt (ví dụ: "$Cho hai tập hợp A = [1; 4]$")
+    if (/[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]{4,}/i.test(inner) && !/\\text\{/.test(inner)) {
+      return inner.replace(/([A-Z]\s*=\s*[\[\(][^\]\)\n]+[\]\)]|[a-zA-Z0-9_\^\{\}\\\+\-\*\/=<>]+)/g, (part) => {
+        const trimmed = part.trim();
+        if (/[\\=_\^\{\}\[\]\(\)<>]/.test(trimmed) || (trimmed.length === 1 && /[A-Za-z]/.test(trimmed))) {
+          return ` $${trimmed}$ `;
+        }
+        return part;
+      });
+    }
+    mathTokens.push(match);
+    return `___MATH_BLOCK_${mathTokens.length - 1}___`;
+  });
+
+  // BƯỚC 3: XỬ LÝ VĂN BẢN NGOÀI KHỐI MATH (BẢO ĐẢM KHÔNG ẢNH HƯỞNG CÔNG THỨC TOÁN ĐÃ CÓ)
+  // Sửa lỗi dính chữ tiếng Việt thông dụng
+  content = content
+    .replace(/Chohaitậphợp\s*([A-Za-z])/gi, 'Cho hai tập hợp $1')
+    .replace(/Chohaitậphợp/gi, 'Cho hai tập hợp ')
+    .replace(/Cho\s*tậphợp\s*([A-Za-z])/gi, 'Cho tập hợp $1')
+    .replace(/Cho\s*tậphợp/gi, 'Cho tập hợp ')
+    .replace(/\bBiết\s*([A-Za-z])(?![a-zà-ỹ])/gi, 'Biết $1')
+    .replace(/Tì\s*m\s*giá\s*trị\s*nguyên\s*lớn\s*nhất\s*của/gi, 'Tìm giá trị nguyên lớn nhất của ')
+    .replace(/Tì\s*m\s*giá\s*trị\s*nguyên\s*lớn\s*nhất/gi, 'Tìm giá trị nguyên lớn nhất ')
+    .replace(/Tìmgiátrịcủa/gi, 'Tính giá trị của ')
+    .replace(/Tìmgiátrị/gi, 'Tìm giá trị ')
+    .replace(/Tínhgiátrịcủa/gi, 'Tính giá trị của ')
+    .replace(/Tínhgiátrị/gi, 'Tính giá trị ')
+    .replace(/Hãyliệtkêcácphầntửcủatậphợp/gi, 'Hãy liệt kê các phần tử của tập hợp ')
+    .replace(/Hãyliệtkê/gi, 'Hãy liệt kê ')
+    .replace(/Hãyxácđịnhcáctậphợp/gi, 'Hãy xác định các tập hợp ')
+    .replace(/cáctậphợp/gi, 'các tập hợp ')
+    .replace(/tậphợp/gi, 'tập hợp ')
+    .replace(/vàtìm/gi, ' và tìm ')
+    .replace(/trêntrụcsố/gi, ' trên trục số')
+    .replace(/độdài/gi, ' độ dài ')
+    .replace(/thỏamãnđiềukiện/gi, ' thỏa mãn điều kiện ')
+    .replace(/nguyênlớnnhấtcủa/gi, ' nguyên lớn nhất của ')
+    .replace(/là\s*một\s*đoạn/gi, ' là một đoạn ')
+    .replace(/\bm\s*để/gi, '$m$ để ')
+    .replace(/mđể/gi, '$m$ để ')
+    .replace(/vàtính/gi, ' và tính ');
+
+  // Tách dính liên từ: )vàB, ]vàB, }vàB (không match chữ cái tiếng Việt như "Thay")
+  content = content
+    .replace(/([\)\]\}\$0-9])\s*(và|hoặc|hay)\s*([A-Za-z\$])/g, '$1 $2 $3')
+    .replace(/([\)\]\}\$0-9])(và|hoặc|hay)/g, '$1 $2')
+    .replace(/(và|hoặc|hay)([A-Z])(?![a-zà-ỹ])/g, '$1 $2');
+
+  // Sửa lỗi cú pháp LaTeX dính chữ:
+  content = content
+    .replace(/\\\\\s*cup/gi, ' \\cup ')
+    .replace(/=\s*emptyset/gi, '= \\emptyset')
+    .replace(/leq(\d+)\s*và\s*([A-Za-z])/gi, '\\le $1 và $2')
+    .replace(/leq(\d+)/gi, '\\le $1 ')
+    .replace(/geq(\d+)/gi, '\\ge $1 ')
+    .replace(/(?<=[0-9a-zA-Z\$\(\]\}])\s*leq(\d+)/gi, ' \\le $1 ')
+    .replace(/(?<=[0-9a-zA-Z\$\(\]\}])\s*geq(\d+)/gi, ' \\ge $1 ')
+    .replace(/([A-Z]\s*=\s*[\[\(][^\]\)]+[\]\)])\s*\$\$\.?\s*Gọi/gi, '$1. Gọi');
+
+  // Bọc các lệnh toán học trần trụi ngoài math:
+  content = content.replace(/\b([A-Z])\s*\\(cap|cup|setminus)\s*([A-Z])\s*=\s*\\emptyset\b/g, (_m, a, op, b) => `$${a} \\${op} ${b} = \\emptyset$`);
+  content = content.replace(/\b([A-Z])\s*\\(cap|cup|setminus)\s*([A-Z])\b/g, (_m, a, op, b) => `$${a} \\${op} ${b}$`);
+  content = content.replace(/(?<![a-zA-Z0-9\$\\])\\(cup|cap|setminus)\s*([A-Z])\b(?!\$)/g, (_m, op, a) => `\\${op} $${a}$`);
+  content = content.replace(/\b([a-zA-Z0-9]+)\s*\\(in|notin|subset|subseteq)\s*([a-zA-Z0-9]+)\b/g, (_m, a, op, b) => `$${a} \\${op} ${b}$`);
+  content = content.replace(/(?<![\$\\])\\(emptyset|varnothing)\b(?!\$)/g, (_m, a) => `$\\${a}$`);
+  content = content.replace(/\b([a-zA-Z0-9]+)\s*\\(le|ge|leq|geq|ne|neq)\s*([a-zA-Z0-9\-]+)\b/g, (_m, a, op, b) => `$${a} \\${op} ${b}$`);
+
+  // Bọc tập hợp trần trụi: A = [1; 4]
+  content = content.replace(/\b([A-Z]\s*=\s*[\[\(][^\]\)\n]+[\]\)])/g, (_m, a) => `$${a}$`);
+
+  // BƯỚC 4: KHÔI PHỤC CÁC KHỐI MATH ĐÃ BẢO VỆ
+  content = content.replace(/___MATH_BLOCK_(\d+)___/g, (_m, idx) => mathTokens[Number(idx)] || '');
+
+  // Dọn dẹp khoảng trắng ngang và dòng trống dư thừa (BẢO VỆ DÒNG MỚI \n CỦA MARKDOWN)
+  content = content
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  return content;
+};
+
+export const rescueAccidentalFullMathBlock = sanitizeExamQuestion;
+
+/**
+ * Tiền xử lý kết hợp cứu hộ câu hỏi và chuẩn hóa công thức toán
+ */
+export const sanitizeAndPolishMath = (content: string): string => {
+  if (!content) return '';
+  let text = sanitizeExamQuestion(content);
+  text = cleanVietnameseUnicode(text);
+  text = polishMathText(text);
+  text = sanitizeMathBeforeRender(text);
+  text = sanitizeExamQuestion(text);
+  return text;
+};
+
+/**
  * Chuẩn hóa và khắc phục triệt để lỗi vỡ công thức:
  * 1. Dấu khác bị tách: / =, /=, \not= -> \ne
  * 2. Dấu không thuộc: ∈/, ∈ /, \in/, \in /, \not\in -> \notin
@@ -606,6 +784,12 @@ export const sanitizeMathBeforeRender = (content: string): string => {
     .replace(/\/\s*=\s*/g, ' \\ne ')
     .replace(/=\s*\/\s*/g, ' \\ne ')
     .replace(/\\not\s*=\s*/g, ' \\ne ');
+
+  // BƯỚC 1.5: Xử lý mệnh đề phủ định \overline{P}, \overline{Q}, ...
+  text = text
+    .replace(/\\bar\{([A-Za-z])\}/g, '\\overline{$1}')
+    .replace(/(?<!\\)\b(overline|bar)\{([A-Za-z])\}/g, '\\overline{$2}')
+    .replace(/([PQAB])[\u0304\u0305]/g, '$\\overline{$1}$');
 
   // BƯỚC 2: Xử lý dứt điểm dấu "không thuộc" (∈/, ∈ /, \in/, \in /, \not\in)
   text = text
@@ -658,12 +842,14 @@ export const normalizeMathLatex = (rawText: string): string => {
 
   // BƯỚC 0: Tách rời các từ nối tiếng Việt bị dính liền với ký tự toán và sửa rách dấu $$ (vd: 3hoặcm -> 3 hoặc m, $$hoặc$$ -> hoặc)
   text = text
-    .replace(/([0-9a-zA-Z\$\\])(?<!\s)(hoặc|hay)(?=[a-zA-Z0-9\$\\])/gi, '$1 $2 ')
-    .replace(/([0-9a-zA-Z\$\\])(?<!\s)và(?!(?:o|i|ng|c|t)\b)(?=[a-zA-Z0-9\$\\])/gi, '$1 và ')
-    .replace(/(hoặc|hay)(?=[a-zA-Z0-9])/gi, '$1 ')
-    .replace(/và(?!(?:o|i|ng|c|t)\b)(?=[a-zA-Z0-9])/gi, 'và ')
-    .replace(/(?<=[a-zA-Z0-9\$\\])(hoặc|hay)/gi, ' $1')
-    .replace(/(?<=[a-zA-Z0-9\$\\])và(?!(?:o|i|ng|c|t)\b)/gi, ' và')
+    .replace(/\b([a-z])(hoặc|hay)\b/gi, (match, letter, conj) => {
+      if (/^(thay|chay)$/i.test(match)) return match;
+      return `${letter} ${conj}`;
+    })
+    .replace(/([0-9\$\)\]\}])(?<!\s)(hoặc|hay)(?=[a-zA-Z0-9\$\\])/gi, '$1 $2 ')
+    .replace(/([0-9\$\)\]\}])(?<!\s)và(?!(?:o|i|ng|c|t)\b)(?=[a-zA-Z0-9\$\\])/gi, '$1 và ')
+    .replace(/(?<=[0-9\$\)\]\}])(hoặc|hay)/gi, ' $1')
+    .replace(/(?<=[0-9\$\)\]\}])và(?!(?:o|i|ng|c|t)\b)/gi, ' và')
     .replace(/\$\$\s*(hoặc|và|hay)\s*\$\$/gi, ' $1 ')
     .replace(/\$\$\s*(hoặc|và|hay)\s*/gi, '$ $1 ')
     .replace(/\s*(hoặc|và|hay)\s*\$\$/gi, ' $1 $')
@@ -842,14 +1028,18 @@ export function cleanOptionText(opt: any): string {
   if (!opt && opt !== 0) return '';
   let text = String(opt).trim();
   
+  // 0. Chuẩn hóa dấu tiếng Việt (Unicode NFD -> NFC) và loại bỏ thẻ <br> gây rớt dòng chữ lẻ loi
+  text = cleanVietnameseUnicode(text);
+  text = text.replace(/<br\s*\/?>/gi, ' ').replace(/\s{2,}/g, ' ');
+
   // Tiền xử lý dứt điểm các lỗi vỡ công thức phép hiệu và tách dấu khác
   text = sanitizeMathBeforeRender(text);
 
   // Tách rời chữ tiếng Việt bị dính vào công thức và sửa rách dấu $$
   text = fixInlineOptionText(text);
 
-  // 1. Remove leading option prefixes like "A.", "A)", "A:", "a.", "a)"
-  text = text.replace(/^[A-Da-d][\.\:\)]\s*/, '').trim();
+  // 1. Remove leading option prefixes like "A.", "A)", "A:", "a.", "a)", "C. ", "c. "
+  text = text.replace(/^[A-Da-d][\.\:\)]\s*/, '').replace(/^[a-d]\.\s*/i, '').trim();
 
   // 2. Remove trailing orphan dollar signs after punctuation (e.g. ". $", ".$", ";$", ",$")
   text = text.replace(/([\.\;\,])\s*\$+$/g, '$1').trim();
@@ -919,7 +1109,7 @@ export function cleanOptionText(opt: any): string {
     text = text.replace(/\s*\$+$/, '').trim();
   }
 
-  return text;
+  return sanitizeExamQuestion(text);
 }
 
 export function getPublicAppUrl(): string {
@@ -971,7 +1161,7 @@ export function cleanQuestionStem(content: any, options?: any[], tfStatements?: 
     text = text.replace(/(?:\r?\n|\s)*(?:[-*]\s*)?(?:\*{0,2})a[\.:\)]\s+[\s\S]*$/i, '');
   }
   
-  return text.trim();
+  return sanitizeExamQuestion(text.trim());
 }
 
 export const wrapAllNakedMath = (str: string): string => {
@@ -1326,8 +1516,11 @@ export const fixMath = (text: any) => {
     }
 
     // 4. Auto-wrap math intervals or expressions that are missing $ delimiters
-    // Especially for options like "(-\infty; -1) và (0; 1)" or "(-1; 1)" or "y = 2x + 1"
-    if (!t.includes('$') && !t.includes('\\begin{')) {
+    // ONLY for short option items like "(-\infty; -1) và (0; 1)" or "(-1; 1)" or "y = 2x + 1"
+    // NEVER wrap full Vietnamese sentences, question stems, or text with words!
+    const hasVietnamese = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(t);
+    const isSentential = t.length > 50 || t.split(/\s+/).length > 6;
+    if (!hasVietnamese && !isSentential && !t.includes('$') && !t.includes('\\begin{')) {
         if (/\s+(?:và|hoặc)\s+/i.test(t)) {
             const parts = t.split(/(\s+(?:và|hoặc)\s+)/i);
             t = parts.map(p => {
@@ -1344,6 +1537,9 @@ export const fixMath = (text: any) => {
             }
         }
     }
+
+    // 4.1. Cứu hộ câu hỏi bị lỡ bọc $ trọn vẹn cả câu hoặc dính chữ
+    t = rescueAccidentalFullMathBlock(t);
 
     // 5. Clean stray single $ on isolated lines
     t = t.replace(/^\s*\$\s*$/gm, '');

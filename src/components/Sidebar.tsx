@@ -1,4 +1,4 @@
-import { Trophy, BookOpen, Calendar, FileText, Settings, Sparkles, Clock, ClipboardList, FileEdit, FileCheck, Users, ShieldCheck, CalendarDays, Key } from "lucide-react";
+import { Trophy, BookOpen, Calendar, FileText, Settings, Sparkles, Clock, ClipboardList, FileEdit, FileCheck, Users, ShieldCheck, CalendarDays, Key, Calculator } from "lucide-react";
 import { cn } from "../lib/utils";
 
 interface SidebarProps {
@@ -16,6 +16,7 @@ export function Sidebar({ activeTab, setActiveTab, onOpenSettings }: SidebarProp
         { id: "khdh", label: "Kế hoạch dạy học", icon: BookOpen },
         { id: "worksheets", label: "Phiếu học tập", icon: ClipboardList },
         { id: "exercise", label: "Giải bài tập", icon: Sparkles },
+        { id: "math_tools", label: "Công cụ Toán học", icon: Calculator },
         { id: "pdf2word", label: "Chuyển PDF sang Word", icon: FileEdit },
         { id: "exam", label: "Tạo & Trộn đề", icon: FileCheck },
       ]
@@ -47,7 +48,7 @@ export function Sidebar({ activeTab, setActiveTab, onOpenSettings }: SidebarProp
         </div>
         <p className="text-xs text-slate-400 mt-2 leading-relaxed">
           Ứng dụng đa năng cho GV<br/>
-          (Tác giả: Thầy Nguyễn Đắc Tuấn - 0835606162)
+          (Đăng ký app: LH Zalo 0835606162)
         </p>
       </div>
 
@@ -89,9 +90,10 @@ export function Sidebar({ activeTab, setActiveTab, onOpenSettings }: SidebarProp
           className="flex items-center gap-3 text-sm font-medium text-emerald-400 hover:text-emerald-300 transition-colors w-full text-left"
         >
           <Key className="h-5 w-5" />
-          Nhập mã API key
+          Nhập mã API key của bạn ở đây
         </button>
       </div>
     </div>
   );
 }
+

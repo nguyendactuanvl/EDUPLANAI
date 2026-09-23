@@ -8,122 +8,31 @@ import katex from 'katex';
 // @ts-ignore
 import renderMathInElement from 'katex/dist/contrib/auto-render.js';
 import { TikzRenderer, getTikzSvg } from './TikzRenderer';
-import { fixMath, formatMathContent, convertOmmlToLatex, polishMathText, sanitizeAndFormatMath } from '../lib/utils';
+import { 
+  fixMath, 
+  formatMathContent, 
+  convertOmmlToLatex, 
+  polishMathText, 
+  sanitizeAndFormatMath, 
+  cleanVietnameseUnicode, 
+  rescueAccidentalFullMathBlock, 
+  sanitizeAndPolishMath, 
+  sanitizeExamQuestion,
+  sanitizeMathBeforeRender,
+  normalizeMathLatex,
+  normalizeMathContent
+} from '../lib/utils';
 
-export { polishMathText, sanitizeAndFormatMath };
-
-export const sanitizeMathBeforeRender = (content: string): string => {
-  if (!content) return '';
-  let text = polishMathText(content);
-
-  // BƯỚC 0: Tự động chuyển đổi XML OMML Word Equation nếu có
-  text = convertOmmlToLatex(text);
-
-  // BƯỚC 1: Xử lý dứt điểm dấu "khác" (/ =, /=, \not=, =)
-  text = text
-    .replace(/\/\s*=\s*/g, ' \\ne ')
-    .replace(/=\s*\/\s*/g, ' \\ne ')
-    .replace(/\\not\s*=\s*/g, ' \\ne ');
-
-  // BƯỚC 2: Xử lý dứt điểm dấu "không thuộc" (∈/, ∈ /, \in/, \in /, \not\in)
-  text = text
-    .replace(/(?:\\in|∈)\s*\/\s*/g, ' \\notin ')
-    .replace(/\\not\s*\\in\s*/g, ' \\notin ')
-    .replace(/\\not\s+in(?![a-zA-Z])/g, ' \\notin ');
-
-  // BƯỚC 3: Xử lý dấu "không phải tập con" (⊂/, \subset/, \not\subset)
-  text = text
-    .replace(/(?:\\subset|⊂)(?:eq)?\s*\/\s*/g, ' \\not\\subset ')
-    .replace(/\\not\s*\\subset(?:eq)?(?![a-zA-Z])/g, ' \\not\\subset ');
-
-  // BƯỚC 4: Hàn gắn khối Phép Hiệu {x | x ∈ A và x ∉ B}
-  // Bắt mọi trường hợp vỡ khối kể cả khi có \mid, |, chữ "và", "hoặc"
-  text = text.replace(
-    /A\s*\\setminus\s*B\s*=\s*\{?\s*x\s*(?:\\mid|\|)\s*x\s*(?:\\in|∈)\s*A\s*(?:\\text\{\s*và\s*\}|và)\s*x\s*(?:\\notin|\\in\s*\/|∈\s*\/)\s*B\s*\}?\s*\${0,2}/gi,
-    '$$A \\setminus B = \\{x \\mid x \\in A \\text{ và } x \\notin B\\}$$'
-  );
-
-  // Bắt các khối tổng quát dạng {x \mid ... và ...} bị rách dấu $$
-  text = text.replace(/\{\s*x\s*\\mid\s*x\s*\\in\s*([A-Z])\s*và\s*x\s*\\notin\s*([A-Z])\s*\}\${1,2}/gi, 
-    '$$\\{x \\mid x \\in $1 \\text{ và } x \\notin $2\\}$$'
-  );
-
-  // Bắt các trường hợp tổng quát X \setminus Y
-  text = text.replace(
-    /(?<!\\text\{\s*)([A-Z])\s*\\setminus\s*([A-Z])\s*=\s*\{?\s*x\s*(?:\\mid|\|)\s*x\s*(?:\\in|∈)\s*\1\s*(?<!\\text\{\s*)và\s*x\s*(?:\\notin|\\in\s*\/|∈\s*\/)\s*\2\s*\}?\s*\${0,2}/gi,
-    (_m, p1, p2) => `$$${p1} \\setminus ${p2} = \\{x \\mid x \\in ${p1} \\text{ và } x \\notin ${p2}\\}$$`
-  );
-
-  // BƯỚC 5: Dọn dẹp các dấu $ thừa hoặc cọc cạch
-  text = text
-    .replace(/\${3,}/g, '$$')
-    .replace(/([a-zA-Z0-9\emptyset\\])\s*\/\s*=\s*([a-zA-Z0-9\emptyset\\])/g, '$1 \\ne $2');
-
-  return text;
-};
-
-export const normalizeMathContent = sanitizeMathBeforeRender;
-
-export const normalizeMathLatex = (rawText: string): string => {
-  if (!rawText) return '';
-  let text = sanitizeMathBeforeRender(rawText);
-
-  // BƯỚC 0: Tách rời các từ nối tiếng Việt bị dính liền với ký tự toán và sửa rách dấu $$ (vd: 3hoặcm -> 3 hoặc m, $$hoặc$$ -> hoặc)
-  text = text
-    .replace(/([0-9a-zA-Z\$\\])(?<!\s)(hoặc|hay)(?=[a-zA-Z0-9\$\\])/gi, '$1 $2 ')
-    .replace(/([0-9a-zA-Z\$\\])(?<!\s)và(?!(?:o|i|ng|c|t)\b)(?=[a-zA-Z0-9\$\\])/gi, '$1 và ')
-    .replace(/(hoặc|hay)(?=[a-zA-Z0-9])/gi, '$1 ')
-    .replace(/và(?!(?:o|i|ng|c|t)\b)(?=[a-zA-Z0-9])/gi, 'và ')
-    .replace(/(?<=[a-zA-Z0-9\$\\])(hoặc|hay)/gi, ' $1')
-    .replace(/(?<=[a-zA-Z0-9\$\\])và(?!(?:o|i|ng|c|t)\b)/gi, ' và')
-    .replace(/\$\$\s*(hoặc|và|hay)\s*\$\$/gi, ' $1 ')
-    .replace(/\$\$\s*(hoặc|và|hay)\s*/gi, '$ $1 ')
-    .replace(/\s*(hoặc|và|hay)\s*\$\$/gi, ' $1 $')
-    .replace(/\$\s*(hoặc|và|hay)\s*\$/gi, ' $1 ');
-
-  // BƯỚC 1: Xử lý các biến thể ký hiệu gạch chéo bị lệch sang phải hoặc tách rời
-  text = text
-    // Dấu không thuộc: \in/, \in /, \not\in, \not \in
-    .replace(/\\in\s*\//g, ' \\notin ')
-    .replace(/\\not\s*\\in/g, ' \\notin ')
-    .replace(/\\not\s+in(?![a-zA-Z])/g, ' \\notin ')
-    // Dấu không phải tập con: \subset/, \subset /, \not\subset
-    .replace(/\\subset(eq)?\s*\//g, ' \\not\\subset ')
-    .replace(/\\not\s*\\subset(eq)?(?![a-zA-Z])/g, ' \\not\\subset ')
-    // Dấu khác: =/, = /, /=, \not=
-    .replace(/=\s*\//g, ' \\ne ')
-    .replace(/\/\s*=/g, ' \\ne ')
-    .replace(/\\not\s*=/g, ' \\ne ')
-    .replace(/\\not\s*\\equiv/g, ' \\not\\equiv ');
-
-  // BƯỚC 2: Tự động khôi phục dấu backslash (\) bị mất bên trong công thức
-  // Áp dụng cho nội dung nằm trong cặp dấu $...$ hoặc các cụm từ khóa toán học đặc trưng
-  text = text.replace(/\$([^\$]+)\$/g, (match, formula) => {
-    let fixed = formula
-      // Khôi phục các toán tử tập hợp & quan hệ
-      .replace(/(?<!\\)\b(cap|cup|in|notin|subset|supset|subseteq|supseteq)\b/g, '\\$1')
-      .replace(/(?<!\\)\b(mathbb|mathbf|mathcal)\b/g, '\\$1')
-      .replace(/(?<!\\)\b(mid)\b/g, '\\mid ')
-      // Khôi phục lượng giác & hàm số
-      .replace(/(?<!\\)\b(sin|cos|tan|cot|lim)\b/g, '\\$1')
-      // Khôi phục ký hiệu phép toán & so sánh
-      .replace(/(?<!\\)\b(sqrt|frac|left|right|le|ge|ne|times|pm|cdot)\b/g, '\\$1');
-    return `$${fixed}$`;
-  });
-
-  // BƯỚC 3: Xử lý trường hợp chuỗi toán không bọc dấu $ nhưng bị dính chữ (ví dụ: xinmathbbZmid)
-  text = text
-    .replace(/(?<!\\)\b([a-zA-Z])inmathbb([A-Z])mid/g, '$1 \\in \\mathbb{$2} \\mid ')
-    .replace(/(?<!\\)\b([A-Z])cap([A-Z])\b/g, '$1 \\cap $2')
-    .replace(/(?<!\\)\b([A-Z])cup([A-Z])\b/g, '$1 \\cup $2');
-
-  // BƯỚC 4: Tự động bọc $$ cho hệ phương trình \begin{cases} nếu thiếu
-  text = text
-    .replace(/(?<!\$)\\begin\{cases\}([\s\S]*?)\\end\{cases\}(?!\$)/g, '$$\\begin{cases}$1\\end{cases}$$')
-    // Chuẩn hóa dấu ngắt dòng cho cases
-    .replace(/\\\\(?=[a-zA-Z0-9])/g, '\\\\ ');
-
-  return text;
+export { 
+  polishMathText, 
+  sanitizeAndFormatMath, 
+  cleanVietnameseUnicode, 
+  rescueAccidentalFullMathBlock, 
+  sanitizeAndPolishMath, 
+  sanitizeExamQuestion,
+  sanitizeMathBeforeRender,
+  normalizeMathLatex,
+  normalizeMathContent
 };
 
 /**
@@ -153,12 +62,14 @@ export const fixInlineOptionText = (text: string): string => {
 
   // Bước 1: Tách rời các từ nối tiếng Việt bị dính liền với số/ký tự (vd: 3hoặcm -> 3 hoặc m, avàa -> a và a)
   res = res
-    .replace(/([0-9a-zA-Z\$\\])(?<!\s)(hoặc|hay)(?=[a-zA-Z0-9\$\\])/gi, '$1 $2 ')
-    .replace(/([0-9a-zA-Z\$\\])(?<!\s)và(?!(?:o|i|ng|c|t)\b)(?=[a-zA-Z0-9\$\\])/gi, '$1 và ')
-    .replace(/(hoặc|hay)(?=[a-zA-Z0-9])/gi, '$1 ')
-    .replace(/và(?!(?:o|i|ng|c|t)\b)(?=[a-zA-Z0-9])/gi, 'và ')
-    .replace(/(?<=[a-zA-Z0-9\$\\])(hoặc|hay)/gi, ' $1')
-    .replace(/(?<=[a-zA-Z0-9\$\\])và(?!(?:o|i|ng|c|t)\b)/gi, ' và');
+    .replace(/\b([a-z])(hoặc|hay)\b/gi, (match, letter, conj) => {
+      if (/^(thay|chay)$/i.test(match)) return match;
+      return `${letter} ${conj}`;
+    })
+    .replace(/([0-9\$\)\]\}])(?<!\s)(hoặc|hay)(?=[a-zA-Z0-9\$\\])/gi, '$1 $2 ')
+    .replace(/([0-9\$\)\]\}])(?<!\s)và(?!(?:o|i|ng|c|t)\b)(?=[a-zA-Z0-9\$\\])/gi, '$1 và ')
+    .replace(/(?<=[0-9\$\)\]\}])(hoặc|hay)/gi, ' $1')
+    .replace(/(?<=[0-9\$\)\]\}])và(?!(?:o|i|ng|c|t)\b)/gi, ' và');
 
   // Bước 2: Sửa lỗi đóng/mở $$ bị rách giữa biểu thức (vd: \ge 3$$ hoặc $$m \le -1)
   res = res
@@ -201,12 +112,13 @@ export { formatMathContent };
 
 export const MarkdownRenderer = ({ content, className }: { content: string, className?: string }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  let processedContent = polishMathText(content || '');
+  let processedContent = sanitizeExamQuestion(content || '');
+  processedContent = polishMathText(processedContent);
   processedContent = sanitizeMathBeforeRender(processedContent);
   processedContent = normalizeMathLatex(processedContent);
 
   // Chuẩn hóa phương án trắc nghiệm: bóc tách chữ tiếng Việt và sửa rách dấu $$
-  if (!processedContent.includes('\n') || processedContent.length < 300) {
+  if (/^\s*(?:[-*]\s*)?(?:\*{0,2})[A-Da-d][\.\:\)]/i.test(processedContent.trim())) {
     processedContent = fixInlineOptionText(processedContent);
   }
   processedContent = processedContent.replace(/(^|\n)(\s*(?:[-*]\s*)?(?:\*{0,2})[A-Da-d][\.\:\)](?:\*{0,2})\s*)([^\n]+)/g, (_m, lineStart, label, optText) => {

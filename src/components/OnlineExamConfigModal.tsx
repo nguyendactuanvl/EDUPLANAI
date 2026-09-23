@@ -8,6 +8,7 @@ import LZString from 'lz-string';
 import { apiFetch } from '../lib/apiFetch';
 import { saveExamToCloud } from '../lib/cloudExamStore';
 import { embedTikzSvgsInText } from './TikzRenderer';
+import { sanitizeExamQuestion } from '../lib/utils';
 import { 
   STANDARDIZED_EXAM_TYPES, 
   getDefaultDurationForExamType, 
@@ -153,11 +154,11 @@ export const OnlineExamConfigModal: React.FC<OnlineExamConfigModalProps> = ({
         ...exam,
         questions: exam.questions.map((q: any) => ({
           ...q,
-          content: embedTikzSvgsInText(q.content || q.question || q.text || ''),
-          explanation: q.explanation ? embedTikzSvgsInText(q.explanation) : undefined,
-          options: q.options ? q.options.map((opt: string) => embedTikzSvgsInText(opt)) : undefined,
+          content: sanitizeExamQuestion(embedTikzSvgsInText(q.content || q.question || q.text || '')),
+          explanation: q.explanation ? sanitizeExamQuestion(embedTikzSvgsInText(q.explanation)) : undefined,
+          options: q.options ? q.options.map((opt: string) => sanitizeExamQuestion(embedTikzSvgsInText(opt))) : undefined,
           tfStatements: q.tfStatements ? q.tfStatements.map((tf: any) => ({
-            statement: embedTikzSvgsInText(tf.statement || ''),
+            statement: sanitizeExamQuestion(embedTikzSvgsInText(tf.statement || '')),
             correct: tf.correct
           })) : undefined
         }))
