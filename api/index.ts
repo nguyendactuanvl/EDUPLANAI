@@ -2040,7 +2040,25 @@ app.post('/api/export-docx', async (req, res) => {
     }
     
     // Remove any data:image/svg images to prevent HTMLtoDOCX crashing
-    const cleanHtml = html.replace(/<img[^>]*src=["']data:image\/svg[^"']*["'][^>]*>/gi, '');
+    let cleanHtml = html.replace(/<img[^>]*src=["']data:image\/svg[^"']*["'][^>]*>/gi, '');
+    
+    // Normalize and style math characters with Cambria Math font to prevent empty boxes in Office
+    cleanHtml = cleanHtml
+      .replace(/\\mathbb\{R\}|\b\\mathbb\s*R\b/g, 'ℝ')
+      .replace(/\\mathbb\{N\}|\b\\mathbb\s*N\b/g, 'ℕ')
+      .replace(/\\mathbb\{Z\}|\b\\mathbb\s*Z\b/g, 'ℤ')
+      .replace(/\\mathbb\{Q\}|\b\\mathbb\s*Q\b/g, 'ℚ')
+      .replace(/\\mathbb\{C\}|\b\\mathbb\s*C\b/g, 'ℂ')
+      .replace(/\\forall\b/g, '∀')
+      .replace(/\\exists\b/g, '∃')
+      .replace(/\\in\b/g, '∈')
+      .replace(/\\notin\b/g, '∉')
+      .replace(/\\cap\b/g, '∩')
+      .replace(/\\cup\b/g, '∪')
+      .replace(
+        /([\u2100-\u214F\u2190-\u21FF\u2200-\u22FF\u2300-\u23FF\u25A0-\u25FF\u27C0-\u27EF\u27F0-\u27FF\u2900-\u297F\u2980-\u29FF\u2A00-\u2AFF\u2B00-\u2BFF\u00B1\u00D7\u00F7\u00AC\u00B7]|[\uD835][\uDC00-\uDFFF])/g,
+        '<span style="font-family: \'Cambria Math\', \'Segoe UI Symbol\';">$1</span>'
+      );
     
     // Convert inch to twips (1 inch = 1440 twips)
     // 2cm is ~0.787 inches = ~1134 twips

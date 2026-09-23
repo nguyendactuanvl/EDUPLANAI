@@ -110,7 +110,15 @@ export const fixInlineOptionText = (text: string): string => {
 
 export { formatMathContent };
 
-export const MarkdownRenderer = ({ content, className }: { content: string, className?: string }) => {
+export const MarkdownRenderer = ({ 
+  content, 
+  className, 
+  inline = false 
+}: { 
+  content: string; 
+  className?: string; 
+  inline?: boolean; 
+}) => {
   const containerRef = useRef<HTMLDivElement>(null);
   let processedContent = sanitizeExamQuestion(content || '');
   processedContent = polishMathText(processedContent);
@@ -287,6 +295,34 @@ export const MarkdownRenderer = ({ content, className }: { content: string, clas
     }
   }, [processedContent]);
 
+  if (inline) {
+    return (
+      <span
+        ref={containerRef as any}
+        className={className || "inline-flex items-center gap-1 align-baseline"}
+      >
+        <Markdown
+          remarkPlugins={[remarkMath, remarkGfm]}
+          rehypePlugins={[rehypeRaw, [rehypeKatex, { strict: false, throwOnError: false, errorColor: 'inherit' }]]}
+          components={{
+            p: ({ node, children, ...props }: any) => (
+              <span className="inline" {...props}>
+                {children}
+              </span>
+            ),
+            div: ({ node, children, ...props }: any) => (
+              <span className="inline" {...props}>
+                {children}
+              </span>
+            )
+          }}
+        >
+          {processedContent}
+        </Markdown>
+      </span>
+    );
+  }
+
   return (
     <div 
       ref={containerRef}
@@ -419,6 +455,10 @@ export const MarkdownRenderer = ({ content, className }: { content: string, clas
       </Markdown>
     </div>
   );
+};
+
+export const MathSpan: React.FC<{ content: string; className?: string }> = ({ content, className }) => {
+  return <MarkdownRenderer content={content} inline className={className} />;
 };
 
 

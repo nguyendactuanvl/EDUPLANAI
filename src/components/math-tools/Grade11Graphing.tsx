@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from "react";
 import { InteractivePlot } from "./InteractivePlot";
 import { Geometry3DViewer } from "./Geometry3DViewer";
-import { MarkdownRenderer } from "../MarkdownRenderer";
+import { VariationTable, VariationTablePoint, VariationInterval } from "./VariationTable";
+import { MarkdownRenderer, MathSpan } from "../MarkdownRenderer";
 import { FunctionPlotData, Point2D, AsymptoteLine, Shape3DType } from "./types";
 import { Sparkles, Box, Info, CheckCircle2 } from "lucide-react";
 
@@ -21,6 +22,8 @@ export const Grade11Graphing: React.FC = () => {
     let fnPlot: FunctionPlotData;
     let points: Point2D[] = [];
     let asymptotes: AsymptoteLine[] = [];
+    let bbtPoints: VariationTablePoint[] = [];
+    let bbtIntervals: VariationInterval[] = [];
 
     if (funcType === "exp") {
       // y = a^x
@@ -46,6 +49,29 @@ export const Grade11Graphing: React.FC = () => {
           color: "#9333ea"
         }
       ];
+
+      // Bảng biến thiên 3 dòng chuẩn cho Hàm Mũ
+      if (isIncreasing) {
+        bbtPoints = [
+          { x: "-\\infty", yVal: "0", yPosition: "bottom" },
+          { x: "0", yVal: "1", yPosition: "middle" },
+          { x: "+\\infty", yVal: "+\\infty", yPosition: "top" }
+        ];
+        bbtIntervals = [
+          { trend: "increasing", sign: "+" },
+          { trend: "increasing", sign: "+" }
+        ];
+      } else {
+        bbtPoints = [
+          { x: "-\\infty", yVal: "+\\infty", yPosition: "top" },
+          { x: "0", yVal: "1", yPosition: "middle" },
+          { x: "+\\infty", yVal: "0", yPosition: "bottom" }
+        ];
+        bbtIntervals = [
+          { trend: "decreasing", sign: "-" },
+          { trend: "decreasing", sign: "-" }
+        ];
+      }
     } else {
       // y = log_a(x) (x > 0)
       fnPlot = {
@@ -71,10 +97,33 @@ export const Grade11Graphing: React.FC = () => {
           color: "#9333ea"
         }
       ];
+
+      // Bảng biến thiên 3 dòng chuẩn cho Hàm Logarit
+      if (isIncreasing) {
+        bbtPoints = [
+          { x: "0", isDiscontinuity: true, yRightVal: "-\\infty" },
+          { x: "1", yVal: "0", yPosition: "middle" },
+          { x: "+\\infty", yVal: "+\\infty", yPosition: "top" }
+        ];
+        bbtIntervals = [
+          { trend: "increasing", sign: "+" },
+          { trend: "increasing", sign: "+" }
+        ];
+      } else {
+        bbtPoints = [
+          { x: "0", isDiscontinuity: true, yRightVal: "+\\infty" },
+          { x: "1", yVal: "0", yPosition: "middle" },
+          { x: "+\\infty", yVal: "-\\infty", yPosition: "bottom" }
+        ];
+        bbtIntervals = [
+          { trend: "decreasing", sign: "-" },
+          { trend: "decreasing", sign: "-" }
+        ];
+      }
     }
 
     return {
-      a, isIncreasing, fnPlot, points, asymptotes
+      a, isIncreasing, fnPlot, points, asymptotes, bbtPoints, bbtIntervals
     };
   }, [funcType, baseA]);
 
@@ -100,7 +149,7 @@ export const Grade11Graphing: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Sub-tabs */}
-      <div className="flex items-center bg-slate-100 p-1 rounded-xl w-fit border border-slate-200 text-xs font-semibold">
+      <div className="flex flex-wrap items-center bg-slate-100 p-1 rounded-xl w-fit border border-slate-200 text-xs font-semibold gap-1">
         <button
           onClick={() => setActiveTab("exp_log")}
           className={`px-4 py-2 rounded-lg transition-all ${
@@ -109,7 +158,7 @@ export const Grade11Graphing: React.FC = () => {
               : "text-slate-600 hover:text-slate-900"
           }`}
         >
-          1. Đồ thị hàm Mũ ($y = a^x$) & Logarit ($y = \log_a x$)
+          <MathSpan content="1. Đồ thị hàm Mũ ($y = a^x$) & Logarit ($y = \log_a x$)" />
         </button>
         <button
           onClick={() => setActiveTab("geometry_3d")}
@@ -119,7 +168,7 @@ export const Grade11Graphing: React.FC = () => {
               : "text-slate-600 hover:text-slate-900"
           }`}
         >
-          2. Công cụ vẽ Hình học không gian (3D)
+          <MathSpan content="2. Công cụ vẽ Hình học không gian (3D)" />
         </button>
       </div>
 
@@ -132,9 +181,9 @@ export const Grade11Graphing: React.FC = () => {
             <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
               <div className="border-b border-slate-100 pb-3">
                 <h3 className="text-sm font-bold text-slate-800">
-                  Hàm số Mũ và Logarit (Toán 11)
+                  <MathSpan content="Hàm số Mũ và Logarit (Toán 11)" />
                 </h3>
-                <p className="text-xs text-slate-500">Khảo sát tính đơn điệu, tiệm cận và điểm cố định</p>
+                <p className="text-xs text-slate-500">Khảo sát đạo hàm, tính đơn điệu, BBT 3 dòng và tiệm cận</p>
               </div>
 
               {/* Function Type Selector */}
@@ -147,7 +196,7 @@ export const Grade11Graphing: React.FC = () => {
                       : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
                   }`}
                 >
-                  Hàm Mũ: $y = a^x$
+                  <MathSpan content="Hàm Mũ: $y = a^x$" />
                 </button>
                 <button
                   onClick={() => setFuncType("log")}
@@ -157,14 +206,14 @@ export const Grade11Graphing: React.FC = () => {
                       : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
                   }`}
                 >
-                  Hàm Logarit: $y = \log_a(x)$
+                  <MathSpan content="Hàm Logarit: $y = \log_a x$" />
                 </button>
               </div>
 
               {/* Base Input a */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  {"Cơ số $a$ ($a > 0, a \\ne 1$)"}
+                  <MathSpan content="Cơ số $a$ ($a > 0, a \ne 1$)" />
                 </label>
                 <input
                   type="number"
@@ -199,48 +248,110 @@ export const Grade11Graphing: React.FC = () => {
                       onClick={() => setBaseA(preset.a)}
                       className="px-2.5 py-1 bg-slate-100 hover:bg-blue-50 text-slate-700 rounded-lg text-xs font-medium transition-colors"
                     >
-                      ${preset.label}$
+                      <MathSpan content={`$${preset.label}$`} />
                     </button>
                   ))}
                 </div>
               </div>
 
+              {/* Chi tiết tính đạo hàm y' (Render bằng KaTeX) */}
+              <div className="bg-indigo-50/70 rounded-xl p-4 border border-indigo-100 space-y-2 text-xs text-slate-700">
+                <div className="font-bold text-indigo-900 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-indigo-600" />
+                  <span>Bước tính đạo hàm $y'$ chi tiết:</span>
+                </div>
+
+                {funcType === "exp" ? (
+                  <div className="space-y-1.5">
+                    <MarkdownRenderer
+                      content={`- **Công thức đạo hàm:**
+  $$y' = (a^x)' = a^x \\ln a$$
+- **Xét dấu đạo hàm:**
+  Vì $a^x > 0, \\forall x \\in \\mathbb{R}$, nên dấu của $y'$ phụ thuộc vào $\\ln a$:
+  ${expLogAnalysis.isIncreasing 
+    ? `Do $a = ${expLogAnalysis.a} > 1 \\implies \\ln a > 0 \\implies y' > 0, \\forall x \\in \\mathbb{R}$. Hàm số **đồng biến** trên $\\mathbb{R}$.`
+    : `Do $0 < a = ${expLogAnalysis.a} < 1 \\implies \\ln a < 0 \\implies y' < 0, \\forall x \\in \\mathbb{R}$. Hàm số **nghịch biến** trên $\\mathbb{R}$.`
+  }`}
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <MarkdownRenderer
+                      content={`- **Công thức đạo hàm:**
+  $$y' = (\\log_a x)' = \\frac{1}{x \\ln a}, \\quad \\forall x \\in (0; +\\infty)$$
+- **Xét dấu đạo hàm:**
+  Với mọi $x > 0$, dấu của $y'$ phụ thuộc hoàn toàn vào $\\ln a$:
+  ${expLogAnalysis.isIncreasing 
+    ? `Do $a = ${expLogAnalysis.a} > 1 \\implies \\ln a > 0 \\implies y' > 0, \\forall x > 0$. Hàm số **đồng biến** trên $(0; +\\infty)$.`
+    : `Do $0 < a = ${expLogAnalysis.a} < 1 \\implies \\ln a < 0 \\implies y' < 0, \\forall x > 0$. Hàm số **nghịch biến** trên $(0; +\\infty)$.`
+  }`}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Bảng biến thiên 3 dòng chuẩn cho Lớp 11 */}
+              <VariationTable
+                title={funcType === "exp" ? "Bảng biến thiên hàm Mũ (Toán 11)" : "Bảng biến thiên hàm Logarit (Toán 11)"}
+                points={expLogAnalysis.bbtPoints}
+                intervals={expLogAnalysis.bbtIntervals}
+                showDerivative={true}
+              />
+
               {/* Properties & pedagogical conclusion */}
-              <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 space-y-2.5 text-xs text-slate-700">
+              <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 space-y-2 text-xs text-slate-700">
                 <div className="font-bold text-slate-900 flex items-center gap-1.5">
                   <Info className="w-4 h-4 text-blue-600" />
                   <span>Đặc trưng toán học (SGK Toán 11):</span>
                 </div>
 
                 {funcType === "exp" ? (
-                  <div className="space-y-1.5">
-                    <div>• <strong>Tập xác định:</strong> {"$D = \\mathbb{R}$."}</div>
-                    <div>• <strong>Tập giá trị:</strong> {"$T = (0; +\\infty)$ (đồ thị luôn nằm phía trên trục $Ox$)."}</div>
+                  <div className="space-y-1">
                     <div>
-                      • <strong>Tính đơn điệu:</strong>{" "}
-                      {expLogAnalysis.isIncreasing ? (
-                        <span className="text-emerald-700 font-semibold">{`Vì $a = ${expLogAnalysis.a} > 1$ nên hàm số đồng biến trên $\\mathbb{R}$.`}</span>
-                      ) : (
-                        <span className="text-amber-700 font-semibold">{`Vì $0 < a = ${expLogAnalysis.a} < 1$ nên hàm số nghịch biến trên $\\mathbb{R}$.`}</span>
-                      )}
+                      <MarkdownRenderer inline content="• **Tập xác định:** $D = \mathbb{R}$." />
                     </div>
-                    <div>• <strong>Đường tiệm cận:</strong> Tiệm cận ngang là trục hoành $Ox$ ($y = 0$).</div>
-                    <div>• <strong>Điểm cố định:</strong> Luôn đi qua điểm $(0; 1)$ và $(1; {expLogAnalysis.a})$.</div>
+                    <div>
+                      <MarkdownRenderer inline content="• **Tập giá trị:** $T = (0; +\infty)$ (đồ thị luôn nằm hoàn toàn phía trên trục hoành $Ox$)." />
+                    </div>
+                    <div>
+                      <MarkdownRenderer
+                        inline
+                        content={expLogAnalysis.isIncreasing 
+                          ? `• **Tính đơn điệu:** Do $a = ${expLogAnalysis.a} > 1$ nên hàm số đồng biến trên $\\mathbb{R}$.`
+                          : `• **Tính đơn điệu:** Do $0 < a = ${expLogAnalysis.a} < 1$ nên hàm số nghịch biến trên $\\mathbb{R}$.`
+                        }
+                      />
+                    </div>
+                    <div>
+                      <MarkdownRenderer inline content="• **Đường tiệm cận:** Tiệm cận ngang là trục hoành $Ox$ ($y = 0$)." />
+                    </div>
+                    <div>
+                      <MarkdownRenderer inline content={`• **Điểm cố định:** Luôn đi qua điểm $(0; 1)$ và điểm $(1; ${expLogAnalysis.a})$.`} />
+                    </div>
                   </div>
                 ) : (
-                  <div className="space-y-1.5">
-                    <div>• <strong>Tập xác định:</strong> {"$D = (0; +\\infty)$ (đồ thị luôn nằm bên phải trục $Oy$)."}</div>
-                    <div>• <strong>Tập giá trị:</strong> {"$T = \\mathbb{R}$."}</div>
+                  <div className="space-y-1">
                     <div>
-                      • <strong>Tính đơn điệu:</strong>{" "}
-                      {expLogAnalysis.isIncreasing ? (
-                        <span className="text-emerald-700 font-semibold">{`Vì $a = ${expLogAnalysis.a} > 1$ nên hàm số đồng biến trên $(0; +\\infty)$.`}</span>
-                      ) : (
-                        <span className="text-amber-700 font-semibold">{`Vì $0 < a = ${expLogAnalysis.a} < 1$ nên hàm số nghịch biến trên $(0; +\\infty)$.`}</span>
-                      )}
+                      <MarkdownRenderer inline content="• **Tập xác định:** $D = (0; +\infty)$ (đồ thị luôn nằm ở nửa bên phải trục tung $Oy$)." />
                     </div>
-                    <div>• <strong>Đường tiệm cận:</strong> Tiệm cận đứng là trục tung $Oy$ ($x = 0$).</div>
-                    <div>• <strong>Điểm cố định:</strong> Luôn đi qua điểm $(1; 0)$ và $({expLogAnalysis.a}; 1)$.</div>
+                    <div>
+                      <MarkdownRenderer inline content="• **Tập giá trị:** $T = \mathbb{R}$." />
+                    </div>
+                    <div>
+                      <MarkdownRenderer
+                        inline
+                        content={expLogAnalysis.isIncreasing 
+                          ? `• **Tính đơn điệu:** Do $a = ${expLogAnalysis.a} > 1$ nên hàm số đồng biến trên $(0; +\\infty)$.`
+                          : `• **Tính đơn điệu:** Do $0 < a = ${expLogAnalysis.a} < 1$ nên hàm số nghịch biến trên $(0; +\\infty)$.`
+                        }
+                      />
+                    </div>
+                    <div>
+                      <MarkdownRenderer inline content="• **Đường tiệm cận:** Tiệm cận đứng là trục tung $Oy$ ($x = 0$)." />
+                    </div>
+                    <div>
+                      <MarkdownRenderer inline content={`• **Điểm cố định:** Luôn đi qua điểm $(1; 0)$ và điểm $(${expLogAnalysis.a}; 1)$.`} />
+                    </div>
                   </div>
                 )}
               </div>

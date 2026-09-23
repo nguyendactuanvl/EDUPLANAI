@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from "react";
 import { InteractivePlot } from "./InteractivePlot";
 import { VariationTable, VariationTablePoint, VariationInterval } from "./VariationTable";
-import { MarkdownRenderer } from "../MarkdownRenderer";
+import { MarkdownRenderer, MathSpan } from "../MarkdownRenderer";
+import { formatLinearEquation, formatLinearInequality, formatQuadratic } from "../../lib/mathFormatters";
 import { FunctionPlotData, Point2D, AsymptoteLine, InequalityConstraint, PolygonVertex } from "./types";
 import { Sparkles, Plus, Trash2, CheckCircle2, TrendingUp, Info } from "lucide-react";
 
@@ -83,23 +84,23 @@ export const Grade10Graphing: React.FC = () => {
       width: 2.5
     };
 
-    // BBT Data
+    // BBT Data: Theo SGK GDPT 2018 Lớp 10 CHỈ CÓ 2 DÒNG (x và y), HOÀN TOÀN KHÔNG CÓ DÒNG y'
     const bbtPoints: VariationTablePoint[] = a > 0 ? [
       { x: "-\\infty", yVal: "+\\infty", yPosition: "top" },
-      { x: Number(xVertex.toFixed(2)).toString(), yPrime: "0", yVal: Number(yVertex.toFixed(2)).toString(), yPosition: "bottom" },
+      { x: Number(xVertex.toFixed(2)).toString(), yVal: Number(yVertex.toFixed(2)).toString(), yPosition: "bottom" },
       { x: "+\\infty", yVal: "+\\infty", yPosition: "top" }
     ] : [
       { x: "-\\infty", yVal: "-\\infty", yPosition: "bottom" },
-      { x: Number(xVertex.toFixed(2)).toString(), yPrime: "0", yVal: Number(yVertex.toFixed(2)).toString(), yPosition: "top" },
+      { x: Number(xVertex.toFixed(2)).toString(), yVal: Number(yVertex.toFixed(2)).toString(), yPosition: "top" },
       { x: "+\\infty", yVal: "-\\infty", yPosition: "bottom" }
     ];
 
     const bbtIntervals: VariationInterval[] = a > 0 ? [
-      { trend: "decreasing", fromVal: "+\\infty", toVal: Number(yVertex.toFixed(2)).toString(), sign: "-" },
-      { trend: "increasing", fromVal: Number(yVertex.toFixed(2)).toString(), toVal: "+\\infty", sign: "+" }
+      { trend: "decreasing", fromVal: "+\\infty", toVal: Number(yVertex.toFixed(2)).toString(), sign: "" },
+      { trend: "increasing", fromVal: Number(yVertex.toFixed(2)).toString(), toVal: "+\\infty", sign: "" }
     ] : [
-      { trend: "increasing", fromVal: "-\\infty", toVal: Number(yVertex.toFixed(2)).toString(), sign: "+" },
-      { trend: "decreasing", fromVal: Number(yVertex.toFixed(2)).toString(), toVal: "-\\infty", sign: "-" }
+      { trend: "increasing", fromVal: "-\\infty", toVal: Number(yVertex.toFixed(2)).toString(), sign: "" },
+      { trend: "decreasing", fromVal: Number(yVertex.toFixed(2)).toString(), toVal: "-\\infty", sign: "" }
     ];
 
     return {
@@ -240,7 +241,7 @@ export const Grade10Graphing: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Sub-tabs */}
-      <div className="flex items-center bg-slate-100 p-1 rounded-xl w-fit border border-slate-200 text-xs font-semibold">
+      <div className="flex flex-wrap items-center bg-slate-100 p-1 rounded-xl w-fit border border-slate-200 text-xs font-semibold gap-1">
         <button
           onClick={() => setActiveSubTab("parabola")}
           className={`px-4 py-2 rounded-lg transition-all ${
@@ -249,7 +250,7 @@ export const Grade10Graphing: React.FC = () => {
               : "text-slate-600 hover:text-slate-900"
           }`}
         >
-          1. Parabol tổng quát $y = ax^2 + bx + c$
+          <MathSpan content="1. Parabol tổng quát $y = ax^2 + bx + c$" />
         </button>
         <button
           onClick={() => setActiveSubTab("single_ineq")}
@@ -259,7 +260,7 @@ export const Grade10Graphing: React.FC = () => {
               : "text-slate-600 hover:text-slate-900"
           }`}
         >
-          2. Miền nghiệm BPT bậc nhất 2 ẩn
+          <MathSpan content="2. Miền nghiệm BPT bậc nhất 2 ẩn" />
         </button>
         <button
           onClick={() => setActiveSubTab("system_ineq")}
@@ -269,7 +270,7 @@ export const Grade10Graphing: React.FC = () => {
               : "text-slate-600 hover:text-slate-900"
           }`}
         >
-          3. Hệ BPT 2 ẩn & Bài toán Tối ưu Tuyến tính
+          <MathSpan content="3. Hệ BPT 2 ẩn & Bài toán Tối ưu Tuyến tính $F(x, y)$" />
         </button>
       </div>
 
@@ -282,15 +283,17 @@ export const Grade10Graphing: React.FC = () => {
             <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
               <div className="border-b border-slate-100 pb-3">
                 <h3 className="text-sm font-bold text-slate-800">
-                  Parabol: $y = ax^2 + bx + c$ ($a \ne 0$)
+                  <MathSpan content="Parabol: $y = ax^2 + bx + c$ ($a \ne 0$)" />
                 </h3>
-                <p className="text-xs text-slate-500">Tự động xác định đỉnh $I$, trục đối xứng, BBT và vẽ đồ thị</p>
+                <p className="text-xs text-slate-500">Tự động xác định đỉnh $I$, trục đối xứng, BBT 2 dòng chuẩn SGK Toán 10</p>
               </div>
 
               {/* Input a, b, c */}
               <div className="grid grid-cols-3 gap-2.5">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Hệ số $a$</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    <MathSpan content="Hệ số $a$" />
+                  </label>
                   <input
                     type="number"
                     step="any"
@@ -300,7 +303,9 @@ export const Grade10Graphing: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Hệ số $b$</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    <MathSpan content="Hệ số $b$" />
+                  </label>
                   <input
                     type="number"
                     step="any"
@@ -310,7 +315,9 @@ export const Grade10Graphing: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Hệ số $c$</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    <MathSpan content="Hệ số $c$" />
+                  </label>
                   <input
                     type="number"
                     step="any"
@@ -337,7 +344,7 @@ export const Grade10Graphing: React.FC = () => {
                       onClick={() => { setPA(p.a); setPB(p.b); setPC(p.c); }}
                       className="px-2.5 py-1 bg-slate-100 hover:bg-blue-50 text-slate-700 rounded-lg text-xs font-medium"
                     >
-                      ${p.label}$
+                      <MathSpan content={`$${p.label}$`} />
                     </button>
                   ))}
                 </div>
@@ -350,10 +357,33 @@ export const Grade10Graphing: React.FC = () => {
                   <span>Các yếu tố đặc trưng (Toán 10):</span>
                 </div>
                 <div className="space-y-1.5">
-                  <div>• <strong>Đỉnh Parabol:</strong> {`$I\\left(-\\frac{b}{2a}; -\\frac{\\Delta}{4a}\\right) \\implies I(${Number(parabolaAnalysis.xVertex.toFixed(2))}; ${Number(parabolaAnalysis.yVertex.toFixed(2))})$`}.</div>
-                  <div>• <strong>Trục đối xứng:</strong> {`$x = -\\frac{b}{2a} = ${Number(parabolaAnalysis.xVertex.toFixed(2))}$`}.</div>
-                  <div>• <strong>Biệt thức $\Delta$:</strong> {`$\\Delta = b^2 - 4ac = ${parabolaAnalysis.delta}$`}.</div>
-                  <div>• <strong>Bề lõm:</strong> {parabolaAnalysis.a > 0 ? "Quay lên trên (a > 0)" : "Quay xuống dưới (a < 0)"}.</div>
+                  <div>
+                    <MarkdownRenderer
+                      inline
+                      content={`• **Đỉnh Parabol:** $I\\left(-\\frac{b}{2a}; -\\frac{\\Delta}{4a}\\right) \\implies I(${Number(parabolaAnalysis.xVertex.toFixed(2))}; ${Number(parabolaAnalysis.yVertex.toFixed(2))})$`}
+                    />
+                  </div>
+                  <div>
+                    <MarkdownRenderer
+                      inline
+                      content={`• **Trục đối xứng:** Đường thẳng $x = -\\frac{b}{2a} = ${Number(parabolaAnalysis.xVertex.toFixed(2))}$`}
+                    />
+                  </div>
+                  <div>
+                    <MarkdownRenderer
+                      inline
+                      content={`• **Biệt thức $\\Delta$:** $\\Delta = b^2 - 4ac = ${parabolaAnalysis.delta}$`}
+                    />
+                  </div>
+                  <div>
+                    <MarkdownRenderer
+                      inline
+                      content={parabolaAnalysis.a > 0 
+                        ? `• **Bề lõm:** Vì $a = ${parabolaAnalysis.a} > 0$ nên parabol quay bề lõm lên trên, đỉnh $I(${Number(parabolaAnalysis.xVertex.toFixed(2))}; ${Number(parabolaAnalysis.yVertex.toFixed(2))})$ là điểm thấp nhất.`
+                        : `• **Bề lõm:** Vì $a = ${parabolaAnalysis.a} < 0$ nên parabol quay bề lõm xuống dưới, đỉnh $I(${Number(parabolaAnalysis.xVertex.toFixed(2))}; ${Number(parabolaAnalysis.yVertex.toFixed(2))})$ là điểm cao nhất.`
+                      }
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -366,7 +396,9 @@ export const Grade10Graphing: React.FC = () => {
                   <table className="w-full text-center">
                     <thead className="bg-slate-50 font-bold border-b border-slate-200">
                       <tr>
-                        <th className="p-2 border-r border-slate-200">$x$</th>
+                        <th className="p-2 border-r border-slate-200">
+                          <MathSpan content="$x$" />
+                        </th>
                         {parabolaAnalysis.tablePoints.map((pt, idx) => (
                           <th key={idx} className="p-2 border-r last:border-r-0 border-slate-200 font-mono">
                             {pt.x}
@@ -376,7 +408,9 @@ export const Grade10Graphing: React.FC = () => {
                     </thead>
                     <tbody>
                       <tr>
-                        <td className="p-2 font-bold border-r border-slate-200 bg-slate-50">$y$</td>
+                        <td className="p-2 font-bold border-r border-slate-200 bg-slate-50">
+                          <MathSpan content="$y$" />
+                        </td>
                         {parabolaAnalysis.tablePoints.map((pt, idx) => (
                           <td key={idx} className="p-2 border-r last:border-r-0 border-slate-200 font-mono font-bold text-blue-700">
                             {pt.y}
@@ -388,18 +422,19 @@ export const Grade10Graphing: React.FC = () => {
                 </div>
               </div>
 
-              {/* BBT */}
+              {/* BBT SGK TOÁN 10 CHỈ CÓ 2 DÒNG (showDerivative={false}) */}
               <VariationTable
                 title="Bảng biến thiên Parabol (Toán 10)"
                 points={parabolaAnalysis.bbtPoints}
                 intervals={parabolaAnalysis.bbtIntervals}
+                showDerivative={false}
               />
             </div>
           </div>
 
           <div className="lg:col-span-7">
             <InteractivePlot
-              title={`Đồ thị: y = ${pA}x² ${pB >= 0 ? "+ " + pB : "- " + Math.abs(pB)}x ${pC >= 0 ? "+ " + pC : "- " + Math.abs(pC)}`}
+              title={`Đồ thị: y = ${formatQuadratic(pA, pB, pC)}`}
               subtitle="Đỉnh I, trục đối xứng và các giao điểm với trục tọa độ"
               functions={[parabolaAnalysis.fnPlot]}
               points={parabolaAnalysis.points}
@@ -421,7 +456,7 @@ export const Grade10Graphing: React.FC = () => {
             <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
               <div className="border-b border-slate-100 pb-3">
                 <h3 className="text-sm font-bold text-slate-800">
-                  Biểu diễn Miền nghiệm BPT: $ax + by + c \le 0$
+                  <MathSpan content="Biểu diễn Miền nghiệm BPT: $ax + by + c \le 0$" />
                 </h3>
                 <p className="text-xs text-slate-500">Gạch sọc phần KHÔNG phải miền nghiệm, giữ sáng miền nghiệm</p>
               </div>
@@ -429,7 +464,9 @@ export const Grade10Graphing: React.FC = () => {
               {/* Inputs */}
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Hệ số $a$</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    <MathSpan content="Hệ số $a$" />
+                  </label>
                   <input
                     type="number"
                     value={sA}
@@ -438,7 +475,9 @@ export const Grade10Graphing: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Hệ số $b$</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    <MathSpan content="Hệ số $b$" />
+                  </label>
                   <input
                     type="number"
                     value={sB}
@@ -447,7 +486,9 @@ export const Grade10Graphing: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Hệ số $c$</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    <MathSpan content="Hệ số $c$" />
+                  </label>
                   <input
                     type="number"
                     value={sC}
@@ -471,7 +512,7 @@ export const Grade10Graphing: React.FC = () => {
                           : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
                       }`}
                     >
-                      {op === "<=" ? "≤ 0" : op === ">=" ? "≥ 0" : op === "<" ? "< 0" : "> 0"}
+                      <MathSpan content={op === "<=" ? "$\\le 0$" : op === ">=" ? "$\\ge 0$" : op === "<" ? "$< 0$" : "$> 0$"} />
                     </button>
                   ))}
                 </div>
@@ -484,25 +525,40 @@ export const Grade10Graphing: React.FC = () => {
                   <span>Quy trình xác định miền nghiệm (SGK Toán 10):</span>
                 </div>
                 <div className="space-y-1">
-                  <div><strong>Bước 1:</strong> Vẽ đường thẳng biên $d: {sA}x + {sB}y + {sC} = 0$.</div>
+                  <div>
+                    <MarkdownRenderer
+                      inline
+                      content={`**Bước 1:** Vẽ đường thẳng biên $d: ${formatLinearEquation(sA, sB, sC)}$.`}
+                    />
+                  </div>
                   <div className="text-slate-500 pl-3">
                     {sOp === "<=" || sOp === ">=" ? "• Vẽ nét liền vì có dấu bằng (biên thuộc miền nghiệm)." : "• Vẽ nét đứt vì dấu ngặt (biên không thuộc miền nghiệm)."}
                   </div>
                 </div>
                 <div className="space-y-1">
                   <div>
-                    <strong>Bước 2:</strong> Chọn điểm thử $M({singleIneqAnalysis.testPoint.x}; {singleIneqAnalysis.testPoint.y})$ không thuộc đường thẳng $d$.
+                    <MarkdownRenderer
+                      inline
+                      content={`**Bước 2:** Chọn điểm thử $M(${singleIneqAnalysis.testPoint.x}; ${singleIneqAnalysis.testPoint.y}) \\notin d$.`}
+                    />
                   </div>
                   <div className="pl-3">
-                    Thay vào vế trái: ${sA}({singleIneqAnalysis.testPoint.x}) + {sB}({singleIneqAnalysis.testPoint.y}) + {sC} = {singleIneqAnalysis.valAtTest}$.
+                    <MarkdownRenderer
+                      inline
+                      content={`Thay vào vế trái ta được: $${sA}(${singleIneqAnalysis.testPoint.x}) + (${sB})(${singleIneqAnalysis.testPoint.y}) + (${sC}) = ${singleIneqAnalysis.valAtTest}$.`}
+                    />
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <div><strong>Bước 3:</strong> Kết luận:</div>
+                  <div><strong>Bước 3: Kết luận:</strong></div>
                   <div className="pl-3 font-semibold text-indigo-800">
-                    {singleIneqAnalysis.satisfies
-                      ? `Vì ${singleIneqAnalysis.valAtTest} thỏa mãn BPT nên nửa mặt phẳng chứa điểm M(${singleIneqAnalysis.testPoint.x}; ${singleIneqAnalysis.testPoint.y}) là miền nghiệm.`
-                      : `Vì ${singleIneqAnalysis.valAtTest} KHÔNG thỏa mãn BPT nên nửa mặt phẳng KHÔNG chứa điểm M(${singleIneqAnalysis.testPoint.x}; ${singleIneqAnalysis.testPoint.y}) là miền nghiệm.`}
+                    <MarkdownRenderer
+                      inline
+                      content={singleIneqAnalysis.satisfies
+                        ? `Vì $${singleIneqAnalysis.valAtTest}$ thỏa mãn bất phương trình nên nửa mặt phẳng chứa điểm $M(${singleIneqAnalysis.testPoint.x}; ${singleIneqAnalysis.testPoint.y})$ ${sOp === "<=" || sOp === ">=" ? "(kể cả bờ $d$)" : "(không kể bờ $d$)"} là miền nghiệm.`
+                        : `Vì $${singleIneqAnalysis.valAtTest}$ KHÔNG thỏa mãn bất phương trình nên nửa mặt phẳng KHÔNG chứa điểm $M(${singleIneqAnalysis.testPoint.x}; ${singleIneqAnalysis.testPoint.y})$ là miền nghiệm.`
+                      }
+                    />
                   </div>
                 </div>
               </div>
@@ -511,7 +567,7 @@ export const Grade10Graphing: React.FC = () => {
 
           <div className="lg:col-span-7">
             <InteractivePlot
-              title={`Miền nghiệm BPT: ${sA}x ${sB >= 0 ? "+ " + sB : "- " + Math.abs(sB)}y ${sC >= 0 ? "+ " + sC : "- " + Math.abs(sC)} ${sOp === "<=" ? "≤" : sOp === ">=" ? "≥" : sOp} 0`}
+              title={`Miền nghiệm: ${formatLinearInequality(sA, sB, sC, sOp)}`}
               subtitle="Phần tô màu đỏ nhạt là phần bị gạch bỏ (không thuộc miền nghiệm), phần sáng là miền nghiệm"
               inequalities={[singleIneqAnalysis.ineq]}
               points={[{
@@ -538,7 +594,7 @@ export const Grade10Graphing: React.FC = () => {
               <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
                 <div>
                   <h3 className="text-sm font-bold text-slate-800">
-                    Hệ BPT & Tối ưu Tuyến tính $F(x, y)$
+                    <MathSpan content="Hệ BPT & Tối ưu Tuyến tính $F(x, y)$" />
                   </h3>
                   <p className="text-xs text-slate-500">Tự động tìm miền đa giác nghiệm & tính Max/Min tại các đỉnh</p>
                 </div>
@@ -619,12 +675,14 @@ export const Grade10Graphing: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-emerald-900 flex items-center gap-1.5">
                     <TrendingUp className="w-4 h-4 text-emerald-700" />
-                    Biểu thức mục tiêu: $F(x, y) = Ax + By + C$
+                    <MathSpan content="Biểu thức mục tiêu: $F(x, y) = Ax + By + C$" />
                   </span>
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Hệ số $A$</label>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      <MathSpan content="Hệ số $A$" />
+                    </label>
                     <input
                       type="number"
                       value={fA}
@@ -633,7 +691,9 @@ export const Grade10Graphing: React.FC = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Hệ số $B$</label>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      <MathSpan content="Hệ số $B$" />
+                    </label>
                     <input
                       type="number"
                       value={fB}
@@ -642,7 +702,9 @@ export const Grade10Graphing: React.FC = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Hệ số $C$</label>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      <MathSpan content="Hệ số $C$" />
+                    </label>
                     <input
                       type="number"
                       value={fC}
@@ -656,15 +718,19 @@ export const Grade10Graphing: React.FC = () => {
               {/* Table of Vertices & Values */}
               <div>
                 <span className="text-xs font-bold text-slate-700 block mb-1.5">
-                  Tọa độ các đỉnh của miền đa giác & Giá trị $F(x, y)$:
+                  <MathSpan content="Tọa độ các đỉnh của miền đa giác & Giá trị $F(x, y)$:" />
                 </span>
                 <div className="border border-slate-200 rounded-xl overflow-hidden text-xs">
                   <table className="w-full text-center">
                     <thead className="bg-slate-50 font-bold border-b border-slate-200">
                       <tr>
                         <th className="p-2 border-r border-slate-200">Đỉnh</th>
-                        <th className="p-2 border-r border-slate-200">Tọa độ $(x; y)$</th>
-                        <th className="p-2">Giá trị $F(x, y)$</th>
+                        <th className="p-2 border-r border-slate-200">
+                          <MathSpan content="Tọa độ $(x; y)$" />
+                        </th>
+                        <th className="p-2">
+                          <MathSpan content="Giá trị $F(x, y)$" />
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -673,7 +739,7 @@ export const Grade10Graphing: React.FC = () => {
                           <td className="p-2 font-bold border-r border-slate-200">{v.label}</td>
                           <td className="p-2 font-mono border-r border-slate-200">({v.x}; {v.y})</td>
                           <td className="p-2 font-mono font-bold">
-                            <span className={v.isOptimalMax ? "text-orange-600" : v.isOptimalMin ? "text-blue-600" : "text-slate-700"}>
+                            <span className={v.isOptimalMax ? "text-orange-600 font-extrabold" : v.isOptimalMin ? "text-blue-600 font-extrabold" : "text-slate-700"}>
                               {v.fValue} {v.isOptimalMax && "(Max)"} {v.isOptimalMin && "(Min)"}
                             </span>
                           </td>
@@ -688,8 +754,20 @@ export const Grade10Graphing: React.FC = () => {
               {linearProgrammingResult.polygonVertices.length > 0 && (
                 <div className="bg-slate-900 text-white p-3.5 rounded-xl text-xs space-y-1.5">
                   <div className="font-bold text-emerald-400">Kết luận bài toán tối ưu (Định lý đa giác lồi):</div>
-                  <div>• Giá trị lớn nhất: $\max F(x, y) = {linearProgrammingResult.maxVal}$ đạt được tại điểm ${linearProgrammingResult.maxVertex}$.</div>
-                  <div>• Giá trị nhỏ nhất: $\min F(x, y) = {linearProgrammingResult.minVal}$ đạt được tại điểm ${linearProgrammingResult.minVertex}$.</div>
+                  <div className="space-y-1 text-slate-200">
+                    <div>
+                      <MarkdownRenderer
+                        inline
+                        content={`• Giá trị lớn nhất: $\\max F(x, y) = ${linearProgrammingResult.maxVal}$ đạt được tại điểm $${linearProgrammingResult.maxVertex}$.`}
+                      />
+                    </div>
+                    <div>
+                      <MarkdownRenderer
+                        inline
+                        content={`• Giá trị nhỏ nhất: $\\min F(x, y) = ${linearProgrammingResult.minVal}$ đạt được tại điểm $${linearProgrammingResult.minVertex}$.`}
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

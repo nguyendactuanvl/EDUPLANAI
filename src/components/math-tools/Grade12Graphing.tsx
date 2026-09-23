@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from "react";
 import { InteractivePlot } from "./InteractivePlot";
 import { VariationTable, VariationTablePoint, VariationInterval } from "./VariationTable";
-import { MarkdownRenderer } from "../MarkdownRenderer";
+import { MarkdownRenderer, MathSpan } from "../MarkdownRenderer";
+import { formatCubic } from "../../lib/mathFormatters";
 import { FunctionPlotData, Point2D, AsymptoteLine } from "./types";
 import { Sparkles, BookOpen, Copy, Check, Info } from "lucide-react";
 
@@ -307,19 +308,59 @@ export const Grade12Graphing: React.FC = () => {
 
     // y' = m - r / (dx + e)^2 = 0 => (dx+e)^2 = r / m
     let roots: number[] = [];
+    let bbtPoints: VariationTablePoint[] = [];
+    let bbtIntervals: VariationInterval[] = [];
+
     if (r / m > 1e-6) {
       const sqrtVal = Math.sqrt(r / m);
       const root1 = (-e - sqrtVal) / d;
       const root2 = (-e + sqrtVal) / d;
       roots = [Math.min(root1, root2), Math.max(root1, root2)];
 
-      const y1 = (a * root1 * root1 + b * root1 + c) / (d * root1 + e);
-      const y2 = (a * root2 * root2 + b * root2 + c) / (d * root2 + e);
+      const y1 = (a * roots[0] * roots[0] + b * roots[0] + c) / (d * roots[0] + e);
+      const y2 = (a * roots[1] * roots[1] + b * roots[1] + c) / (d * roots[1] + e);
 
       points.push(
-        { x: Number(root1.toFixed(2)), y: Number(y1.toFixed(2)), label: `CĐ/CT(${Number(root1.toFixed(2))}; ${Number(y1.toFixed(2))})`, color: "#ea580c", isDashedToAxes: true },
-        { x: Number(root2.toFixed(2)), y: Number(y2.toFixed(2)), label: `CĐ/CT(${Number(root2.toFixed(2))}; ${Number(y2.toFixed(2))})`, color: "#0284c7", isDashedToAxes: true }
+        { x: Number(roots[0].toFixed(2)), y: Number(y1.toFixed(2)), label: `CĐ(${Number(roots[0].toFixed(2))}; ${Number(y1.toFixed(2))})`, color: "#ea580c", isDashedToAxes: true },
+        { x: Number(roots[1].toFixed(2)), y: Number(y2.toFixed(2)), label: `CT(${Number(roots[1].toFixed(2))}; ${Number(y2.toFixed(2))})`, color: "#0284c7", isDashedToAxes: true }
       );
+
+      // BBT with 2 extrema and 1 discontinuity point
+      bbtPoints = [
+        { x: "-\\infty", yVal: "-\\infty", yPosition: "bottom" },
+        { x: Number(roots[0].toFixed(2)).toString(), yPrime: "0", yVal: Number(y1.toFixed(2)).toString(), yPosition: "top" },
+        {
+          x: Number(xAsymptote.toFixed(2)).toString(),
+          isDiscontinuity: true,
+          yLeftVal: "-\\infty",
+          yRightVal: "+\\infty"
+        },
+        { x: Number(roots[1].toFixed(2)).toString(), yPrime: "0", yVal: Number(y2.toFixed(2)).toString(), yPosition: "bottom" },
+        { x: "+\\infty", yVal: "+\\infty", yPosition: "top" }
+      ];
+
+      bbtIntervals = [
+        { trend: "increasing", sign: "+" },
+        { trend: "decreasing", sign: "-" },
+        { trend: "decreasing", sign: "-" },
+        { trend: "increasing", sign: "+" }
+      ];
+    } else {
+      bbtPoints = [
+        { x: "-\\infty", yVal: "-\\infty", yPosition: "bottom" },
+        {
+          x: Number(xAsymptote.toFixed(2)).toString(),
+          isDiscontinuity: true,
+          yLeftVal: "-\\infty",
+          yRightVal: "+\\infty"
+        },
+        { x: "+\\infty", yVal: "+\\infty", yPosition: "top" }
+      ];
+
+      bbtIntervals = [
+        { trend: "increasing", sign: "+" },
+        { trend: "increasing", sign: "+" }
+      ];
     }
 
     const fnPlot: FunctionPlotData = {
@@ -329,23 +370,6 @@ export const Grade12Graphing: React.FC = () => {
       width: 2.5,
       discontinuities: [xAsymptote]
     };
-
-    // BBT
-    const bbtPoints: VariationTablePoint[] = [
-      { x: "-\\infty", yVal: "-\\infty", yPosition: "bottom" },
-      {
-        x: Number(xAsymptote.toFixed(2)).toString(),
-        isDiscontinuity: true,
-        yLeftVal: "-\\infty",
-        yRightVal: "+\\infty"
-      },
-      { x: "+\\infty", yVal: "+\\infty", yPosition: "top" }
-    ];
-
-    const bbtIntervals: VariationInterval[] = [
-      { trend: "increasing", fromVal: "-\\infty", toVal: "-\\infty", sign: "+" },
-      { trend: "increasing", fromVal: "+\\infty", toVal: "+\\infty", sign: "+" }
-    ];
 
     return {
       a, b, c, d, e, m, n, r, xAsymptote, yCenter,
@@ -357,7 +381,7 @@ export const Grade12Graphing: React.FC = () => {
   const fullReportMarkdown = useMemo(() => {
     if (funcType === "cubic") {
       const { a, b, c, d, aPrime, bPrime, cPrime, roots, xInflection, yInflection, extremaMarkdown } = cubicAnalysis;
-      return `### SƠ ĐỒ KHẢO SÁT HÀM SỐ BẬC BA: $y = ${a}x^3 ${b >= 0 ? "+ " + b : "- " + Math.abs(b)}x^2 ${c >= 0 ? "+ " + c : "- " + Math.abs(c)}x ${d >= 0 ? "+ " + d : "- " + Math.abs(d)}$
+      return `### SƠ ĐỒ KHẢO SÁT HÀM SỐ BẬC BA: $y = ${formatCubic(a, b, c, d)}$
 
 #### 1. Tập xác định:
 $D = \\mathbb{R}$.
@@ -442,7 +466,7 @@ $$y = (${Number(m.toFixed(2))}x ${n >= 0 ? "+ " + Number(n.toFixed(2)) : "- " + 
               : "text-slate-600 hover:text-slate-900"
           }`}
         >
-          1. Hàm bậc ba: $y = ax^3 + bx^2 + cx + d$
+          <MathSpan content="1. Hàm bậc ba: $y = ax^3 + bx^2 + cx + d$" />
         </button>
         <button
           onClick={() => setFuncType("rational1_1")}
@@ -452,7 +476,7 @@ $$y = (${Number(m.toFixed(2))}x ${n >= 0 ? "+ " + Number(n.toFixed(2)) : "- " + 
               : "text-slate-600 hover:text-slate-900"
           }`}
         >
-          2. Hàm phân thức bậc nhất/bậc nhất: $y = \frac{"ax + b"}{"cx + d"}$
+          <MathSpan content="2. Hàm phân thức: $y = \frac{ax + b}{cx + d}$" />
         </button>
         <button
           onClick={() => setFuncType("rational2_1")}
@@ -462,7 +486,7 @@ $$y = (${Number(m.toFixed(2))}x ${n >= 0 ? "+ " + Number(n.toFixed(2)) : "- " + 
               : "text-slate-600 hover:text-slate-900"
           }`}
         >
-          3. Hàm phân thức bậc hai/bậc nhất: $y = \frac{"ax^2 + bx + c"}{"dx + e"}$
+          <MathSpan content="3. Hàm phân thức: $y = \frac{ax^2 + bx + c}{dx + e}$" />
         </button>
       </div>
 
@@ -473,11 +497,11 @@ $$y = (${Number(m.toFixed(2))}x ${n >= 0 ? "+ " + Number(n.toFixed(2)) : "- " + 
             <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-bold text-slate-800">
-                  {funcType === "cubic" && "Khảo sát hàm số bậc ba"}
-                  {funcType === "rational1_1" && "Khảo sát hàm bậc nhất / bậc nhất"}
-                  {funcType === "rational2_1" && "Khảo sát hàm bậc hai / bậc nhất"}
+                  {funcType === "cubic" && <MathSpan content="Khảo sát hàm số bậc ba: $y = ax^3 + bx^2 + cx + d$" />}
+                  {funcType === "rational1_1" && <MathSpan content="Khảo sát hàm phân thức: $y = \frac{ax + b}{cx + d}$" />}
+                  {funcType === "rational2_1" && <MathSpan content="Khảo sát hàm phân thức: $y = \frac{ax^2 + bx + c}{dx + e}$" />}
                 </h3>
-                <p className="text-xs text-slate-500">Chuẩn quy cách SGK mới GDPT 2018</p>
+                <p className="text-xs text-slate-500">Chuẩn quy cách SGK GDPT 2018 (Toán 12)</p>
               </div>
 
               {/* Copy full report button */}
@@ -496,7 +520,9 @@ $$y = (${Number(m.toFixed(2))}x ${n >= 0 ? "+ " + Number(n.toFixed(2)) : "- " + 
               <div className="space-y-3">
                 <div className="grid grid-cols-4 gap-2">
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Hệ số $a$</label>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      <MathSpan content="Hệ số $a$" />
+                    </label>
                     <input
                       type="number"
                       value={c3A}
@@ -505,7 +531,9 @@ $$y = (${Number(m.toFixed(2))}x ${n >= 0 ? "+ " + Number(n.toFixed(2)) : "- " + 
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Hệ số $b$</label>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      <MathSpan content="Hệ số $b$" />
+                    </label>
                     <input
                       type="number"
                       value={c3B}
@@ -514,7 +542,9 @@ $$y = (${Number(m.toFixed(2))}x ${n >= 0 ? "+ " + Number(n.toFixed(2)) : "- " + 
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Hệ số $c$</label>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      <MathSpan content="Hệ số $c$" />
+                    </label>
                     <input
                       type="number"
                       value={c3C}
@@ -523,7 +553,9 @@ $$y = (${Number(m.toFixed(2))}x ${n >= 0 ? "+ " + Number(n.toFixed(2)) : "- " + 
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Hệ số $d$</label>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      <MathSpan content="Hệ số $d$" />
+                    </label>
                     <input
                       type="number"
                       value={c3D}
@@ -545,15 +577,17 @@ $$y = (${Number(m.toFixed(2))}x ${n >= 0 ? "+ " + Number(n.toFixed(2)) : "- " + 
                       onClick={() => { setC3A(p.a); setC3B(p.b); setC3C(p.c); setC3D(p.d); }}
                       className="px-2 py-1 bg-slate-100 hover:bg-blue-50 text-slate-700 rounded text-xs"
                     >
-                      ${p.label}$
+                      <MathSpan content={`$${p.label}$`} />
                     </button>
                   ))}
                 </div>
 
                 {/* Variation Table */}
                 <VariationTable
+                  title="Bảng biến thiên hàm bậc ba (Toán 12)"
                   points={cubicAnalysis.bbtPoints}
                   intervals={cubicAnalysis.bbtIntervals}
+                  showDerivative={true}
                 />
               </div>
             )}
@@ -562,7 +596,9 @@ $$y = (${Number(m.toFixed(2))}x ${n >= 0 ? "+ " + Number(n.toFixed(2)) : "- " + 
               <div className="space-y-3">
                 <div className="grid grid-cols-4 gap-2">
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Hệ số $a$</label>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      <MathSpan content="Hệ số $a$" />
+                    </label>
                     <input
                       type="number"
                       value={r1A}
@@ -571,7 +607,9 @@ $$y = (${Number(m.toFixed(2))}x ${n >= 0 ? "+ " + Number(n.toFixed(2)) : "- " + 
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Hệ số $b$</label>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      <MathSpan content="Hệ số $b$" />
+                    </label>
                     <input
                       type="number"
                       value={r1B}
@@ -580,7 +618,9 @@ $$y = (${Number(m.toFixed(2))}x ${n >= 0 ? "+ " + Number(n.toFixed(2)) : "- " + 
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Hệ số $c$</label>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      <MathSpan content="Hệ số $c$" />
+                    </label>
                     <input
                       type="number"
                       value={r1C}
@@ -589,7 +629,9 @@ $$y = (${Number(m.toFixed(2))}x ${n >= 0 ? "+ " + Number(n.toFixed(2)) : "- " + 
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Hệ số $d$</label>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      <MathSpan content="Hệ số $d$" />
+                    </label>
                     <input
                       type="number"
                       value={r1D}
@@ -601,23 +643,25 @@ $$y = (${Number(m.toFixed(2))}x ${n >= 0 ? "+ " + Number(n.toFixed(2)) : "- " + 
 
                 <div className="flex flex-wrap gap-1.5">
                   {[
-                    { a: 2, b: -1, c: 1, d: 1, label: "y = (2x - 1)/(x + 1)" },
-                    { a: 1, b: 2, c: 1, d: -1, label: "y = (x + 2)/(x - 1)" },
-                    { a: -1, b: 1, c: 1, d: 1, label: "y = (-x + 1)/(x + 1)" }
+                    { a: 2, b: -1, c: 1, d: 1, label: "y = \\frac{2x - 1}{x + 1}" },
+                    { a: 1, b: 2, c: 1, d: -1, label: "y = \\frac{x + 2}{x - 1}" },
+                    { a: -1, b: 1, c: 1, d: 1, label: "y = \\frac{-x + 1}{x + 1}" }
                   ].map((p, idx) => (
                     <button
                       key={idx}
                       onClick={() => { setR1A(p.a); setR1B(p.b); setR1C(p.c); setR1D(p.d); }}
                       className="px-2 py-1 bg-slate-100 hover:bg-blue-50 text-slate-700 rounded text-xs"
                     >
-                      ${p.label}$
+                      <MathSpan content={`$${p.label}$`} />
                     </button>
                   ))}
                 </div>
 
                 <VariationTable
+                  title="Bảng biến thiên hàm phân thức 1/1 (Toán 12)"
                   points={rational1Analysis.bbtPoints}
                   intervals={rational1Analysis.bbtIntervals}
+                  showDerivative={true}
                 />
               </div>
             )}
@@ -626,7 +670,9 @@ $$y = (${Number(m.toFixed(2))}x ${n >= 0 ? "+ " + Number(n.toFixed(2)) : "- " + 
               <div className="space-y-3">
                 <div className="grid grid-cols-5 gap-1.5">
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">a (x²)</label>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      <MathSpan content="$a (x^2)$" />
+                    </label>
                     <input
                       type="number"
                       value={r2A}
@@ -635,7 +681,9 @@ $$y = (${Number(m.toFixed(2))}x ${n >= 0 ? "+ " + Number(n.toFixed(2)) : "- " + 
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">b (x)</label>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      <MathSpan content="$b (x)$" />
+                    </label>
                     <input
                       type="number"
                       value={r2B}
@@ -644,7 +692,9 @@ $$y = (${Number(m.toFixed(2))}x ${n >= 0 ? "+ " + Number(n.toFixed(2)) : "- " + 
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">c (tự do)</label>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      <MathSpan content="$c$" />
+                    </label>
                     <input
                       type="number"
                       value={r2C}
@@ -653,7 +703,9 @@ $$y = (${Number(m.toFixed(2))}x ${n >= 0 ? "+ " + Number(n.toFixed(2)) : "- " + 
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">d (mẫu x)</label>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      <MathSpan content="$d (x)$" />
+                    </label>
                     <input
                       type="number"
                       value={r2D}
@@ -662,7 +714,9 @@ $$y = (${Number(m.toFixed(2))}x ${n >= 0 ? "+ " + Number(n.toFixed(2)) : "- " + 
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">e (mẫu)</label>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      <MathSpan content="$e$" />
+                    </label>
                     <input
                       type="number"
                       value={r2E}
@@ -674,23 +728,25 @@ $$y = (${Number(m.toFixed(2))}x ${n >= 0 ? "+ " + Number(n.toFixed(2)) : "- " + 
 
                 <div className="flex flex-wrap gap-1.5">
                   {[
-                    { a: 1, b: 1, c: -2, d: 1, e: -1, label: "(x^2 + x - 2)/(x - 1)" },
-                    { a: 1, b: 0, c: 1, d: 1, e: 0, label: "(x^2 + 1)/x" },
-                    { a: 1, b: -2, c: 2, d: 1, e: -1, label: "(x^2 - 2x + 2)/(x - 1)" }
+                    { a: 1, b: 1, c: -2, d: 1, e: -1, label: "y = \\frac{x^2 + x - 2}{x - 1}" },
+                    { a: 1, b: 0, c: 1, d: 1, e: 0, label: "y = \\frac{x^2 + 1}{x}" },
+                    { a: 1, b: -2, c: 2, d: 1, e: -1, label: "y = \\frac{x^2 - 2x + 2}{x - 1}" }
                   ].map((p, idx) => (
                     <button
                       key={idx}
                       onClick={() => { setR2A(p.a); setR2B(p.b); setR2C(p.c); setR2D(p.d); setR2E(p.e); }}
                       className="px-2 py-1 bg-slate-100 hover:bg-blue-50 text-slate-700 rounded text-xs"
                     >
-                      ${p.label}$
+                      <MathSpan content={`$${p.label}$`} />
                     </button>
                   ))}
                 </div>
 
                 <VariationTable
+                  title="Bảng biến thiên hàm phân thức 2/1 (Toán 12)"
                   points={rational2Analysis.bbtPoints}
                   intervals={rational2Analysis.bbtIntervals}
+                  showDerivative={true}
                 />
               </div>
             )}

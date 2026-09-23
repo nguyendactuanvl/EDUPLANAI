@@ -270,6 +270,92 @@ function tokenizeTextAndMath(rawText: string): TextOrMathToken[] {
 }
 
 /**
+ * Regex matching math symbols, set symbols, logic operators, arrows, etc.
+ * that must be rendered using 'Cambria Math' font to avoid empty square boxes on machines
+ * running older Word/Windows where 'Times New Roman' lacks these glyphs.
+ */
+const MATH_SYMBOL_SPLIT_REGEX = /([\u2100-\u214F\u2190-\u21FF\u2200-\u22FF\u2300-\u23FF\u25A0-\u25FF\u27C0-\u27EF\u27F0-\u27FF\u2900-\u297F\u2980-\u29FF\u2A00-\u2AFF\u2B00-\u2BFF\u00B1\u00D7\u00F7\u00AC\u00B7]|[\uD835][\uDC00-\uDFFF])/g;
+
+const MATH_SYMBOL_CHAR_REGEX = /^([\u2100-\u214F\u2190-\u21FF\u2200-\u22FF\u2300-\u23FF\u25A0-\u25FF\u27C0-\u27EF\u27F0-\u27FF\u2900-\u297F\u2980-\u29FF\u2A00-\u2AFF\u2B00-\u2BFF\u00B1\u00D7\u00F7\u00AC\u00B7]|[\uD835][\uDC00-\uDFFF])+$/;
+
+/**
+ * Normalizes raw LaTeX math macros in non-delimited text into standard Unicode math characters.
+ */
+function normalizeRawMathSymbols(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/\\mathbb\{R\}|\b\\mathbb\s*R\b/g, 'ℝ')
+    .replace(/\\mathbb\{N\}|\b\\mathbb\s*N\b/g, 'ℕ')
+    .replace(/\\mathbb\{Z\}|\b\\mathbb\s*Z\b/g, 'ℤ')
+    .replace(/\\mathbb\{Q\}|\b\\mathbb\s*Q\b/g, 'ℚ')
+    .replace(/\\mathbb\{C\}|\b\\mathbb\s*C\b/g, 'ℂ')
+    .replace(/\\forall\b/g, '∀')
+    .replace(/\\exists\b/g, '∃')
+    .replace(/\\nexists\b/g, '∄')
+    .replace(/\\in\b/g, '∈')
+    .replace(/\\notin\b/g, '∉')
+    .replace(/\\cap\b/g, '∩')
+    .replace(/\\cup\b/g, '∪')
+    .replace(/\\setminus\b/g, '∖')
+    .replace(/\\subset\b/g, '⊂')
+    .replace(/\\subseteq\b/g, '⊆')
+    .replace(/\\supset\b/g, '⊃')
+    .replace(/\\supseteq\b/g, '⊇')
+    .replace(/\\emptyset\b|\\varnothing\b/g, '∅')
+    .replace(/\\le\b|\\leq\b/g, '≤')
+    .replace(/\\ge\b|\\geq\b/g, '≥')
+    .replace(/\\ne\b|\\neq\b/g, '≠')
+    .replace(/\\approx\b/g, '≈')
+    .replace(/\\equiv\b/g, '≡')
+    .replace(/\\pm\b/g, '±')
+    .replace(/\\times\b/g, '×')
+    .replace(/\\div\b/g, '÷')
+    .replace(/\\infty\b/g, '∞')
+    .replace(/\\to\b|\\rightarrow\b/g, '→')
+    .replace(/\\Leftarrow\b/g, '⇐')
+    .replace(/\\Rightarrow\b/g, '⇒')
+    .replace(/\\Leftrightarrow\b|\\iff\b/g, '⇔')
+    .replace(/\\perp\b/g, '⊥')
+    .replace(/\\parallel\b/g, '∥');
+}
+
+/**
+ * Creates TextRun items from a text string.
+ * Special mathematical symbols (ℝ, ℕ, ℤ, ∀, ∃, ∈, ∉, ∩, ∪, ∅, ≤, ≥, ≠, etc.)
+ * are explicitly assigned font: 'Cambria Math' to prevent empty square boxes on Windows/Office.
+ */
+function createTextRunsWithMathFont(
+  rawText: string,
+  style: RunStyle = {}
+): TextRun[] {
+  if (!rawText) return [];
+  const normalized = normalizeRawMathSymbols(rawText);
+  const parts = normalized.split(MATH_SYMBOL_SPLIT_REGEX);
+  const runs: TextRun[] = [];
+
+  for (const part of parts) {
+    if (!part) continue;
+
+    const isMathSymbol = MATH_SYMBOL_CHAR_REGEX.test(part);
+
+    runs.push(
+      new TextRun({
+        text: part,
+        font: isMathSymbol ? 'Cambria Math' : (style.font || 'Times New Roman'),
+        size: style.size || 24,
+        bold: style.bold,
+        italics: style.italics,
+        superScript: style.superScript,
+        subScript: style.subScript,
+        color: style.color,
+      })
+    );
+  }
+
+  return runs;
+}
+
+/**
  * Converts an array of TextOrMathTokens into Word ParagraphChild runs (TextRun and OMML equations).
  */
 function tokensToRuns(
@@ -285,8 +371,8 @@ function tokensToRuns(
       if (qMatch && !style.bold) {
         const cleanLabel = qMatch[1].replace(/\*\*/g, '').trim();
         runs.push(
-          new TextRun({
-            text: `${cleanLabel} `,
+          ...createTextRunsWithMathFont(`${cleanLabel} `, {
+            ...style,
             bold: true,
             font: style.font || 'Times New Roman',
             size: style.size || 24,
@@ -295,39 +381,23 @@ function tokensToRuns(
         const rest = qMatch[2].replace(/^\s+/, '');
         if (rest) {
           runs.push(
-            new TextRun({
-              text: rest,
-              font: style.font || 'Times New Roman',
-              size: style.size || 24,
-              bold: style.bold,
-              italics: style.italics,
-              superScript: style.superScript,
-              subScript: style.subScript,
-            })
+            ...createTextRunsWithMathFont(rest, style)
           );
         }
       } else {
         runs.push(
-          new TextRun({
-            text: token.content,
-            font: style.font || 'Times New Roman',
-            size: style.size || 24,
-            bold: style.bold,
-            italics: style.italics,
-            superScript: style.superScript,
-            subScript: style.subScript,
-          })
+          ...createTextRunsWithMathFont(token.content, style)
         );
       }
     } else {
       // Math token
       if (options.mathFormat === 'latex') {
+        const mathText = token.isBlock ? `\n$$${token.content}$$\n` : ` $${token.content}$ `;
         runs.push(
-          new TextRun({
-            text: token.isBlock ? `\n$$${token.content}$$\n` : ` $${token.content}$ `,
+          ...createTextRunsWithMathFont(mathText, {
+            ...style,
             italics: true,
-            font: 'Times New Roman',
-            size: style.size || 24,
+            font: style.font || 'Times New Roman',
           })
         );
       } else {
@@ -381,14 +451,12 @@ function parseInlineContent(
       const isBlock = el.getAttribute('data-block') === '1';
 
       if (options.mathFormat === 'latex') {
-        return [
-          new TextRun({
-            text: isBlock ? `\n$$${tex}$$\n` : ` $${tex}$ `,
-            italics: true,
-            font: 'Times New Roman',
-            size: style.size || 24,
-          }),
-        ];
+        const mathText = isBlock ? `\n$$${tex}$$\n` : ` $${tex}$ `;
+        return createTextRunsWithMathFont(mathText, {
+          ...style,
+          italics: true,
+          font: style.font || 'Times New Roman',
+        });
       }
       return [latexToOmmlComponent(tex, isBlock)];
     }
@@ -400,14 +468,12 @@ function parseInlineContent(
       const isBlock = el.classList.contains('katex-display') || !!el.closest('.katex-display');
 
       if (options.mathFormat === 'latex') {
-        return [
-          new TextRun({
-            text: isBlock ? `\n$$${tex}$$\n` : ` $${tex}$ `,
-            italics: true,
-            font: 'Times New Roman',
-            size: style.size || 24,
-          }),
-        ];
+        const mathText = isBlock ? `\n$$${tex}$$\n` : ` $${tex}$ `;
+        return createTextRunsWithMathFont(mathText, {
+          ...style,
+          italics: true,
+          font: style.font || 'Times New Roman',
+        });
       }
       return [latexToOmmlComponent(tex, isBlock)];
     }

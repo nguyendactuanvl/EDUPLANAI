@@ -532,7 +532,16 @@ export const cleanVietnameseUnicode = (str: string): string => {
 
   // 2. Triệt tiêu các ký tự dấu thanh bị gãy rụng đứng cạnh chữ cái
   res = res
-    .replace(/([a-zA-Z\u00C0-\u1EF9])[\s]*[`´'](?=[a-zA-Z\u00C0-\u1EF9\s]|$)/g, '$1')
+    .replace(/PHÂ\s*[`']\s*N/gi, 'PHẦN')
+    .replace(/THỐ\s*[´']\s*NG/gi, 'THỐNG')
+    .replace(/TRĂ\s*[´']\s*C/gi, 'TRẮC')
+    .replace(/NHIÊ\s*[`']\s*U/gi, 'NHIỀU')
+    .replace(/nhấ\s*[´']\s*t/gi, 'nhất')
+    .replace(/viế\s*[´']\s*t/gi, 'viết')
+    .replace(/biế\s*[´']\s*n/gi, 'biến')
+    .replace(/Số\s*[´']/gi, 'Số')
+    .replace(/đề\s*[`']/gi, 'đề')
+    .replace(/tố\s*[´']/gi, 'tố')
     .replace(/Â[`']/g, 'Ầ')
     .replace(/Â´/g, 'Ấ')
     .replace(/Ă´/g, 'Ắ')
@@ -545,15 +554,7 @@ export const cleanVietnameseUnicode = (str: string): string => {
     .replace(/ế´/g, 'ế')
     .replace(/ố´/g, 'ố')
     .replace(/ố[`']/g, 'ồ')
-    .replace(/PHÂ\s*`\s*N/gi, 'PHẦN')
-    .replace(/THỐ\s*´\s*NG/gi, 'THỐNG')
-    .replace(/TRĂ\s*´\s*C/gi, 'TRẮC')
-    .replace(/NHIÊ\s*`\s*U/gi, 'NHIỀU')
-    .replace(/nhấ\s*´\s*t/gi, 'nhất')
-    .replace(/đề\s*`/gi, 'đề')
-    .replace(/tố\s*´/gi, 'tố')
-    .replace(/Số\s*´/gi, 'Số')
-    .replace(/biế\s*´\s*n/gi, 'biến');
+    .replace(/([a-zA-Z\u00C0-\u1EF9])[\s]*[`´'](?=[a-zA-Z\u00C0-\u1EF9\s]|$)/g, '$1');
 
   // 3. Xử lý thiếu gạch đầu mệnh đề phủ định (\overline{P}, \overline{Q}, ...)
   res = res
@@ -583,9 +584,11 @@ export const polishMathText = (content: string): string => {
   // 2. Tự động tách liên từ "và", "hoặc", "với" bị dính giữa 2 công thức (vd: )vàB =, ]vàB =)
   // Trường hợp nằm ngoài hoặc trong dấu $, bảo vệ không phá vỡ từ tiếng Việt (vào, vàng, vài)
   text = text
-    .replace(/([\)\]\}0-9a-zA-Z])(?<!\s)và(?!(?:o|i|ng|c|t)\b)([A-Za-z])/g, '$1 và $2')
-    .replace(/([\)\]\}0-9a-zA-Z])(?<!\s)hoặc([A-Za-z])/g, '$1 hoặc $2')
-    .replace(/([\)\]\}0-9a-zA-Z])(?<!\s)với([A-Za-z])/g, '$1 với $2')
+    .replace(/\b1vàm\b/gi, '1 và m')
+    .replace(/\bvàtìm\b/gi, 'và tìm')
+    .replace(/([\)\]\}0-9a-zA-Z])(?<!\s)và(?!(?:o|i|ng|c|t)\b)([a-zA-Z0-9\$\\])/g, '$1 và $2')
+    .replace(/([\)\]\}0-9a-zA-Z])(?<!\s)hoặc(?=[a-zA-Z0-9\$\\])/g, '$1 hoặc $2')
+    .replace(/([\)\]\}0-9a-zA-Z])(?<!\s)với(?=[a-zA-Z0-9\$\\])/g, '$1 với $2')
     .replace(/([\)\]\}0-9a-zA-Z])\s*và\s*([A-Z])/g, '$1 và $2')
     .replace(/([\)\]\}0-9a-zA-Z])\s*hoặc\s*([A-Z])/g, '$1 hoặc $2')
     .replace(/([\)\]\}0-9a-zA-Z])\s*với\s*([A-Z])/g, '$1 với $2');

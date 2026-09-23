@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { InteractivePlot } from "./InteractivePlot";
-import { MarkdownRenderer } from "../MarkdownRenderer";
+import { MarkdownRenderer, MathSpan } from "../MarkdownRenderer";
+import { formatLinearEquation } from "../../lib/mathFormatters";
 import { FunctionPlotData, Point2D } from "./types";
 import { Sparkles, Calculator, Info } from "lucide-react";
 
@@ -84,7 +85,7 @@ export const Grade9Graphing: React.FC = () => {
               : "text-slate-600 hover:text-slate-900"
           }`}
         >
-          1. Đường thẳng $y = ax + b$
+          <MathSpan content="1. Đường thẳng $y = ax + b$" />
         </button>
         <button
           onClick={() => setActiveType("parabola")}
@@ -94,7 +95,7 @@ export const Grade9Graphing: React.FC = () => {
               : "text-slate-600 hover:text-slate-900"
           }`}
         >
-          2. Parabol $y = ax^2$ ($a \ne 0$)
+          <MathSpan content="2. Parabol $y = ax^2$ ($a \ne 0$)" />
         </button>
       </div>
 
@@ -106,16 +107,18 @@ export const Grade9Graphing: React.FC = () => {
             <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
               <div className="border-b border-slate-100 pb-3">
                 <h3 className="text-sm font-bold text-slate-800">
-                  Thiết lập hàm số bậc nhất: $y = ax + b$
+                  <MathSpan content="Thiết lập hàm số bậc nhất: $y = ax + b$" />
                 </h3>
-                <p className="text-xs text-slate-500">Nhập các hệ số $a$ (hệ số góc) và $b$ (tung độ gốc)</p>
+                <p className="text-xs text-slate-500">
+                  <MathSpan content="Nhập các hệ số $a$ (hệ số góc) và $b$ (tung độ gốc)" />
+                </p>
               </div>
 
               {/* Inputs */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Hệ số $a$ (hệ số góc)
+                    <MathSpan content="Hệ số $a$ (hệ số góc)" />
                   </label>
                   <input
                     type="number"
@@ -128,7 +131,7 @@ export const Grade9Graphing: React.FC = () => {
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Hệ số $b$ (tung độ gốc)
+                    <MathSpan content="Hệ số $b$ (tung độ gốc)" />
                   </label>
                   <input
                     type="number"
@@ -157,7 +160,7 @@ export const Grade9Graphing: React.FC = () => {
                       onClick={() => { setLineA(preset.a); setLineB(preset.b); }}
                       className="px-2.5 py-1 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 rounded-lg text-xs font-medium transition-colors"
                     >
-                      ${preset.label}$
+                      <MathSpan content={`$${preset.label}$`} />
                     </button>
                   ))}
                 </div>
@@ -171,36 +174,32 @@ export const Grade9Graphing: React.FC = () => {
                 </div>
 
                 <div>
-                  <span className="font-semibold text-slate-800">1. Giao điểm với trục tung $Oy$:</span>
-                  <div className="pl-3 mt-0.5">
-                    Cho $x = 0 \implies y = {lineAnalysis.b}$. Điểm $B(0; {lineAnalysis.b})$.
-                  </div>
+                  <MarkdownRenderer
+                    inline
+                    content={`**1. Giao điểm với trục tung $Oy$:** Cho $x = 0 \\implies y = ${lineAnalysis.b}$. Điểm $B(0; ${lineAnalysis.b})$.`}
+                  />
                 </div>
 
                 <div>
-                  <span className="font-semibold text-slate-800">2. Giao điểm với trục hoành $Ox$:</span>
-                  <div className="pl-3 mt-0.5">
-                    {lineAnalysis.hasXIntercept ? (
-                      <div>
-                        Cho $y = 0 \implies {lineAnalysis.a}x + {lineAnalysis.b} = 0 \iff x = {lineAnalysis.xIntercept?.x}$. Điểm $A({lineAnalysis.xIntercept?.x}; 0)$.
-                      </div>
-                    ) : (
-                      <div>Đường thẳng song song với trục hoành $Ox$ (vì $a = 0$).</div>
-                    )}
-                  </div>
+                  <MarkdownRenderer
+                    inline
+                    content={lineAnalysis.hasXIntercept 
+                      ? `**2. Giao điểm với trục hoành $Ox$:** Cho $y = 0 \\implies ${lineAnalysis.a}x + (${lineAnalysis.b}) = 0 \\iff x = ${lineAnalysis.xIntercept?.x}$. Điểm $A(${lineAnalysis.xIntercept?.x}; 0)$.`
+                      : `**2. Giao điểm với trục hoành $Ox$:** Đường thẳng song song với trục hoành $Ox$ (vì $a = 0$).`
+                    }
+                  />
                 </div>
 
                 <div>
-                  <span className="font-semibold text-slate-800">3. Tính chất:</span>
-                  <div className="pl-3 mt-0.5">
-                    {lineAnalysis.a > 0 ? (
-                      <span className="text-emerald-700 font-semibold">{`Vì $a = ${lineAnalysis.a} > 0$ nên hàm số đồng biến trên $\\mathbb{R}$ (đường thẳng đi lên từ trái sang phải).`}</span>
-                    ) : lineAnalysis.a < 0 ? (
-                      <span className="text-amber-700 font-semibold">{`Vì $a = ${lineAnalysis.a} < 0$ nên hàm số nghịch biến trên $\\mathbb{R}$ (đường thẳng đi xuống từ trái sang phải).`}</span>
-                    ) : (
-                      <span>Hàm hằng $y = {lineAnalysis.b}$.</span>
-                    )}
-                  </div>
+                  <MarkdownRenderer
+                    inline
+                    content={lineAnalysis.a > 0
+                      ? `**3. Tính chất:** Vì $a = ${lineAnalysis.a} > 0$ nên hàm số đồng biến trên $\\mathbb{R}$ (đường thẳng đi lên từ trái sang phải).`
+                      : lineAnalysis.a < 0
+                      ? `**3. Tính chất:** Vì $a = ${lineAnalysis.a} < 0$ nên hàm số nghịch biến trên $\\mathbb{R}$ (đường thẳng đi xuống từ trái sang phải).`
+                      : `**3. Tính chất:** Hàm hằng $y = ${lineAnalysis.b}$.`
+                    }
+                  />
                 </div>
               </div>
             </div>
@@ -229,15 +228,17 @@ export const Grade9Graphing: React.FC = () => {
             <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
               <div className="border-b border-slate-100 pb-3">
                 <h3 className="text-sm font-bold text-slate-800">
-                  Thiết lập Parabol: $y = ax^2$ ($a \ne 0$)
+                  <MathSpan content="Thiết lập Parabol: $y = ax^2$ ($a \ne 0$)" />
                 </h3>
-                <p className="text-xs text-slate-500">Đồ thị có đỉnh tại gốc tọa độ $O(0;0)$ và nhận trục tung $Oy$ làm trục đối xứng</p>
+                <p className="text-xs text-slate-500">
+                  <MathSpan content="Đồ thị có đỉnh tại gốc tọa độ $O(0;0)$ và nhận trục tung $Oy$ làm trục đối xứng" />
+                </p>
               </div>
 
               {/* Input a */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Hệ số $a$ ($a \ne 0$)
+                  <MathSpan content="Hệ số $a$ ($a \ne 0$)" />
                 </label>
                 <input
                   type="number"
@@ -269,7 +270,7 @@ export const Grade9Graphing: React.FC = () => {
                       onClick={() => setParabolaA(preset.a)}
                       className="px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700 rounded-lg text-xs font-medium transition-colors"
                     >
-                      ${preset.label}$
+                      <MathSpan content={`$${preset.label}$`} />
                     </button>
                   ))}
                 </div>
@@ -284,7 +285,9 @@ export const Grade9Graphing: React.FC = () => {
                   <table className="w-full text-center">
                     <thead className="bg-slate-50 font-bold border-b border-slate-200">
                       <tr>
-                        <th className="p-2 border-r border-slate-200">$x$</th>
+                        <th className="p-2 border-r border-slate-200">
+                          <MathSpan content="$x$" />
+                        </th>
                         {parabolaAnalysis.tablePoints.map((p, idx) => (
                           <th key={idx} className="p-2 border-r last:border-r-0 border-slate-200 font-mono">
                             {p.x}
@@ -294,7 +297,9 @@ export const Grade9Graphing: React.FC = () => {
                     </thead>
                     <tbody>
                       <tr>
-                        <td className="p-2 font-bold border-r border-slate-200 bg-slate-50">$y = {parabolaA}x^2$</td>
+                        <td className="p-2 font-bold border-r border-slate-200 bg-slate-50">
+                          <MathSpan content={`$y = ${parabolaA}x^2$`} />
+                        </td>
                         {parabolaAnalysis.tablePoints.map((p, idx) => (
                           <td key={idx} className="p-2 border-r last:border-r-0 border-slate-200 font-mono font-bold text-indigo-700">
                             {p.y}
@@ -312,18 +317,23 @@ export const Grade9Graphing: React.FC = () => {
                   <Info className="w-4 h-4 text-indigo-600" />
                   <span>Đặc điểm hình học:</span>
                 </div>
-                <ul className="space-y-1 list-disc pl-4">
-                  <li><strong>Đỉnh:</strong> Gốc tọa độ $O(0; 0)$.</li>
-                  <li><strong>Trục đối xứng:</strong> Trục tung $Oy$ ($x = 0$).</li>
-                  <li>
-                    <strong>Bề lõm:</strong>{" "}
-                    {parabolaA > 0 ? (
-                      <span className="text-emerald-700 font-semibold">{`Vì $a = ${parabolaA} > 0$ nên đồ thị quay bề lõm lên trên, điểm $O(0;0)$ là điểm thấp nhất.`}</span>
-                    ) : (
-                      <span className="text-amber-700 font-semibold">{`Vì $a = ${parabolaA} < 0$ nên đồ thị quay bề lõm xuống dưới, điểm $O(0;0)$ là điểm cao nhất.`}</span>
-                    )}
-                  </li>
-                </ul>
+                <div className="space-y-1">
+                  <div>
+                    <MarkdownRenderer inline content="• **Đỉnh:** Gốc tọa độ $O(0; 0)$." />
+                  </div>
+                  <div>
+                    <MarkdownRenderer inline content="• **Trục đối xứng:** Trục tung $Oy$ ($x = 0$)." />
+                  </div>
+                  <div>
+                    <MarkdownRenderer
+                      inline
+                      content={parabolaA > 0 
+                        ? `• **Bề lõm:** Vì $a = ${parabolaA} > 0$ nên đồ thị quay bề lõm lên trên, điểm $O(0;0)$ là điểm thấp nhất.`
+                        : `• **Bề lõm:** Vì $a = ${parabolaA} < 0$ nên đồ thị quay bề lõm xuống dưới, điểm $O(0;0)$ là điểm cao nhất.`
+                      }
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
