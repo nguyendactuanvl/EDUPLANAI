@@ -632,12 +632,91 @@ export const polishMathText = (content: string): string => {
 export const sanitizeAndFormatMath = polishMathText;
 
 /**
+ * KHẮC PHỤC LỖI RỚT DẤU CHẤM HỎI (?) VÀ LỖI LỘ CÚ PHÁP \begin{cases} TRONG ĐỀ THI ONLINE:
+ * 1. Tự động bọc $ cho các khối \begin{cases}...\end{cases} chưa có dấu $
+ * 2. Khắc phục lỗi dấu hỏi chấm (?) bị rơi xuống dòng dưới công thức display math
+ * 3. Dọn dẹp dấu xuống dòng thừa cạnh dấu câu
+ */
+export const fixLatexAndPunctuation = (rawText: string): string => {
+  if (!rawText) return '';
+  let text = rawText;
+
+  // 1. TỰ ĐỘNG BỌC $ CHO CÁC KHỐI \begin{cases}...\end{cases} CHƯA CÓ DẤU $
+  // Bắt mọi khối \begin{cases} đứng trần trụi ngoài văn bản (chưa có $ hoặc $$ bọc)
+  text = text.replace(
+    /(\$\$[\s\S]*?\$\$|(?<!\$)\$(?!\$)[\s\S]*?(?<!\$)\$(?!\$))|(\\begin\{cases\}[\s\S]*?\\end\{cases\})/g,
+    (match, wrapped, naked) => {
+      if (wrapped) return wrapped;
+      return `\n$$\n${naked}\n$$\n`;
+    }
+  );
+
+  // 2. KHẮC PHỤC LỖI DẤU HỎI CHẤM (?) BỊ RƠI XUỐNG DÒNG DƯỚI CÔNG THỨC
+  // Nếu câu hỏi có cấu trúc: "... hệ (bất) phương trình : $$...$$ ?"
+  // Chuyển khối display math thành câu khẳng định ngữ pháp chuẩn SGK:
+  text = text.replace(
+    /(hệ\s+(?:bất\s+)?phương\s+trình)\s*(?::\s*)?\$\$(\s*\\begin\{cases\}[\s\S]*?\\end\{cases\}\s*)\$\$\s*\?/gi,
+    (_m, g1, g2) => `${g1} sau:\n$$\n${g2}\n$$`
+  );
+
+  text = text.replace(
+    /(\bthuộc\s+miền\s+nghiệm\s+của\s+hệ\s+(?:bất\s+)?phương\s+trình)\s*(?::\s*)?\$\$(\s*\\begin\{cases\}[\s\S]*?\\end\{cases\}\s*)\$\$\s*\?/gi,
+    (_m, g1, g2) => `${g1} sau:\n$$\n${g2}\n$$`
+  );
+
+  // Kéo dấu chấm hỏi liền vào trước hoặc loại bỏ ngắt dòng mồ côi
+  text = text.replace(/\$\$\s*\n+\s*([?\.!:])/g, '$$ $1');
+  text = text.replace(/\n+\s*\?\s*$/gm, '?');
+
+  // 3. DỌN DẸP DẤU XUỐNG DÒNG THỪA CẠNH DẤU CÂU
+  text = text
+    .replace(/\s+([?\.!:,])/g, '$1')
+    .replace(/(\\end\{cases\})\s*\$\$\s*\?/g, (_m, g1) => `${g1}\n$$?`);
+
+  // Xóa bỏ dấu hỏi chấm mồ côi đứng một mình ở cuối chuỗi sau khối display math
+  text = text.replace(/\$\$\s*\n*\s*\?\s*$/g, '$$');
+
+  return text;
+};
+
+/**
+ * HÀM SỬA CHỮA HOÀN HẢO CÁC TỪ TIẾNG VIỆT BỊ CẮT NHẦM ĐUÔI "C.":
+ * Khắc phục lỗi ranh giới từ \b hiểu sai ký tự tiếng Việt có dấu (như á, ộ, ụ, ợ, ự...) thành non-word,
+ * dẫn đến từ kết thúc bằng "c." bị xé đôi: "tam giá\n\nc." -> "tam giác."
+ */
+export const healBrokenVietnameseWords = (text: string): string => {
+  if (!text) return '';
+  let res = text;
+
+  // Vá lại các trường hợp đã bị bẻ đôi từ: "tam giá\n\nc." -> "tam giác."
+  res = res
+    .replace(/(tam\s*giá)\s*\n*\s*c\.\s*/gi, '$1c. ')
+    .replace(/([a-zA-Z\u00C0-\u1EF9]+[áéíóúýắấếốứàèìòùỳảẻỉỏủỷãẽĩõũỹạẹịọụỵăằẳẵặâầẩẫậêềểễệôồổỗộơờởỡợưừửữự])\s*\n*\s*c\.\s*/gi, '$1c. ')
+    .replace(/(thuộ)\s*\n*\s*c\.\s*/gi, '$1c. ')
+    .replace(/(trụ)\s*\n*\s*c\.\s*/gi, '$1c. ')
+    .replace(/(mụ)\s*\n*\s*c\.\s*/gi, '$1c. ')
+    .replace(/(họ)\s*\n*\s*c\.\s*/gi, '$1c. ')
+    .replace(/(bậ)\s*\n*\s*c\.\s*/gi, '$1c. ')
+    .replace(/(lự)\s*\n*\s*c\.\s*/gi, '$1c. ')
+    .replace(/(thự)\s*\n*\s*c\.\s*/gi, '$1c. ')
+    .replace(/(cự)\s*\n*\s*c\.\s*/gi, '$1c. ')
+    .replace(/(mự)\s*\n*\s*c\.\s*/gi, '$1c. ')
+    .replace(/(vự)\s*\n*\s*c\.\s*/gi, '$1c. ')
+    .replace(/(trự)\s*\n*\s*c\.\s*/gi, '$1c. ')
+    .replace(/(đượ)\s*\n*\s*c\.\s*/gi, '$1c. ')
+    .replace(/(bướ)\s*\n*\s*c\.\s*/gi, '$1c. ')
+    .replace(/(trướ)\s*\n*\s*c\.\s*/gi, '$1c. ');
+
+  return res;
+};
+
+/**
  * XỬ LÝ TỔNG QUÁT & TRIỆT ĐỂ 100% LỖI DÍNH CHỮ TIẾNG VIỆT IN NGHIÊNG VÀ LỘ LỆNH LATEX TRÊN TRANG LÀM BÀI ONLINE
  * Tokenizer & Sanitizer bảo vệ tiếng Việt cho đề thi toán
  */
 export const sanitizeExamQuestion = (rawContent: string): string => {
   if (!rawContent) return '';
-  let content = rawContent.trim();
+  let content = healBrokenVietnameseWords(fixLatexAndPunctuation(rawContent.trim()));
 
   // BƯỚC 1: GIẢI CỨU CHUỖI NẾU BỊ BỌC NHẦM CẢ CÂU TRONG DẤU $ HOẶC $$
   // Nếu chuỗi bắt đầu và kết thúc bằng $ hoặc $$ nhưng bên trong có nhiều từ tiếng Việt
@@ -747,7 +826,7 @@ export const sanitizeExamQuestion = (rawContent: string): string => {
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 
-  return content;
+  return healBrokenVietnameseWords(fixLatexAndPunctuation(content));
 };
 
 export const rescueAccidentalFullMathBlock = sanitizeExamQuestion;
@@ -986,7 +1065,7 @@ export const fixInlineOptionText = (text: string): string => {
  */
 export function formatMathContent(raw?: string | null): string {
   if (!raw && raw !== '') return '';
-  let str = normalizeMathLatex(String(raw));
+  let str = healBrokenVietnameseWords(normalizeMathLatex(String(raw)));
 
   // 1. Chuẩn hóa họ nghiệm lượng giác (đổi \begin{cases} có chứa k2\pi, k\pi, k \in \mathbb{Z}... sang \left[\begin{aligned}...\end{aligned}\right.)
   str = normalizeTrigSolutions(str);
@@ -1005,7 +1084,7 @@ export function formatMathContent(raw?: string | null): string {
   // 4. Tự động bọc naked math environments (bao gồm \left[\begin{aligned}...\end{aligned}\right. và \begin{cases})
   str = wrapNakedMathEnvironments(str);
 
-  return str;
+  return healBrokenVietnameseWords(str);
 }
 
 /**
@@ -1550,7 +1629,7 @@ export const fixMath = (text: any) => {
     // 6. Format multiple choice options into standard CSS Grid layout and ensure spacing between questions
     t = formatMultipleChoiceInMarkdown(t);
 
-    return t;
+    return healBrokenVietnameseWords(t);
 };
 
 /**
@@ -1558,7 +1637,7 @@ export const fixMath = (text: any) => {
  */
 export function formatMultipleChoiceInMarkdown(content: string): string {
   if (!content) return '';
-  let text = String(content);
+  let text = healBrokenVietnameseWords(String(content));
 
   // 1. TÁCH BIỆT GIỮA CÁC CÂU HỎI (Spacing):
   // Đảm bảo giữa mỗi câu (từ Câu 1 đến Câu 12, Bài 1...) có khoảng cách rõ ràng (\n\n),
@@ -1569,12 +1648,11 @@ export function formatMultipleChoiceInMarkdown(content: string): string {
   // - KHÔNG biến đổi phần này thành các lựa chọn trắc nghiệm A, B, C, D.
   // - Giữ nguyên định dạng văn bản thuần Markdown: khi gặp các ký hiệu ý a), b), c), d),
   //   chèn 2 dấu ngắt dòng \n\n phía trước để mỗi ý tự động rớt xuống 1 hàng riêng:
-  //   a) [Mệnh đề 1]
-  //   b) [Mệnh đề 2]
-  //   c) [Mệnh đề 3]
-  //   d) [Mệnh đề 4]
-  text = text.replace(/([^\n])\s*(?:\r?\n)?(?:\b|\s)([a-d]\))\s+/g, '$1\n\n$2 ');
-  text = text.replace(/([^\n])\s*(?:\r?\n)?(?:\b|\s)([a-d]\.)\s+(?=[A-ZÀ-Ỹ\$])/g, '$1\n\n$2 ');
+  // SỬA LẠI REGEX NHẬN DIỆN CÁC Ý a), b), c), d) HOẶC a., b., c., d. AN TOÀN UNICODE TIẾNG VIỆT:
+  // Chỉ nhận diện là tiểu mục nếu đứng ở đầu dòng hoặc sau khoảng trắng/xuống dòng, và phía trước KHÔNG PHẢI là chữ cái tiếng Việt/Latin:
+  text = text.replace(/(?:^|\n|\s{2,})(?<![a-zA-Z\u00C0-\u1EF9])([a-dA-D]\))\s+/g, '\n\n$1 ');
+  text = text.replace(/(?:^|\n|\s{2,})(?<![a-zA-Z\u00C0-\u1EF9])([a-dA-D]\.)\s+(?=[A-ZÀ-Ỹ\$])/g, '\n\n$1 ');
+  text = healBrokenVietnameseWords(text);
 
   // 3. TÁCH DÒNG ĐỀ BÀI VÀ 4 PHƯƠNG ÁN LỰA CHỌN (PHẦN I):
   // Tuyệt đối KHÔNG để phương án A. dính liền ngay sau câu hỏi.
@@ -1612,7 +1690,7 @@ export function formatMultipleChoiceInMarkdown(content: string): string {
     return `\n\n- **A.** ${optA}\n- **B.** ${optB}\n- **C.** ${optC}\n- **D.** ${optD}\n\n`;
   });
 
-  return text;
+  return healBrokenVietnameseWords(text);
 }
 
 /**

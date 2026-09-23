@@ -18,6 +18,8 @@ import {
   rescueAccidentalFullMathBlock, 
   sanitizeAndPolishMath, 
   sanitizeExamQuestion,
+  fixLatexAndPunctuation,
+  healBrokenVietnameseWords,
   sanitizeMathBeforeRender,
   normalizeMathLatex,
   normalizeMathContent
@@ -30,6 +32,8 @@ export {
   rescueAccidentalFullMathBlock, 
   sanitizeAndPolishMath, 
   sanitizeExamQuestion,
+  fixLatexAndPunctuation,
+  healBrokenVietnameseWords,
   sanitizeMathBeforeRender,
   normalizeMathLatex,
   normalizeMathContent
@@ -120,7 +124,8 @@ export const MarkdownRenderer = ({
   inline?: boolean; 
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  let processedContent = sanitizeExamQuestion(content || '');
+  let processedContent = healBrokenVietnameseWords(fixLatexAndPunctuation(content || ''));
+  processedContent = sanitizeExamQuestion(processedContent);
   processedContent = polishMathText(processedContent);
   processedContent = sanitizeMathBeforeRender(processedContent);
   processedContent = normalizeMathLatex(processedContent);
@@ -135,6 +140,8 @@ export const MarkdownRenderer = ({
 
   processedContent = formatMathContent(processedContent);
   processedContent = fixMath(processedContent);
+  processedContent = fixLatexAndPunctuation(processedContent);
+  processedContent = healBrokenVietnameseWords(processedContent);
   processedContent = normalizeMathLatex(processedContent);
 
   // 0. Unescape escaped dollar signs so KaTeX/remark-math parses them as math delimiters
@@ -333,7 +340,12 @@ export const MarkdownRenderer = ({
         rehypePlugins={[rehypeRaw, [rehypeKatex, { strict: false, throwOnError: false, errorColor: 'inherit' }]]}
         components={{
           p: ({ node, children, ...props }: any) => {
-            const firstChild = React.Children.toArray(children)[0];
+            const childArray = React.Children.toArray(children);
+            // Khắc phục triệt để lỗi dấu hỏi chấm (?) hoặc dấu chấm mồ côi rớt xuống dòng riêng
+            if (childArray.length === 1 && typeof childArray[0] === 'string' && /^\s*[?\.!:]\s*$/.test(childArray[0])) {
+              return null;
+            }
+            const firstChild = childArray[0];
             const isQuestion = typeof firstChild === 'string' && /^\s*(?:\*\*)?(?:Câu|Bài|\d+\.)\s*\d*/i.test(firstChild);
             return (
               <div className={`leading-relaxed ${isQuestion ? 'mt-6 mb-2 font-medium text-slate-900 text-base sm:text-lg' : 'my-3'}`} {...props}>
@@ -414,7 +426,7 @@ export const MarkdownRenderer = ({
             // Check if items are multiple choice options (- **A.** ...)
             const isChoiceList = childArray.length >= 2 && childArray.length <= 4 && childArray.some((child: any) => {
               const text = getNodePlainText(child?.props?.children);
-              return /\b[A-D][\.\)]/.test(text);
+              return /(?:^|[\s\(\[])[A-D][\.\)]/.test(text);
             });
 
             if (isChoiceList) {
@@ -439,7 +451,7 @@ export const MarkdownRenderer = ({
             };
 
             const text = getNodePlainText(children);
-            const isChoice = /^\s*(?:\*\*)?[A-D][\.\)]/.test(text) || /\b[A-D][\.\)]/.test(text);
+            const isChoice = /^\s*(?:\*\*)?[A-D][\.\)]/.test(text) || /(?:^|[\s\(\[])[A-D][\.\)]/.test(text);
             if (isChoice) {
               return (
                 <li className="flex items-baseline gap-2 py-1.5 px-3 rounded-lg bg-slate-50/70 border border-slate-200 text-slate-800 hover:bg-slate-100 transition-colors shadow-none list-none m-0" {...props}>
