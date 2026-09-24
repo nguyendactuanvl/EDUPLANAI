@@ -517,10 +517,22 @@ export function ExamGenerator() {
         if (Array.isArray(cloudData) && cloudData.length > 0) {
           const merged = [...local];
           cloudData.forEach((cloudItem: any) => {
-            const index = merged.findIndex((m: any) =>
-              (m.studentName && cloudItem.studentName && m.studentName.trim().toLowerCase() === cloudItem.studentName.trim().toLowerCase() && String(m.examId) === String(cloudItem.examId)) ||
-              (m.id && cloudItem.id && m.id === cloudItem.id)
-            );
+            if (!cloudItem || typeof cloudItem !== 'object') return;
+            const cName = String(cloudItem.studentName ?? '').trim().toLowerCase();
+            const cExamId = String(cloudItem.examId ?? '');
+            const cId = cloudItem.id ? String(cloudItem.id) : '';
+
+            const index = merged.findIndex((m: any) => {
+              if (!m) return false;
+              const mName = String(m.studentName ?? '').trim().toLowerCase();
+              const mExamId = String(m.examId ?? '');
+              const mId = m.id ? String(m.id) : '';
+
+              return (
+                (mName && cName && mName === cName && mExamId && cExamId && mExamId === cExamId) ||
+                (mId && cId && mId === cId)
+              );
+            });
             if (index === -1) {
               merged.push(cloudItem);
             } else {
@@ -4390,3 +4402,4 @@ Lời giải: Tiệm cận ngang là $y = 1$ nên ý c sai.`);
     </div>
   );
 }
+

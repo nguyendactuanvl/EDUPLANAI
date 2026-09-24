@@ -18,6 +18,8 @@ const MATH_FORMATTING_RULES = `QUY TẮC ĐỊNH DẠNG TOÁN HỌC VÀ VĂN B�
 3. Công thức nằm riêng một dòng độc lập: Luôn kẹp trong cặp dấu $$...$$.
 4. Ký hiệu bắt buộc: Phân số dùng \\dfrac{a}{b}, hệ phương trình dùng \\begin{cases} ... \\end{cases}, dấu khác (không bằng) BẮT BUỘC dùng \\neq (tuyệt đối KHÔNG viết dạng "/ =", "/=", "!=" hay "=/=").
    Ký hiệu vô cực (vô cùng) BẮT BUỘC dùng \\infty: $-\\infty, +\\infty$. Tuyệt đối KHÔNG viết thiếu dấu gạch chéo thành -infty, +infty hay in fty. Các khoảng như $(-\\infty; -1)$, $(-1; +\\infty)$ BẮT BUỘC có \\ trước infty.
+   KÝ HIỆU TẬP HỢP DÙNG DẤU NGOẶC NHỌN: Dấu ngoặc nhọn tập hợp { } BẮT BUỘC phải thoát bằng dấu gạch chéo ngược: \\{ và \\} (ví dụ: $A = \\{x \\in \\mathbb{Z} \\mid -2 \\le x < 3\\}$, $B = \\{1; 2; 3\\}$, $\\{x \\in \\mathbb{R} \\mid |x| \\le 3\\}$). Tuyệt đối KHÔNG viết thiếu gạch chéo { } vì KaTeX sẽ ẩn mất dấu ngoặc nhọn.
+   CÁC TOÁN TỬ SO SÁNH: BẮT BUỘC viết \\le, \\ge, \\neq (ví dụ: $x \\le 3$, $|x| \\le 3$, $-2 \\le x < 3$). Tuyệt đối KHÔNG viết dính liền chữ dạng "leqx", "leq3" hay thiếu dấu gạch chéo ngược.
 5. [CỰC KỲ QUAN TRỌNG] QUY ƯỚC CÔNG THỨC NGHIỆM PHƯƠNG TRÌNH LƯỢNG GIÁC (CHUẨN TOÁN HỌC & KATEX):
    - Khi biểu diễn họ nghiệm tuyển của phương trình lượng giác (\\sin, \\cos, \\tan, \\cot hoặc các bài toán phương trình có nghiệm phân nhánh "hoặc"):
      + BẮT BUỘC sử dụng dấu móc vuông \\left[ kết hợp \\begin{aligned} ... \\end{aligned}\\right. thay vì dấu móc nhọn \\begin{cases}.
@@ -2124,4 +2126,5 @@ if (!process.env.VERCEL) {
   }
 }
 export default app;
+
 

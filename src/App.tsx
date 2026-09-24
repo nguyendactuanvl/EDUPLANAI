@@ -7,6 +7,7 @@ import { Menu, Sparkles, Key, AlertCircle } from "lucide-react";
 import React, { useState, Suspense, useEffect } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { SettingsModal } from "./components/SettingsModal";
 
 function safeLazy<T extends React.ComponentType<any>>(
   factory: () => Promise<{ default: T }>,
@@ -30,21 +31,20 @@ function safeLazy<T extends React.ComponentType<any>>(
   });
 }
 
-const EducationalPlan = safeLazy(() => import("./pages/EducationalPlan").then(module => ({ default: module.EducationalPlan })));
-const LessonPlan = safeLazy(() => import("./pages/LessonPlan").then(module => ({ default: module.LessonPlan })));
-const Circulars = safeLazy(() => import("./pages/Circulars").then(module => ({ default: module.Circulars })));
-const HistoryPage = safeLazy(() => import("./pages/HistoryPage").then(module => ({ default: module.HistoryPage })));
-const Worksheets = safeLazy(() => import("./pages/Worksheets").then(module => ({ default: module.Worksheets })));
-import { SettingsModal } from "./components/SettingsModal";
-const ExerciseSolver = safeLazy(() => import('./pages/ExerciseSolver').then(module => ({ default: module.ExerciseSolver })));
-const PdfToWord = safeLazy(() => import('./pages/PdfToWord').then(module => ({ default: module.PdfToWord })));
-const ExamGenerator = safeLazy(() => import('./pages/ExamGenerator').then(module => ({ default: module.ExamGenerator })));
-const StudentExamView = safeLazy(() => import('./pages/StudentExamView').then(module => ({ default: module.StudentExamView })));
-const ClassMap = safeLazy(() => import('./pages/ClassMap').then(module => ({ default: module.ClassMap })));
-const HomeroomManagement = safeLazy(() => import('./pages/HomeroomManagement').then(module => ({ default: module.HomeroomManagement })));
-const WeeklyTimetable = safeLazy(() => import('./pages/WeeklyTimetable').then(module => ({ default: module.WeeklyTimetable })));
-const Gamification = safeLazy(() => import('./pages/Gamification').then(module => ({ default: module.Gamification })));
-const MathTools = safeLazy(() => import('./pages/MathTools').then(module => ({ default: module.MathTools })));
+const EducationalPlan = safeLazy(() => import("./pages/EducationalPlan").then(m => ({ default: ((m as any).default || (m as any).EducationalPlan) as React.ComponentType<any> })));
+const LessonPlan = safeLazy(() => import("./pages/LessonPlan").then(m => ({ default: ((m as any).default || (m as any).LessonPlan) as React.ComponentType<any> })));
+const Circulars = safeLazy(() => import("./pages/Circulars").then(m => ({ default: ((m as any).default || (m as any).Circulars) as React.ComponentType<any> })));
+const HistoryPage = safeLazy(() => import("./pages/HistoryPage").then(m => ({ default: ((m as any).default || (m as any).HistoryPage) as React.ComponentType<any> })));
+const Worksheets = safeLazy(() => import("./pages/Worksheets").then(m => ({ default: ((m as any).default || (m as any).Worksheets) as React.ComponentType<any> })));
+const ExerciseSolver = safeLazy(() => import('./pages/ExerciseSolver').then(m => ({ default: ((m as any).default || (m as any).ExerciseSolver) as React.ComponentType<any> })));
+const PdfToWord = safeLazy(() => import('./pages/PdfToWord').then(m => ({ default: ((m as any).default || (m as any).PdfToWord) as React.ComponentType<any> })));
+const ExamGenerator = safeLazy(() => import('./pages/ExamGenerator').then(m => ({ default: ((m as any).default || (m as any).ExamGenerator) as React.ComponentType<any> })));
+const StudentExamView = safeLazy(() => import('./pages/StudentExamView').then(m => ({ default: ((m as any).default || (m as any).StudentExamView) as React.ComponentType<any> })));
+const ClassMap = safeLazy(() => import('./pages/ClassMap').then(m => ({ default: ((m as any).default || (m as any).ClassMap) as React.ComponentType<any> })));
+const HomeroomManagement = safeLazy(() => import('./pages/HomeroomManagement').then(m => ({ default: ((m as any).default || (m as any).HomeroomManagement) as React.ComponentType<any> })));
+const WeeklyTimetable = safeLazy(() => import('./pages/WeeklyTimetable').then(m => ({ default: ((m as any).default || (m as any).WeeklyTimetable) as React.ComponentType<any> })));
+const Gamification = safeLazy(() => import('./pages/Gamification').then(m => ({ default: ((m as any).default || (m as any).Gamification) as React.ComponentType<any> })));
+const MathTools = safeLazy(() => import('./pages/MathTools').then(m => ({ default: ((m as any).default || (m as any).MathTools) as React.ComponentType<any> })));
 
 
 

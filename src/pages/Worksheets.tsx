@@ -2,7 +2,7 @@ import { apiFetch } from '../lib/apiFetch';
 import { GDPT_2018_SUBJECTS } from '../lib/subjects';
 import LZString from 'lz-string';
 import { exportHtmlToWord, exportElementToImage } from "../lib/exportUtils";
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { 
   BookOpen, Download, AlertCircle, Edit3, Eye, Printer, Share2, Copy, CheckCircle2, 
   ExternalLink, Upload, FileText, Palette, LayoutTemplate, GitFork, Sparkles, Zap, Image as ImageIcon, Sliders, Check
@@ -1046,4 +1046,7 @@ export function Worksheets() {
     </div>
   );
 }
+
+export default Worksheets;
+
 

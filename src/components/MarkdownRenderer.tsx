@@ -18,11 +18,13 @@ import {
   rescueAccidentalFullMathBlock, 
   sanitizeAndPolishMath, 
   sanitizeExamQuestion,
-  fixLatexAndPunctuation,
-  healBrokenVietnameseWords,
   sanitizeMathBeforeRender,
   normalizeMathLatex,
-  normalizeMathContent
+  normalizeMathContent,
+  normalizeSetNotation,
+  fixNakedLeqGeq,
+  rescueVietnameseFromMath,
+  normalizeLogicAndSetSymbols
 } from '../lib/utils';
 
 export { 
@@ -31,12 +33,14 @@ export {
   cleanVietnameseUnicode, 
   rescueAccidentalFullMathBlock, 
   sanitizeAndPolishMath, 
-  sanitizeExamQuestion,
-  fixLatexAndPunctuation,
-  healBrokenVietnameseWords,
-  sanitizeMathBeforeRender,
-  normalizeMathLatex,
-  normalizeMathContent
+  sanitizeExamQuestion, 
+  sanitizeMathBeforeRender, 
+  normalizeMathLatex, 
+  normalizeMathContent,
+  normalizeSetNotation,
+  fixNakedLeqGeq,
+  rescueVietnameseFromMath,
+  normalizeLogicAndSetSymbols
 };
 
 /**
@@ -75,12 +79,10 @@ export const fixInlineOptionText = (text: string): string => {
     .replace(/(?<=[0-9\$\)\]\}])(hoặc|hay)/gi, ' $1')
     .replace(/(?<=[0-9\$\)\]\}])và(?!(?:o|i|ng|c|t)\b)/gi, ' và');
 
-  // Bước 2: Sửa lỗi đóng/mở $$ bị rách giữa biểu thức (vd: \ge 3$$ hoặc $$m \le -1)
+  // Bước 2: Đảm bảo khoảng trắng rõ ràng giữa các biểu thức toán nối bằng liên từ (không làm rách cặp dấu $...$)
   res = res
-    .replace(/\$\$\s*(hoặc|và|hay)\s*\$\$/gi, ' $1 ')
-    .replace(/\$\$\s*(hoặc|và|hay)\s*/gi, '$ $1 ')
-    .replace(/\s*(hoặc|và|hay)\s*\$\$/gi, ' $1 $')
-    .replace(/\$\s*(hoặc|và|hay)\s*\$/gi, ' $1 ');
+    .replace(/(?<!\$)\$(?!\$)\s*(hoặc|và|hay|với)\s*(?<!\$)\$(?!\$)/gi, '$$ $1 $$')
+    .replace(/\$\$\s*(hoặc|và|hay|với)\s*\$\$/gi, '$$ $1 $$');
 
   // Bước 3: Nếu một phương án chứa công thức nhưng thiếu cặp dấu $ ở đầu/cuối:
   // Ví dụ: `m \ge 3 hoặc m+2 \le 1` -> `$m \ge 3$ hoặc $m+2 \le 1$`
@@ -124,11 +126,12 @@ export const MarkdownRenderer = ({
   inline?: boolean; 
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  let processedContent = healBrokenVietnameseWords(fixLatexAndPunctuation(content || ''));
-  processedContent = sanitizeExamQuestion(processedContent);
+  let processedContent = sanitizeExamQuestion(content || '');
+  processedContent = normalizeLogicAndSetSymbols(processedContent);
   processedContent = polishMathText(processedContent);
   processedContent = sanitizeMathBeforeRender(processedContent);
   processedContent = normalizeMathLatex(processedContent);
+  processedContent = normalizeLogicAndSetSymbols(processedContent);
 
   // Chuẩn hóa phương án trắc nghiệm: bóc tách chữ tiếng Việt và sửa rách dấu $$
   if (/^\s*(?:[-*]\s*)?(?:\*{0,2})[A-Da-d][\.\:\)]/i.test(processedContent.trim())) {
@@ -138,11 +141,11 @@ export const MarkdownRenderer = ({
     return `${lineStart}${label}${fixInlineOptionText(optText)}`;
   });
 
+  processedContent = normalizeSetNotation(processedContent);
   processedContent = formatMathContent(processedContent);
   processedContent = fixMath(processedContent);
-  processedContent = fixLatexAndPunctuation(processedContent);
-  processedContent = healBrokenVietnameseWords(processedContent);
   processedContent = normalizeMathLatex(processedContent);
+  processedContent = normalizeSetNotation(processedContent);
 
   // 0. Unescape escaped dollar signs so KaTeX/remark-math parses them as math delimiters
   processedContent = processedContent.replace(/\\(\$)/g, '$1');
@@ -185,6 +188,25 @@ export const MarkdownRenderer = ({
     }
     return `$${trimmed}$${trailingPunct}`;
   });
+
+  // Dọn dẹp dấu $ thừa/rách (ví dụ: $$$ -> $, $$$$ -> $$)
+  processedContent = processedContent.replace(/\${3,}/g, (m) => m.length % 2 === 1 ? '$' : '$$');
+
+  // Cứu các câu hỏi tiếng Việt bị dính vào môi trường toán
+  processedContent = rescueVietnameseFromMath(processedContent);
+
+  // Chuẩn hóa khối display math $$...$$: nếu có nhiều dòng, đảm bảo dấu mở $$ và đóng $$ luôn ở dòng riêng biệt
+  // Điều này ngăn remark-math bị lỗi "Expected EOF got \end{cases}" và nuốt luôn câu văn tiếng Việt phía sau
+  processedContent = processedContent.replace(/\$\$([\s\S]*?)\$\$/g, (_match, body) => {
+    const trimmed = body.trim();
+    if (!trimmed.includes('\n')) {
+      return `$$${trimmed}$$`;
+    }
+    return `\n\n$$\n${trimmed}\n$$\n\n`;
+  });
+
+  // Xóa dấu chấm mồ côi ngay sau khối $$...$$ trước khi bắt đầu câu mới tiếng Việt
+  processedContent = processedContent.replace(/(\$\$[\s\S]*?\$\$)\s*\.\s*(?=[A-ZÀ-Ỹ])/g, '$1\n\n');
 
   // 0.1 Unwrap any existing code blocks around SVG
   processedContent = processedContent.replace(/```[a-z]*\s*(<svg[\s\S]*?<\/svg>)\s*```/gi, '$1');
@@ -340,12 +362,7 @@ export const MarkdownRenderer = ({
         rehypePlugins={[rehypeRaw, [rehypeKatex, { strict: false, throwOnError: false, errorColor: 'inherit' }]]}
         components={{
           p: ({ node, children, ...props }: any) => {
-            const childArray = React.Children.toArray(children);
-            // Khắc phục triệt để lỗi dấu hỏi chấm (?) hoặc dấu chấm mồ côi rớt xuống dòng riêng
-            if (childArray.length === 1 && typeof childArray[0] === 'string' && /^\s*[?\.!:]\s*$/.test(childArray[0])) {
-              return null;
-            }
-            const firstChild = childArray[0];
+            const firstChild = React.Children.toArray(children)[0];
             const isQuestion = typeof firstChild === 'string' && /^\s*(?:\*\*)?(?:Câu|Bài|\d+\.)\s*\d*/i.test(firstChild);
             return (
               <div className={`leading-relaxed ${isQuestion ? 'mt-6 mb-2 font-medium text-slate-900 text-base sm:text-lg' : 'my-3'}`} {...props}>
@@ -426,7 +443,7 @@ export const MarkdownRenderer = ({
             // Check if items are multiple choice options (- **A.** ...)
             const isChoiceList = childArray.length >= 2 && childArray.length <= 4 && childArray.some((child: any) => {
               const text = getNodePlainText(child?.props?.children);
-              return /(?:^|[\s\(\[])[A-D][\.\)]/.test(text);
+              return /\b[A-D][\.\)]/.test(text);
             });
 
             if (isChoiceList) {
@@ -451,7 +468,7 @@ export const MarkdownRenderer = ({
             };
 
             const text = getNodePlainText(children);
-            const isChoice = /^\s*(?:\*\*)?[A-D][\.\)]/.test(text) || /(?:^|[\s\(\[])[A-D][\.\)]/.test(text);
+            const isChoice = /^\s*(?:\*\*)?[A-D][\.\)]/.test(text) || /\b[A-D][\.\)]/.test(text);
             if (isChoice) {
               return (
                 <li className="flex items-baseline gap-2 py-1.5 px-3 rounded-lg bg-slate-50/70 border border-slate-200 text-slate-800 hover:bg-slate-100 transition-colors shadow-none list-none m-0" {...props}>
