@@ -19,7 +19,13 @@ import {
   type ParagraphChild,
   type FileChild,
 } from 'docx';
-import { fixInlineOptionText, sanitizeMathBeforeRender } from './utils';
+import {
+  fixInlineOptionText,
+  sanitizeMathBeforeRender,
+  sanitizeLatexString,
+  wrapNakedMathEnvironments,
+  preProcessMathContent
+} from './utils';
 
 interface RunStyle {
   bold?: boolean;
@@ -45,15 +51,27 @@ function latexToOmmlComponent(rawTex: string, isBlock: boolean = false): any {
     return new TextRun({ text: '' });
   }
 
-  const cleanTex = rawTex.trim()
+  let cleanTex = sanitizeLatexString(rawTex.trim())
     .replace(/^\\\[|\\\]$/g, '')
     .replace(/^\\\(|\\\)$/g, '')
+    .replace(/^\\\$|\\\$$/g, '')
     .replace(/\\dotfill\b/g, '')
     .trim();
 
+  // Đảm bảo không bị thiếu delimiter \right. khi có \left[
+  const leftBracketCount = (cleanTex.match(/\\left\s*\[/g) || []).length;
+  const rightBracketCount = (cleanTex.match(/\\right\s*[.\]\)\}]/g) || []).length;
+  if (leftBracketCount > rightBracketCount) {
+    cleanTex += ' \\right.';
+  }
+
+  // Đảm bảo môi trường đa dòng (aligned, cases, array, matrix, split, gather, align) sử dụng displayMode
+  const hasMultlineEnv = /\\begin\s*\{(?:aligned|cases|array|matrix|pmatrix|bmatrix|vmatrix|Vmatrix|split|gather|align)\*?\}/.test(cleanTex);
+  const effectiveDisplayMode = isBlock || hasMultlineEnv;
+
   try {
     const mathmlHtml = katex.renderToString(cleanTex, {
-      displayMode: isBlock,
+      displayMode: effectiveDisplayMode,
       output: 'mathml',
       throwOnError: false,
     });
@@ -163,17 +181,19 @@ function getNodeLatexOrText(node: Node): string {
     // Check for preprocessed OMML math token
     if (el.classList.contains('omml-math-node')) {
       const tex = decodeURIComponent(el.getAttribute('data-latex') || '');
-      return `$${tex}$`;
+      const isBlock = el.getAttribute('data-block') === '1';
+      return isBlock ? `\n$$${tex}$$\n` : `$${tex}$`;
     }
 
     // Check for KaTeX element
     if (el.classList.contains('katex') || el.classList.contains('katex-display')) {
       const ann = el.querySelector("annotation[encoding='application/x-tex']") || el.querySelector("annotation");
+      const isBlock = el.classList.contains('katex-display') || !!el.closest('.katex-display');
       if (ann && ann.textContent) {
-        return `$${ann.textContent.trim()}$`;
+        return isBlock ? `\n$$${ann.textContent.trim()}$$\n` : `$${ann.textContent.trim()}$`;
       }
       const texAttr = el.getAttribute('data-tex') || el.getAttribute('data-latex');
-      if (texAttr) return `$${texAttr}$`;
+      if (texAttr) return isBlock ? `\n$$${texAttr}$$\n` : `$${texAttr}$`;
     }
 
     // Guard: ignore internal KaTeX structures so they never leak raw text
@@ -218,11 +238,12 @@ interface TextOrMathToken {
 /**
  * Robust tokenizer that splits a string into alternating plain text and LaTeX math tokens.
  * Accurately parses $...$, $$...$$, \(...\), \[...\] without stripping or losing any math content or punctuation.
+ * Also catches un-delimited naked math environments (\begin{aligned}, \begin{cases}, \left[...\right.).
  */
 function tokenizeTextAndMath(rawText: string): TextOrMathToken[] {
   if (!rawText) return [];
   const tokens: TextOrMathToken[] = [];
-  const mathRegex = /(\$\$[\s\S]*?\$\$|\$(?!\$)(?:[^\$\n]+|\\begin\{[a-zA-Z*]+\}[\s\S]*?\\end\{[a-zA-Z*]+\})(?<!\$)\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\))/g;
+  const mathRegex = /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$(?!\$)(?:[\s\S]+?)(?<!\$)\$|\\left\s*\[[\s\S]*?\\right\.?|\\begin\{(?:aligned|cases|array|matrix|pmatrix|bmatrix|vmatrix|Vmatrix|split|gather|align)\*?\}[\s\S]*?\\end\{(?:aligned|cases|array|matrix|pmatrix|bmatrix|vmatrix|Vmatrix|split|gather|align)\*?\})/g;
   let lastIdx = 0;
   let match: RegExpExecArray | null;
 
@@ -243,11 +264,18 @@ function tokenizeTextAndMath(rawText: string): TextOrMathToken[] {
       isBlock = true;
     } else if (fullMath.startsWith('$') && fullMath.endsWith('$')) {
       cleanMath = fullMath.slice(1, -1).trim();
+      if (/\\begin\{(?:aligned|cases|array|matrix|split|gather|align)\*?\}|\\left\s*\[/i.test(cleanMath) && cleanMath.includes('\n')) {
+        isBlock = true;
+      }
     } else if (fullMath.startsWith('\\[') && fullMath.endsWith('\\]')) {
       cleanMath = fullMath.slice(2, -2).trim();
       isBlock = true;
     } else if (fullMath.startsWith('\\(') && fullMath.endsWith('\\)')) {
       cleanMath = fullMath.slice(2, -2).trim();
+    } else {
+      // Naked math environment detected
+      cleanMath = fullMath.trim();
+      isBlock = cleanMath.includes('\n') || cleanMath.length > 35;
     }
 
     tokens.push({
@@ -1269,6 +1297,30 @@ export async function exportHtmlToWord(
 
   try {
     const clone = element.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll('.no-print, button, input, select, textarea').forEach(el => el.remove());
+
+    // 0. Pre-process naked math environments in DOM text nodes before word translation
+    const walkAndPreprocessTextNodes = (node: Node) => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const text = node.textContent || '';
+        if (/(\\left\s*\[|\\begin\s*\{(?:aligned|cases|array|matrix)\*?\})/i.test(text)) {
+          const parent = node.parentNode;
+          if (parent && !['SCRIPT', 'STYLE', 'CODE', 'PRE'].includes(parent.nodeName)) {
+            const safeText = preProcessMathContent(text);
+            if (safeText !== text) {
+              node.textContent = safeText;
+            }
+          }
+        }
+        return;
+      }
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const el = node as HTMLElement;
+        if (el.classList.contains('katex') || el.classList.contains('omml-math-node')) return;
+        Array.from(node.childNodes).forEach(walkAndPreprocessTextNodes);
+      }
+    };
+    walkAndPreprocessTextNodes(clone);
 
     // 1. Pre-process TikZ SVGs into high-res PNGs
     const origTikzWrappers = Array.from(element.querySelectorAll('.tikz-wrapper, .svg-wrapper, svg')) as HTMLElement[];
@@ -1489,5 +1541,6 @@ export async function exportElementToImage(
     }
   }
 }
+
 
 

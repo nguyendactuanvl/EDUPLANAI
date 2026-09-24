@@ -335,10 +335,24 @@ function getAiClient(req: any) {
   if (customKey) {
     try { customKey = decodeURIComponent(customKey); } catch (e) {}
     customKey = customKey.replace(/[^\x20-\x7E]/g, '').trim();
-    return new GoogleGenAI({ apiKey: customKey });
+    return new GoogleGenAI({ 
+      apiKey: customKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build'
+        }
+      }
+    });
   }
   
-  return new GoogleGenAI({ apiKey: process.env.CUSTOM_GEMINI_API_KEY || process.env.GEMINI_API_KEY || "missing" });
+  return new GoogleGenAI({ 
+    apiKey: process.env.CUSTOM_GEMINI_API_KEY || process.env.GEMINI_API_KEY || "missing",
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build'
+      }
+    }
+  });
 }
 
 function handleAiError(error: any, req: any, res: any) {
@@ -371,9 +385,9 @@ function handleAiError(error: any, req: any, res: any) {
   }
   if (lowerMsg.includes("503") || error?.status === 503 || lowerMsg.includes("unavailable")) {
     if (!isCustomKey) {
-        return res.status(503).json({ error: "Hệ thống đang quá tải hoặc tạm thời không khả dụng do nhu cầu cao (503). Vui lòng thử lại sau ít phút hoặc sử dụng API Key cá nhân." });
+        return res.status(429).json({ error: "Hệ thống đang quá tải hoặc tạm thời không khả dụng do nhu cầu cao (429). Vui lòng thử lại sau ít phút hoặc sử dụng API Key cá nhân." });
     }
-    return res.status(503).json({ error: "Hệ thống AI của Google đang quá tải (503). Vui lòng đợi vài giây và thử lại." });
+    return res.status(429).json({ error: "Hệ thống AI của Google đang quá tải (429). Vui lòng đợi vài giây và thử lại." });
   }
 
   if (lowerMsg.includes("bad escaped character") || lowerMsg.includes("unexpected token") || lowerMsg.includes("syntaxerror")) {
@@ -619,9 +633,24 @@ function safeJsonParse<T = any>(text: string, fallback?: T): T {
 
 async function generateWithFallback(req: any, payloadOptions: any) {
   const client = getAiClient(req);
-  const models = ["gemini-3.8-flash", "gemini-3.1-pro-preview", "gemini-flash-latest", "gemini-3.1-flash-lite"];
-  let primaryError: any = null;
+  const isCustomKey = !!req.headers['x-gemini-api-key'] || (!!req.headers['authorization'] && (req.headers['authorization'] as string).startsWith('Bearer '));
   
+  // Prioritize active, fast, responsive models with available quota
+  const models = [
+    "gemini-3-flash-preview",
+    "gemini-3.5-flash-lite",
+    "gemini-flash-lite-latest",
+    "gemini-3.5-flash",
+    "gemini-3.8-flash",
+    "gemini-3.6-flash",
+    "gemini-3.7-flash",
+    "gemini-flash-latest"
+  ];
+  if (isCustomKey) {
+    models.push("gemini-3.1-pro-preview");
+  }
+
+  let primaryError: any = null;
   const maxRetries = 3;
   
   for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -657,9 +686,8 @@ async function generateWithFallback(req: any, payloadOptions: any) {
         return await client.models.generateContent(updatedPayload);
   
       } catch (e: any) {
-        const errorMsg = e?.message || "";
         const status = e?.status;
-        
+        console.warn(`[generateWithFallback] Model ${model} status ${status}. Retrying fallback...`);
         const lowerMsg = (e?.message || "").toLowerCase();
         
         // Immediately throw if it's an invalid API key to notify user
@@ -671,12 +699,11 @@ async function generateWithFallback(req: any, payloadOptions: any) {
         const is404 = lowerMsg.includes("not found") || status === 404 || lowerMsg.includes("is not found") || lowerMsg.includes("not exist") || lowerMsg.includes("no longer available") || status === 400;
         
         if (is429) {
-          // Always overwrite primary error with 429, as it's the most actionable rate-limit error.
           primaryError = e;
+          await delay(300);
           continue; 
         }
         if (is404) {
-          // Only set primary error to 404 if we don't already have one (like a 429).
           if (!primaryError) primaryError = e;
           continue;
         }
@@ -686,13 +713,12 @@ async function generateWithFallback(req: any, payloadOptions: any) {
     
     // If all models failed with 429/503, wait and retry
     if (primaryError && attempt < maxRetries - 1) {
-      
-      await delay(2000 * (attempt + 1) + Math.random() * 1000);
+      await delay(2500 * (attempt + 1) + Math.random() * 1000);
     }
   }
   
   if (primaryError) throw primaryError;
-  throw new Error("503 UNAVAILABLE: Hệ thống đang quá tải hoặc tạm thời không khả dụng do nhu cầu cao (503). Vui lòng thử lại sau ít phút hoặc sử dụng API Key cá nhân.");
+  throw new Error("429 RESOURCE_EXHAUSTED: Hệ thống đang quá tải hoặc tạm thời không khả dụng do nhu cầu cao (429). Vui lòng thử lại sau ít phút hoặc sử dụng API Key cá nhân.");
 }
 
 app.all("/api/circulars", async (req, res) => {
@@ -928,7 +954,7 @@ ${MATH_FORMATTING_RULES}
 - Câu trắc nghiệm (mc): mảng "options" phải có ĐÚNG 4 phần tử dạng chuỗi. "correctOptionIndex" là chỉ số đáp án đúng (0, 1, 2, 3).
 - Câu đúng/sai (tf): "tfStatements" phải là mảng ĐÚNG 4 đối tượng [{ "statement": "...", "correct": true/false }].
 - Câu trả lời ngắn (sa): "correctAnswer" BẮT BUỘC là MỘT SỐ CỤ THỂ có độ dài TỐI ĐA 4 KÝ TỰ (ví dụ: "22", "-3.5", "13", "102"). Tuyệt đối không dùng dạng mở hay công thức.
-${detailedSolution !== false ? '- BẮT BUỘC kèm lời giải chi tiết (explanation) rõ ràng, chuẩn xác sư phạm cho từng câu hỏi.' : '- Giáo viên KHÔNG yêu cầu lời giải chi tiết. Hãy để trường "explanation" là chuỗi ngắn gọn để tối ưu tốc độ tạo đề.'}
+${detailedSolution !== false ? '- BẮT BUỘC KÈM TRƯỜNG "solution": Lời giải chi tiết từng bước biến đổi rõ ràng, kèm lý do chọn đáp án, viết bằng công thức LaTeX chuẩn cho TẤT CẢ các câu hỏi (mc, tf, sa, essay).' : '- Hãy để trường "solution" là lời giải ngắn gọn để tối ưu tốc độ tạo đề.'}
 
 BẮT BUỘC TRẢ VỀ DUY NHẤT MỘT ĐỐI TƯỢNG JSON HỢP LỆ VỚI CẤU TRÚC SAU:
 {
@@ -942,7 +968,7 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT MỘT ĐỐI TƯỢNG JSON HỢP LỆ VỚI C
       "content": "Nội dung câu hỏi...",
       "options": ["Phương án A", "Phương án B", "Phương án C", "Phương án D"],
       "correctOptionIndex": 0,
-      "explanation": "Lời giải chi tiết..."
+      "solution": "Lời giải chi tiết từng bước biến đổi, kèm lý do chọn đáp án..."
     },
     {
       "id": 2,
@@ -956,7 +982,7 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT MỘT ĐỐI TƯỢNG JSON HỢP LỆ VỚI C
         { "statement": "Khẳng định c", "correct": true },
         { "statement": "Khẳng định d", "correct": false }
       ],
-      "explanation": "Lời giải chi tiết cho 4 ý..."
+      "solution": "Lời giải chi tiết cho 4 ý..."
     },
     {
       "id": 3,
@@ -964,7 +990,7 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT MỘT ĐỐI TƯỢNG JSON HỢP LỆ VỚI C
       "level": "Vận dụng",
       "content": "Tính diện tích tam giác $ABC$... (Kết quả làm tròn đến hàng đơn vị).",
       "correctAnswer": "25",
-      "explanation": "Lời giải chi tiết..."
+      "solution": "Lời giải chi tiết..."
     },
     {
       "id": 4,
@@ -972,7 +998,7 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT MỘT ĐỐI TƯỢNG JSON HỢP LỆ VỚI C
       "level": "Vận dụng cao",
       "content": "Nội dung bài toán tự luận...",
       "correctAnswer": "Hướng dẫn chấm chi tiết",
-      "explanation": "Lời giải chi tiết..."
+      "solution": "Lời giải chi tiết..."
     }
   ]
 }`;
@@ -1021,13 +1047,18 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT MỘT ĐỐI TƯỢNG JSON HỢP LỆ VỚI C
       parsedData.questions = [];
     }
 
-    parsedData.questions = parsedData.questions.map((q: any, idx: number) => ({
-      ...q,
-      id: q.id || idx + 1,
-      type: q.type || 'mc',
-      level: q.level || 'Nhận biết',
-      isRealWorld: Boolean(q.isRealWorld)
-    }));
+    parsedData.questions = parsedData.questions.map((q: any, idx: number) => {
+      const sol = (q.solution || q.explanation || "").trim();
+      return {
+        ...q,
+        id: q.id || idx + 1,
+        type: q.type || 'mc',
+        level: q.level || 'Nhận biết',
+        isRealWorld: Boolean(q.isRealWorld),
+        solution: sol,
+        explanation: sol
+      };
+    });
 
     return parsedData;
   });
@@ -1416,8 +1447,9 @@ app.all("/api/generate-interactive-worksheet", async (req, res) => {
        - sa: Trả lời ngắn (kết quả là 1 số cụ thể có độ dài tối đa 4 ký tự trong "correctAnswer". ĐẶC BIỆT CHỦ ĐỀ TẬP HỢP: Tuyệt đối không ra đề dạng tìm tập hợp hay viết khoảng/đoạn; bắt buộc hỏi số phần tử nguyên, tính biểu thức T = a+b hoặc độ dài khoảng để đáp số là một con số).
        - essay: Tự luận (nội dung đề bài và hướng dẫn chấm cụ thể)
     ${MATH_FORMATTING_RULES}
-    3. BẮT BUỘC SỬA LỖI CHÍNH TẢ tiếng Việt thật cẩn thận.
-    4. BẮT BUỘC TRẢ VỀ DUY NHẤT MỘT ĐỐI TƯỢNG JSON VỚI CẤU TRÚC SAU:
+    3. BẮT BUỘC KÈM TRƯỜNG "solution": Lời giải chi tiết từng bước biến đổi, kèm lý do chọn đáp án, viết bằng công thức LaTeX chuẩn cho TẤT CẢ các câu hỏi (mc, tf, sa, essay).
+    4. BẮT BUỘC SỬA LỖI CHÍNH TẢ tiếng Việt thật cẩn thận.
+    5. BẮT BUỘC TRẢ VỀ DUY NHẤT MỘT ĐỐI TƯỢNG JSON VỚI CẤU TRÚC SAU:
     {
       "examName": "Phiếu bài tập: ${lesson}",
       "questions": [
@@ -1426,7 +1458,7 @@ app.all("/api/generate-interactive-worksheet", async (req, res) => {
           "content": "Nội dung câu hỏi...",
           "options": ["Đáp án 1", "Đáp án 2", "Đáp án 3", "Đáp án 4"],
           "correctOptionIndex": 0, // Vị trí đáp án đúng (0, 1, 2, 3)
-          "explanation": "Giải thích..."
+          "solution": "Lời giải chi tiết từng bước biến đổi, kèm lý do chọn đáp án..."
         },
         {
           "type": "tf",
@@ -1437,18 +1469,19 @@ app.all("/api/generate-interactive-worksheet", async (req, res) => {
             { "statement": "Ý c...", "correct": true },
             { "statement": "Ý d...", "correct": false }
           ],
-          "explanation": "Giải thích..."
+          "solution": "Lời giải chi tiết từng bước biến đổi cho 4 ý..."
         },
         {
           "type": "sa",
           "content": "Nội dung câu trả lời ngắn...",
           "correctAnswer": "Giá trị/Từ khóa đúng (ngắn gọn)",
-          "explanation": "Giải thích..."
+          "solution": "Lời giải chi tiết từng bước biến đổi..."
         },
         {
           "type": "essay",
           "content": "Nội dung tự luận...",
-          "correctAnswer": "Hướng dẫn chấm/Đáp án gợi ý chi tiết"
+          "correctAnswer": "Hướng dẫn chấm/Đáp án gợi ý chi tiết",
+          "solution": "Lời giải chi tiết từng bước biến đổi..."
         }
       ]
     }
@@ -1466,10 +1499,13 @@ app.all("/api/generate-interactive-worksheet", async (req, res) => {
     
     // Process questions
     const formattedQuestions = (parsedData.questions || []).map((q: any, idx: number) => {
+       const sol = (q.solution || q.explanation || "").trim();
        return {
          ...q,
          id: idx + 1,
-         number: idx + 1
+         number: idx + 1,
+         solution: sol,
+         explanation: sol
        };
     });
 
@@ -1558,7 +1594,7 @@ YÊU CẦU PHONG CÁCH: A4 CHUẨN IN ẤN (Đen trắng / Tiết kiệm mực -
       } else if (answerMode === 'summary') {
         answerPrompt = 'Ở cuối tài liệu, hãy cung cấp bảng đáp số/đáp án ngắn gọn (dạng bảng đáp án trắc nghiệm và kết số tự luận), phân cách bằng tiêu đề "--- BẢNG ĐÁP ÁN NHANH ---".';
       } else {
-        answerPrompt = 'Ở cuối tài liệu, hãy cung cấp phần Hướng dẫn giải chi tiết từng câu, phân cách bằng tiêu đề "--- HƯỚNG DẪN CHẤM / ĐÁP ÁN CHI TIẾT ---".';
+        answerPrompt = 'Ở cuối tài liệu, hãy cung cấp phần Hướng dẫn giải chi tiết từng câu, phân cách bằng tiêu đề "--- HƯỚNG DẪN CHẤM / ĐÁP ÁN CHI TIẾT ---". BẮT BUỘC giải thích chi tiết từng bước biến đổi, kèm lý do chọn đáp án, viết bằng công thức LaTeX chuẩn cho từng câu hỏi.';
       }
 
       const prompt = `Bạn là một giáo viên xuất sắc môn ${subject || "chung"}. Hãy tạo một Phiếu học tập (Worksheet) thật chuyên nghiệp, trực quan cho học sinh lớp ${grade}, bài học/chủ đề: "${lesson}".
@@ -2126,5 +2162,6 @@ if (!process.env.VERCEL) {
   }
 }
 export default app;
+
 
 

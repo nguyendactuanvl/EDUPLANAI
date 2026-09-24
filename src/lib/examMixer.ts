@@ -11,6 +11,7 @@ export interface MixerQuestion {
   correctAnswer?: string;
   tfStatements?: { statement: string; correct: boolean }[];
   explanation?: string;
+  solution?: string;
   level?: string;
   isRealWorld?: boolean;
   topic?: string;
@@ -154,13 +155,42 @@ export function shuffleMultipleChoiceOptions(
   const shuffledObjects = shouldShuffleOptions ? fisherYatesShuffle(optionObjects) : optionObjects;
   const newCorrectIdx = shuffledObjects.findIndex(item => item.isCorrect);
   const finalCorrectIdx = newCorrectIdx >= 0 ? newCorrectIdx : 0;
+  const oldCorrectLetter = String.fromCharCode(65 + originalCorrectIdx);
   const finalCorrectLetter = String.fromCharCode(65 + finalCorrectIdx);
+
+  let updatedSolution = q.solution ?? q.explanation ?? "";
+  let updatedExplanation = q.explanation ?? q.solution ?? "";
+
+  // Nếu vị trí đáp án thay đổi và có lời giải nhắc trực tiếp đến nhãn đáp án cũ (A, B, C, D)
+  if (shouldShuffleOptions && oldCorrectLetter !== finalCorrectLetter) {
+    const updateLabel = (text: string) => {
+      if (!text) return text;
+      let s = text;
+      // 1. "chọn (đáp án/phương án) X" hoặc "do đó/vậy chọn X"
+      const r1 = new RegExp(`(\\b(?:chọn|chọn\\s+đáp\\s+án|chọn\\s+phương\\s+án|do\\s+đó\\s+chọn|vậy\\s+chọn)\\s+)\\b${oldCorrectLetter}\\b`, 'gi');
+      s = s.replace(r1, `$1${finalCorrectLetter}`);
+
+      // 2. "đáp án (đúng là) X"
+      const r2 = new RegExp(`(\\b(?:đáp\\s+án(?:\\s+đúng(?:\\s+là)?)?|phương\\s+án(?:\\s+đúng(?:\\s+là)?)?)\\s+)\\b${oldCorrectLetter}\\b`, 'gi');
+      s = s.replace(r2, `$1${finalCorrectLetter}`);
+
+      // 3. "\text{chọn } X"
+      const r3 = new RegExp(`(\\\\text\\{chọn\\s*\\}\\s*)\\b${oldCorrectLetter}\\b`, 'gi');
+      s = s.replace(r3, `$1${finalCorrectLetter}`);
+
+      return s;
+    };
+    updatedSolution = updateLabel(updatedSolution);
+    updatedExplanation = updateLabel(updatedExplanation);
+  }
 
   return {
     ...q,
     options: shuffledObjects.map(item => item.text),
     correctOptionIndex: finalCorrectIdx,
-    correctAnswer: finalCorrectLetter
+    correctAnswer: finalCorrectLetter,
+    solution: updatedSolution,
+    explanation: updatedExplanation
   };
 }
 
@@ -209,7 +239,9 @@ export function mixExam(
   const taggedQuestions: MixerQuestion[] = originalQuestions.map((q, idx) => ({
     ...q,
     originalId: q.id || idx + 1,
-    section: identifyQuestionSection(q)
+    section: identifyQuestionSection(q),
+    solution: q.solution ?? q.explanation ?? "",
+    explanation: q.explanation ?? q.solution ?? ""
   }));
 
   for (let i = 0; i < totalExams; i++) {

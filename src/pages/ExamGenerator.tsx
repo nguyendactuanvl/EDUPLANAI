@@ -11,7 +11,8 @@ import { Link } from 'lucide-react';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import { exportHtmlToWord } from '../lib/exportUtils';
-import { fixMath, cleanQuestionStem, parseApiResponse, cleanOptionText, getPublicAppUrl, isRealWorldQuestion, sanitizeShortAnswerInput, validateShortAnswer, compareShortAnswers } from '../lib/utils';
+import { fixMath, cleanQuestionStem, parseApiResponse, cleanOptionText, getPublicAppUrl, isRealWorldQuestion, sanitizeShortAnswerInput, validateShortAnswer, compareShortAnswers, sanitizeLatexString } from '../lib/utils';
+import { ensureMathRendered } from '../lib/print';
 import { saveExamToCloud, SYSTEM_EXAM_WEBHOOK } from '../lib/cloudExamStore';
 import { STANDARDIZED_EXAM_TYPES, getDefaultDurationForExamType, formatExamTitle, normalizeExamType } from '../lib/examConfig';
 import { OnlineExamConfigModal } from "../components/OnlineExamConfigModal";
@@ -35,6 +36,7 @@ import { FileCheck, Sparkles, Shuffle, Download, Share2, Plus, Trash2, Printer, 
 interface Question {
   type?: "mc" | "tf" | "sa" | "essay" | "MULTIPLE_CHOICE" | "TRUE_FALSE" | "SHORT_ANSWER" | "ESSAY";
   explanation?: string;
+  solution?: string;
   id: number;
   content: string;
   options?: string[];
@@ -864,6 +866,23 @@ export function ExamGenerator() {
 
 const [examName, setExamName] = useState("");
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [showAllSolutions, setShowAllSolutions] = useState(false);
+  const [expandedSolutionIds, setExpandedSolutionIds] = useState<Record<number, boolean>>({});
+  const [includeDetailedSolution, setIncludeDetailedSolution] = useState(true);
+
+  const toggleSolution = (qId: number) => {
+    setExpandedSolutionIds(prev => ({
+      ...prev,
+      [qId]: !(prev[qId] ?? showAllSolutions)
+    }));
+  };
+  const isSolutionOpen = (qId: number) => expandedSolutionIds[qId] ?? showAllSolutions;
+  const toggleAllSolutions = () => {
+    const next = !showAllSolutions;
+    setShowAllSolutions(next);
+    setExpandedSolutionIds({});
+  };
+
   const [matrixStructure, setMatrixStructure] = useState<{topic: string, subtopics: string[]}[]>([]);
   const [draggedTopicIdx, setDraggedTopicIdx] = useState<number | null>(null);
   const [draggedSubtopic, setDraggedSubtopic] = useState<{tIdx: number, sIdx: number} | null>(null);
@@ -897,6 +916,7 @@ const [examName, setExamName] = useState("");
   const [newQuestionTopic, setNewQuestionTopic] = useState("");
 
   const handleLoadSampleExam = () => {
+    setError(null);
     setQuestions(SAMPLE_MATH_QUESTIONS as Question[]);
     setExamName(SAMPLE_MATH_EXAM_NAME);
     setDuration(SAMPLE_MATH_DURATION);
@@ -910,6 +930,7 @@ const [examName, setExamName] = useState("");
       alert("Không tìm thấy câu hỏi hợp lệ trong đoạn văn bản. Vui lòng định dạng theo mẫu: Câu 1: ... A. ... B. ... C. ... D. ...");
       return;
     }
+    setError(null);
     const currentMaxId = questions.reduce((max, q) => Math.max(max, q.id || 0), 0);
     const reindexed = parsed.map((q, idx) => ({ ...q, id: currentMaxId + idx + 1 }));
     setQuestions(prev => [...prev, ...reindexed]);
@@ -980,6 +1001,7 @@ const [examName, setExamName] = useState("");
     setNewQuestionOptions(["", "", "", ""]);
     setNewQuestionAnswer("");
     setNewQuestionExplanation("");
+    setError(null);
     setActiveTab("exam");
   };
 
@@ -1117,7 +1139,13 @@ ${realWorldPrompt ? `${realWorldPrompt}\n\n` : ""}${qEnabled.sa ? `RÀNG BUỘC 
       const data = parseApiResponse<any>(text);
       if (data && Array.isArray(data.questions) && data.questions.length > 0) {
         setExamName(data.examName || "Đề kiểm tra");
-        setQuestions(data.questions);
+        const formatted = data.questions.map((q: any, idx: number) => ({
+          ...q,
+          id: q.id || idx + 1,
+          solution: (q.solution || q.explanation || "").trim(),
+          explanation: (q.solution || q.explanation || "").trim()
+        }));
+        setQuestions(formatted);
         setActiveTab("exam");
       } else {
         throw new Error("Không tìm thấy danh sách câu hỏi trong phản hồi của AI. Thầy cô có thể bấm nút 'Tải đề mẫu' bên dưới để dùng ngay hoặc thử tạo lại.");
@@ -1165,9 +1193,10 @@ ${realWorldPrompt ? `${realWorldPrompt}\n\n` : ""}${qEnabled.sa ? `RÀNG BUỘC 
     exportHtmlToWord(printContent, `De_kiem_tra_Ma_${code}_Anh.doc`, 'image');
   };
 
-  const handlePrint = (contentId: string) => {
+  const handlePrint = async (contentId: string) => {
     const printContent = document.getElementById(contentId);
     if (!printContent) return;
+    await ensureMathRendered(printContent);
     const windowPrint = window.open('', '', 'left=0,top=0,width=800,height=900,toolbar=0,scrollbars=0,status=0');
     windowPrint?.document.write(`
       <html>
@@ -2295,21 +2324,33 @@ ${realWorldPrompt ? `${realWorldPrompt}\n\n` : ""}${qEnabled.sa ? `RÀNG BUỘC 
 
                     <div className="flex flex-wrap items-center justify-between gap-3 mb-6 pb-4 border-b border-slate-100">
                       <h2 className="text-xl font-bold text-slate-800">{examName}</h2>
-                      {(() => {
-                        const rwCount = questions.filter(q => isRealWorldQuestion(q)).length;
-                        return (
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs px-2.5 py-1 bg-slate-100 text-slate-700 rounded-full font-medium">
-                              Tổng: {questions.length} câu
-                            </span>
-                            {rwCount > 0 && (
-                              <span className="text-xs px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full font-semibold flex items-center gap-1">
-                                <Compass className="w-3.5 h-3.5" /> {rwCount} câu thực tế ({Math.round(rwCount / questions.length * 100)}%)
+                      <div className="flex flex-wrap items-center gap-2">
+                        {(() => {
+                          const rwCount = questions.filter(q => isRealWorldQuestion(q)).length;
+                          return (
+                            <>
+                              <span className="text-xs px-2.5 py-1 bg-slate-100 text-slate-700 rounded-full font-medium">
+                                Tổng: {questions.length} câu
                               </span>
-                            )}
-                          </div>
-                        );
-                      })()}
+                              {rwCount > 0 && (
+                                <span className="text-xs px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full font-semibold flex items-center gap-1">
+                                  <Compass className="w-3.5 h-3.5" /> {rwCount} câu thực tế ({Math.round(rwCount / questions.length * 100)}%)
+                                </span>
+                              )}
+                            </>
+                          );
+                        })()}
+                        {questions.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={toggleAllSolutions}
+                            className="px-3 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                            title="Bật/Tắt hiển thị lời giải chi tiết cho tất cả câu hỏi"
+                          >
+                            <span>{showAllSolutions ? "🙈 Ẩn tất cả lời giải" : "👁️ Hiện tất cả lời giải"}</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                     {questions.map((q, idx) => (
                       <div key={idx} className="pb-4 border-b border-slate-100 last:border-0">
@@ -2363,6 +2404,31 @@ ${realWorldPrompt ? `${realWorldPrompt}\n\n` : ""}${qEnabled.sa ? `RÀNG BUỘC 
                             <span className="font-semibold text-emerald-800">Đáp án:</span> <MarkdownRenderer className="markdown-body inline-block" content={fixMath(q.correctAnswer || '')} />
                           </div>
                         )}
+
+                        {/* Lời giải chi tiết accordion */}
+                        <div className="mt-3 pl-2 no-print">
+                          <button
+                            type="button"
+                            onClick={() => toggleSolution(q.id || idx + 1)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 transition-colors cursor-pointer"
+                          >
+                            <span>{isSolutionOpen(q.id || idx + 1) ? "🙈 Ẩn lời giải" : "💡 Xem lời giải chi tiết"}</span>
+                          </button>
+
+                          {isSolutionOpen(q.id || idx + 1) && (
+                            <div 
+                              style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '12px', marginTop: '8px' }}
+                              className="text-slate-800 text-sm leading-relaxed"
+                            >
+                              <div className="font-bold text-slate-900 mb-1.5 flex items-center gap-1.5">
+                                <span>💡 Lời giải chi tiết:</span>
+                              </div>
+                              <div className="text-slate-800">
+                                <MarkdownRenderer content={fixMath(q.solution || q.explanation || "Chưa có lời giải chi tiết cho câu hỏi này.")} />
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -2487,6 +2553,14 @@ ${realWorldPrompt ? `${realWorldPrompt}\n\n` : ""}${qEnabled.sa ? `RÀNG BUỘC 
                       </button>
                       <button onClick={() => setShowBubbleSheetModal(true)} className="px-3 sm:px-4 py-2 bg-white border border-emerald-600 text-emerald-700 font-medium rounded-lg hover:bg-emerald-50 flex items-center gap-2 shadow-sm">
                         <FileText className="w-4 h-4" /> <span className="hidden sm:inline">In Phiếu Tô</span>
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={toggleAllSolutions}
+                        className="px-3 sm:px-4 py-2 bg-amber-50 border border-amber-300 text-amber-900 font-bold rounded-lg hover:bg-amber-100 flex items-center gap-2 shadow-sm cursor-pointer"
+                        title="Bật/Tắt hiển thị lời giải chi tiết cho tất cả mã đề"
+                      >
+                        <span>{showAllSolutions ? "🙈 Ẩn tất cả lời giải" : "👁️ Hiện tất cả lời giải"}</span>
                       </button>
                     </div>
                   </div>
@@ -2818,6 +2892,37 @@ ${realWorldPrompt ? `${realWorldPrompt}\n\n` : ""}${qEnabled.sa ? `RÀNG BUỘC 
                             </button>
                           </div>
                         </div>
+
+                        {/* Tùy chọn In & Xuất file: Kèm lời giải (Bản GV) vs Không kèm lời giải (Bản HS) */}
+                        <div className="bg-slate-50 px-6 py-2.5 border-b border-slate-200 flex flex-wrap items-center gap-4 text-xs">
+                          <span className="font-bold text-slate-700 flex items-center gap-1">
+                            📄 Chế độ In & Xuất file:
+                          </span>
+                          <label className="flex items-center gap-1.5 cursor-pointer">
+                            <input
+                              type="radio"
+                              name={`sol-mode-${exam.code}`}
+                              checked={includeDetailedSolution}
+                              onChange={() => setIncludeDetailedSolution(true)}
+                              className="w-4 h-4 text-emerald-600 focus:ring-emerald-500"
+                            />
+                            <span className="font-bold text-emerald-800">
+                              Kèm theo lời giải chi tiết (Bản dành cho Giáo viên)
+                            </span>
+                          </label>
+                          <label className="flex items-center gap-1.5 cursor-pointer">
+                            <input
+                              type="radio"
+                              name={`sol-mode-${exam.code}`}
+                              checked={!includeDetailedSolution}
+                              onChange={() => setIncludeDetailedSolution(false)}
+                              className="w-4 h-4 text-slate-600 focus:ring-slate-500"
+                            />
+                            <span className="font-medium text-slate-600">
+                              Không kèm lời giải chi tiết (Bản dành cho Học sinh)
+                            </span>
+                          </label>
+                        </div>
                         <div className="p-6">
                           <div id={`print-exam-${exam.code}`} style={{ fontFamily: '"Times New Roman", Times, serif', color: '#000000', lineHeight: 1.35 }}>
                             {/* Standard Vietnamese School Exam Header */}
@@ -2967,6 +3072,52 @@ ${realWorldPrompt ? `${realWorldPrompt}\n\n` : ""}${qEnabled.sa ? `RÀNG BUỘC 
                                     (Học sinh ghi câu trả lời vào phiếu thi)
                                   </div>
                                 )}
+
+                                {/* Lời giải chi tiết - Toggle trên màn hình xem thử */}
+                                <div className="mt-2.5 no-print">
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleSolution(100000 + (index * 1000) + idx + 1)}
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 transition-colors cursor-pointer"
+                                  >
+                                    <span>{isSolutionOpen(100000 + (index * 1000) + idx + 1) ? "🙈 Ẩn lời giải" : "💡 Xem lời giải chi tiết"}</span>
+                                  </button>
+                                  {isSolutionOpen(100000 + (index * 1000) + idx + 1) && (
+                                    <div 
+                                      style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '12px', marginTop: '8px' }}
+                                      className="text-slate-800 text-sm leading-relaxed"
+                                    >
+                                      <div className="font-bold text-slate-900 mb-1.5 flex items-center gap-1.5">
+                                        <span>💡 Lời giải chi tiết:</span>
+                                      </div>
+                                      <div className="text-slate-800">
+                                        <MarkdownRenderer content={fixMath(q.solution || q.explanation || "Chưa có lời giải chi tiết.")} />
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Lời giải chi tiết - Kèm theo khi In và Xuất Word (Bản Giáo viên) */}
+                                {includeDetailedSolution && (q.solution || q.explanation) && (
+                                  <div 
+                                    style={{ 
+                                      backgroundColor: '#f8fafc', 
+                                      border: '1px solid #cbd5e1', 
+                                      borderRadius: '6px', 
+                                      padding: '8pt 10pt', 
+                                      marginTop: '6pt', 
+                                      marginBottom: '8pt',
+                                      pageBreakInside: 'avoid'
+                                    }}
+                                  >
+                                    <div style={{ fontWeight: 'bold', color: '#0f172a', marginBottom: '3pt', fontSize: '11pt' }}>
+                                      💡 Lời giải chi tiết:
+                                    </div>
+                                    <div style={{ fontSize: '11pt', color: '#1e293b' }}>
+                                      <MarkdownRenderer className="markdown-body inline-block" content={fixMath(q.solution || q.explanation || '')} />
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             </React.Fragment>
                           );
@@ -3035,6 +3186,38 @@ ${realWorldPrompt ? `${realWorldPrompt}\n\n` : ""}${qEnabled.sa ? `RÀNG BUỘC 
                                 })}
                               </tbody>
                             </table>
+
+                            {/* Hướng dẫn giải chi tiết đầy đủ ở cuối đề cho Bản Giáo viên */}
+                            {includeDetailedSolution && (
+                              <div style={{ pageBreakBefore: 'always', marginTop: '20pt' }}>
+                                <div className="answers-title text-center font-bold text-base uppercase mt-8 mb-4" style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '13pt', textTransform: 'uppercase', marginBottom: '12pt' }}>
+                                  HƯỚNG DẪN GIẢI CHI TIẾT (Mã đề {exam.code})
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8pt' }}>
+                                  {exam.questions.map((q, qIdx) => (
+                                    <div 
+                                      key={'sol-page-' + qIdx} 
+                                      style={{ 
+                                        backgroundColor: '#f8fafc', 
+                                        border: '1px solid #cbd5e1', 
+                                        borderRadius: '6px', 
+                                        padding: '8pt 12pt', 
+                                        pageBreakInside: 'avoid',
+                                        fontSize: '11pt',
+                                        lineHeight: 1.4
+                                      }}
+                                    >
+                                      <div style={{ fontWeight: 'bold', color: '#0f172a', marginBottom: '4pt' }}>
+                                        Câu {qIdx + 1}:
+                                      </div>
+                                      <div style={{ color: '#1e293b' }}>
+                                        <MarkdownRenderer className="markdown-body inline-block" content={fixMath(q.solution || q.explanation || 'Chưa có lời giải chi tiết.')} />
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -4402,4 +4585,5 @@ Lời giải: Tiệm cận ngang là $y = 1$ nên ý c sai.`);
     </div>
   );
 }
+
 

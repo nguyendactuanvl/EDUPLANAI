@@ -24,7 +24,9 @@ import {
   normalizeSetNotation,
   fixNakedLeqGeq,
   rescueVietnameseFromMath,
-  normalizeLogicAndSetSymbols
+  normalizeLogicAndSetSymbols,
+  sanitizeLatexString,
+  preProcessMathContent
 } from '../lib/utils';
 
 export { 
@@ -40,7 +42,9 @@ export {
   normalizeSetNotation,
   fixNakedLeqGeq,
   rescueVietnameseFromMath,
-  normalizeLogicAndSetSymbols
+  normalizeLogicAndSetSymbols,
+  sanitizeLatexString,
+  preProcessMathContent
 };
 
 /**
@@ -126,7 +130,8 @@ export const MarkdownRenderer = ({
   inline?: boolean; 
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  let processedContent = sanitizeExamQuestion(content || '');
+  let processedContent = sanitizeLatexString(content || '');
+  processedContent = sanitizeExamQuestion(processedContent);
   processedContent = normalizeLogicAndSetSymbols(processedContent);
   processedContent = polishMathText(processedContent);
   processedContent = sanitizeMathBeforeRender(processedContent);

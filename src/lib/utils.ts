@@ -424,8 +424,46 @@ export function isInsideMath(text: string, pos: number): boolean {
 }
 
 /**
+ * Làm sạch và chuẩn hóa chuỗi công thức LaTeX:
+ * 1. Chuẩn hóa ký hiệu Hy Lạp viết thiếu backslash: thay thế các từ độc lập như \bDelta\b thành \Delta, \bpi\b thành \pi (nếu chưa có \)
+ * 2. Sửa lỗi escape đơn vị đo:
+ *    - Thay thế các dạng (\d+)\s*text\s*([a-zA-Z]+) hoặc (\d+)\s*\\text\s*([a-zA-Z]+) thành $1\\text{ $2} (ví dụ: 6textcm -> 6\text{ cm})
+ *    - Đảm bảo đơn vị hiển thị thẳng đứng và có khoảng cách hợp lý
+ * 3. Sửa lỗi cú pháp số mũ / ký hiệu độ:
+ *    - Thay thế \^\\+\s*circ hoặc \^\{\\+\s*circ\} thành ^\circ (xóa triệt để các dấu backslash dư thừa \\)
+ * 4. Không can thiệp vào các chuỗi LaTeX đã chuẩn sẵn để tránh làm hỏng các công thức bình thường.
+ */
+export function sanitizeLatexString(text: string): string {
+  if (!text) return '';
+  let s = text;
+
+  // 1. Chuẩn hóa ký hiệu Hy Lạp viết thiếu backslash:
+  // Thay thế từ độc lập Delta thành \Delta (nếu chưa có dấu \)
+  s = s.replace(/(?<!\\)\bDelta\b/g, '\\Delta');
+
+  // Chuẩn hóa pi: thay thế 2pi, k2pi, hoặc \bpi\b đứng độc lập thành \pi
+  // Bảo vệ không đụng vào từ tiếng Anh thông thường (pin, topic, spin, opinion, v.v.)
+  s = s.replace(/(\d+)\s*pi\b/g, '$1\\pi');
+  s = s.replace(/(?<![\\a-zA-Z])\bpi\b(?![a-zA-Z])/g, '\\pi');
+
+  // 2. Sửa lỗi escape đơn vị đo:
+  // Thay thế 6textcm, 4textm, 10textcm, 6\textcm, 6\text{cm} thành $1\text{ $2}
+  s = s.replace(/(\d+)\s*\\*text\s*\{?\s*([a-zA-Z]+)\s*\}?/g, '$1\\text{ $2}');
+
+  // 3. Sửa lỗi cú pháp số mũ / ký hiệu độ:
+  // Thay thế 50^\ circ, 50^\\ circ, 50^{\ circ}, 50^{\\ circ}, 50^circ thành 50^\circ
+  s = s.replace(/\^\{\s*\\+\s*circ\s*\}/g, '^\\circ');
+  s = s.replace(/\^\{\s*circ\s*\}/g, '^\\circ');
+  s = s.replace(/\^\s*\\+\s*circ\b/g, '^\\circ');
+  s = s.replace(/(?<=\d)\s*\^\s*circ\b/g, '^\\circ');
+
+  return s;
+}
+
+/**
  * Tự động bọc $$...$$ cho các môi trường toán trần (naked LaTeX environments) khi chưa có $ hoặc $$ bao bọc:
  * - \left[\begin{aligned}...\end{aligned}\right. (kèm tham số họ nghiệm lượng giác \quad (k \in \mathbb{Z}))
+ * - \left[\begin{array}...\end{array}\right. hoặc \left[...\right.
  * - \begin{cases}...\end{cases} (hệ phương trình / hệ BPT)
  * - Các môi trường khác: matrix, pmatrix, bmatrix, vmatrix, array, align, gather...
  */
@@ -433,20 +471,37 @@ export function wrapNakedMathEnvironments(text: string): string {
   if (!text) return '';
   let s = text;
 
-  // 1. Tự động bọc naked \left[\begin{aligned}...\end{aligned}\right.
-  s = s.replace(/(\\left\s*\[\s*\\begin\s*\{aligned\*?\}[\s\S]*?\\end\s*\{aligned\*?\}\s*\\right\.?(?:\s*\\quad\s*\([^\)]+\))?)/g, (match, env, offset) => {
+  // 1. Tự động bọc naked \left[ ... \right. (bao gồm có hoặc không có aligned/array bên trong)
+  s = s.replace(/(\\left\s*\[[\s\S]*?\\right\.?(?:\s*\\quad\s*\([^\)]+\))?)/g, (match, env, offset) => {
     if (isInsideMath(s, offset)) return match;
-    return `\n\n$$\n${env.trim()}\n$$\n\n`;
+    let safeEnv = env.trim();
+    // Tự động bổ sung \right. nếu thiếu
+    if (!/\\right\s*[.\]\)\}]/.test(safeEnv)) {
+      safeEnv = safeEnv + ' \\right.';
+    }
+    const isBlock = safeEnv.includes('\n') || safeEnv.length > 35;
+    return isBlock ? `\n\n$$\n${safeEnv}\n$$\n\n` : ` $${safeEnv}$ `;
   });
 
-  // 2. Tự động bọc các môi trường trần khác: cases, matrix, array... (trừ khi nằm sau \left[ hoặc đã nằm trong math)
+  // 2. Tự động bọc các môi trường trần khác: cases, aligned, array, matrix... (trừ khi nằm sau \left[ hoặc đã nằm trong math)
   s = s.replace(/(\\begin\s*\{(?:cases|aligned|array|matrix|pmatrix|bmatrix|vmatrix|Vmatrix|split|gather|align)\*?\}[\s\S]*?\\end\s*\{(?:cases|aligned|array|matrix|pmatrix|bmatrix|vmatrix|Vmatrix|split|gather|align)\*?\})/g, (match, env, offset) => {
-    const before = s.slice(Math.max(0, offset - 15), offset);
-    if (/\\left\s*[\(\[\{]$/.test(before) || isInsideMath(s, offset)) return match;
-    return `\n\n$$\n${env.trim()}\n$$\n\n`;
+    const before = s.slice(Math.max(0, offset - 25), offset);
+    if (/\\left\s*[\(\[\{\.]$/.test(before.trim()) || isInsideMath(s, offset)) return match;
+    const isBlock = env.includes('\n') || env.length > 35;
+    return isBlock ? `\n\n$$\n${env.trim()}\n$$\n\n` : ` $${env.trim()}$ `;
   });
 
   return s;
+}
+
+/**
+ * Tiền xử lý nội dung toán tổng thể trước khi xuất Word (.docx) hoặc xuất HTML In
+ */
+export function preProcessMathContent(content: string): string {
+  if (!content) return '';
+  let res = sanitizeLatexString(content);
+  res = wrapNakedMathEnvironments(res);
+  return res;
 }
 
 /**
@@ -933,7 +988,8 @@ export const normalizeSetNotation = (text: string): string => {
  */
 export const sanitizeExamQuestion = (rawContent: string): string => {
   if (!rawContent) return '';
-  let content = normalizeSetNotation(rawContent.trim());
+  let content = sanitizeLatexString(rawContent.trim());
+  content = normalizeSetNotation(content);
 
   const hasVietnameseWords = (str: string): boolean => {
     const withoutText = str.replace(/\\text\{[^{}]*\}/g, '');
@@ -1090,7 +1146,8 @@ export const sanitizeAndPolishMath = (content: string): string => {
  */
 export const sanitizeMathBeforeRender = (content: string): string => {
   if (!content) return '';
-  let text = normalizeLogicAndSetSymbols(polishMathText(content));
+  let text = sanitizeLatexString(content);
+  text = normalizeLogicAndSetSymbols(polishMathText(text));
 
   // BƯỚC 0: Tự động chuyển đổi XML OMML Word Equation nếu có
   text = convertOmmlToLatex(text);
@@ -1333,7 +1390,7 @@ export function wrapLatex(text: string): string {
 
 export function cleanOptionText(opt: any): string {
   if (!opt && opt !== 0) return '';
-  let text = String(opt).trim();
+  let text = sanitizeLatexString(String(opt).trim());
   
   // 0. Chuẩn hóa dấu tiếng Việt (Unicode NFD -> NFC) và loại bỏ thẻ <br> gây rớt dòng chữ lẻ loi
   text = cleanVietnameseUnicode(text);
@@ -1435,7 +1492,7 @@ export function getPublicAppUrl(): string {
 
 export function cleanQuestionStem(content: any, options?: any[], tfStatements?: any[]): string {
   if (!content) return '';
-  let text = String(content).trim();
+  let text = sanitizeLatexString(String(content).trim());
   
   // Strip any leaked preamble packages
   text = text.replace(/\\(usetikzlibrary|usepackage)\s*\{[^}]*\}\s*/gi, '');
@@ -1629,7 +1686,8 @@ export const wrapAllNakedMath = (str: string): string => {
 export const fixMath = (text: any) => {
     if (!text || text === 'undefined') return '';
     if (typeof text !== 'string') text = String(text);
-    let t = normalizeLogicAndSetSymbols(normalizeMathLatex(text.trim()));
+    let t = sanitizeLatexString(text.trim());
+    t = normalizeLogicAndSetSymbols(normalizeMathLatex(t));
     
     // 0. Remove stray preamble packages that might be generated in math or TikZ
     t = t.replace(/\\(usetikzlibrary|usepackage)\s*\{[^}]*\}\s*/gi, '');
@@ -2029,6 +2087,7 @@ export function compareShortAnswers(userAns: string, correctAns: string): boolea
   }
   return false;
 }
+
 
 
 

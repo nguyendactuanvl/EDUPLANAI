@@ -13,6 +13,7 @@ export interface ParsedQuestion {
   correctAnswer?: string;
   tfStatements?: { statement: string; correct: boolean }[];
   explanation?: string;
+  solution?: string;
   imageUrl?: string;
   hasFigure?: boolean;
 }
@@ -27,6 +28,7 @@ export interface RawAiQuestion {
   correctOptionIndex?: number;
   tfStatements?: { statement: string; correct: boolean }[];
   explanation?: string;
+  solution?: string;
   imageUrl?: string;
   hasFigure?: boolean;
 }
@@ -99,13 +101,15 @@ export function formatAiQuestionsToParsed(rawQuestions: any[]): ParsedQuestion[]
         });
       }
 
+      const solText = q.solution ? fixMath(cleanMath(q.solution)) : (q.explanation ? fixMath(cleanMath(q.explanation)) : "");
       return {
         id: q.id || (idx + 1),
         type: 'tf',
         level: q.level || 'Thông hiểu',
         content: fixMath(cleanMath(rawContent.replace(/^(?:Câu|Bài|Question|Q)?\s*\d+[\.:\s]*/i, '').trim() || `Câu ${idx + 1}`)),
         tfStatements: statements,
-        explanation: q.explanation ? fixMath(cleanMath(q.explanation)) : undefined,
+        solution: solText,
+        explanation: solText || undefined,
         imageUrl: q.imageUrl || undefined,
         hasFigure: q.hasFigure ?? (!!q.imageUrl || undefined)
       };
@@ -115,13 +119,15 @@ export function formatAiQuestionsToParsed(rawQuestions: any[]): ParsedQuestion[]
     if (normalizedType === 'sa') {
       const rawAns = String(q.correctAnswer ?? q.correct ?? q.answer ?? '').trim();
       const sanitizedAns = sanitizeShortAnswerInput(rawAns) || cleanMath(rawAns).slice(0, 4);
+      const solText = q.solution ? fixMath(cleanMath(q.solution)) : (q.explanation ? fixMath(cleanMath(q.explanation)) : "");
       return {
         id: q.id || (idx + 1),
         type: 'sa',
         level: q.level || 'Vận dụng',
         content: fixMath(cleanMath(rawContent.replace(/^(?:Câu|Bài|Question|Q)?\s*\d+[\.:\s]*/i, '').trim() || `Câu ${idx + 1}`)),
         correctAnswer: sanitizedAns,
-        explanation: q.explanation ? fixMath(cleanMath(q.explanation)) : undefined,
+        solution: solText,
+        explanation: solText || undefined,
         imageUrl: q.imageUrl || undefined,
         hasFigure: q.hasFigure ?? (!!q.imageUrl || undefined)
       };
@@ -130,13 +136,15 @@ export function formatAiQuestionsToParsed(rawQuestions: any[]): ParsedQuestion[]
     // 3. Handle ESSAY ("essay" - Phần IV: Tự luận)
     if (normalizedType === 'essay') {
       const solutionText = String(q.correctAnswer ?? q.explanation ?? q.rubric ?? q.solution ?? '').trim();
+      const solText = q.solution ? fixMath(cleanMath(q.solution)) : (solutionText ? fixMath(cleanMath(solutionText)) : (q.explanation ? fixMath(cleanMath(q.explanation)) : ""));
       return {
         id: q.id || (idx + 1),
         type: 'essay',
         level: q.level || '1.0 điểm',
         content: fixMath(cleanMath(rawContent.replace(/^(?:Câu|Bài|Question|Q)?\s*\d+[\.:\s]*/i, '').trim() || `Câu ${idx + 1}`)),
         correctAnswer: solutionText ? fixMath(cleanMath(solutionText)) : undefined,
-        explanation: q.explanation ? fixMath(cleanMath(q.explanation)) : (solutionText ? fixMath(cleanMath(solutionText)) : undefined),
+        solution: solText,
+        explanation: solText || undefined,
         imageUrl: q.imageUrl || undefined,
         hasFigure: q.hasFigure ?? (!!q.imageUrl || undefined)
       };
@@ -174,6 +182,7 @@ export function formatAiQuestionsToParsed(rawQuestions: any[]): ParsedQuestion[]
     }
 
     const correctLetter = String.fromCharCode(65 + correctOptionIndex);
+    const solText = q.solution ? fixMath(cleanMath(q.solution)) : (q.explanation ? fixMath(cleanMath(q.explanation)) : "");
 
     return {
       id: q.id || (idx + 1),
@@ -183,7 +192,8 @@ export function formatAiQuestionsToParsed(rawQuestions: any[]): ParsedQuestion[]
       options: cleanedOptions,
       correctOptionIndex,
       correctAnswer: correctLetter,
-      explanation: q.explanation ? fixMath(cleanMath(q.explanation)) : undefined,
+      solution: solText,
+      explanation: solText || undefined,
       imageUrl: q.imageUrl || undefined,
       hasFigure: q.hasFigure ?? (!!q.imageUrl || undefined)
     };
@@ -533,13 +543,15 @@ export function parseRawExamText(rawText: string): ParsedQuestion[] {
           statements.push({ statement: `Ý ${subLabels[statements.length]}`, correct: false });
         }
 
+        const solText = explanation ? fixMath(cleanMath(explanation)) : "";
         results.push({
           id: globalId++,
           type: "tf",
           level: "Thông hiểu",
           content: fixMath(cleanMath(stem.replace(/^(?:Câu|Bài|Question|Q)?\s*\d+[\.:\s]*/i, '').trim() || `Câu ${globalId}`)),
           tfStatements: statements,
-          explanation: explanation ? fixMath(cleanMath(explanation)) : undefined
+          solution: solText,
+          explanation: solText || undefined
         });
         return;
       }
@@ -574,6 +586,7 @@ export function parseRawExamText(rawText: string): ParsedQuestion[] {
             correctOptionIndex = extractedCorrect.charCodeAt(0) - 65;
           }
 
+          const solText = explanation ? fixMath(cleanMath(explanation)) : "";
           results.push({
             id: globalId++,
             type: "mc",
@@ -582,7 +595,8 @@ export function parseRawExamText(rawText: string): ParsedQuestion[] {
             options: options,
             correctOptionIndex,
             correctAnswer: String.fromCharCode(65 + correctOptionIndex),
-            explanation: explanation ? fixMath(cleanMath(explanation)) : undefined
+            solution: solText,
+            explanation: solText || undefined
           });
           return;
         }
@@ -592,28 +606,33 @@ export function parseRawExamText(rawText: string): ParsedQuestion[] {
       if (sec.type === 'sa' || (extractedCorrect !== undefined && extractedCorrect.length <= 15)) {
         const rawAns = extractedCorrect || "1";
         const sanitizedAns = sanitizeShortAnswerInput(rawAns) || cleanMath(rawAns).slice(0, 4);
+        const solText = explanation ? fixMath(cleanMath(explanation)) : "";
         results.push({
           id: globalId++,
           type: "sa",
           level: "Vận dụng",
           content: fixMath(cleanMath(mainBlock.replace(/^(?:Câu|Bài|Question|Q)?\s*\d+[\.:\s]*/i, '').trim() || `Câu ${globalId}`)),
           correctAnswer: sanitizedAns,
-          explanation: explanation ? fixMath(cleanMath(explanation)) : undefined
+          solution: solText,
+          explanation: solText || undefined
         });
         return;
       }
 
       // 4. Kiểm tra Tự luận (Phần IV)
+      const solText = explanation ? fixMath(cleanMath(explanation)) : (extractedCorrect ? fixMath(cleanMath(extractedCorrect)) : "Lời giải và hướng dẫn chấm chi tiết");
       results.push({
         id: globalId++,
         type: "essay",
         level: "1.0 điểm",
         content: fixMath(cleanMath(mainBlock.replace(/^(?:Câu|Bài|Question|Q)?\s*\d+[\.:\s]*/i, '').trim() || `Câu ${globalId}`)),
-        correctAnswer: explanation ? fixMath(cleanMath(explanation)) : (extractedCorrect ? fixMath(cleanMath(extractedCorrect)) : "Lời giải và hướng dẫn chấm chi tiết"),
-        explanation: explanation ? fixMath(cleanMath(explanation)) : undefined
+        correctAnswer: solText,
+        solution: solText,
+        explanation: solText || undefined
       });
     });
   });
 
   return results;
 }
+

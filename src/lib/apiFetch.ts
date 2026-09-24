@@ -75,16 +75,31 @@ export async function apiFetch(url: string, options: RequestInit = {}): Promise<
       const text = await response.text();
       const lowerText = text.toLowerCase();
       console.warn("HTML ERROR RESPONSE:", text.substring(0, 500));
+
+      const isWarmupOrTemporary = lowerText.includes("warmup") || lowerText.includes("nginx") || response.status === 502 || response.status === 503 || response.status === 504 || response.status === 200;
+      if (isWarmupOrTemporary && attempt < maxRetries) {
+        console.warn(`[apiFetch] Received HTML/Warmup response (${response.status}). Retrying... (Attempt ${attempt + 1} of ${maxRetries})`);
+        window.dispatchEvent(new CustomEvent('api-retry-status', { 
+          detail: { 
+            attempt: attempt + 1, 
+            maxRetries, 
+            message: "Hệ thống AI/máy chủ đang xử lý dữ liệu hoặc phản hồi chậm. Đang tự động kết nối lại..." 
+          } 
+        }));
+        await delay(3000 + attempt * 2000);
+        continue;
+      }
+
       if (response.status === 504 || response.status === 502) {
         throw new Error("Hệ thống xử lý quá lâu và bị ngắt kết nối (Lỗi Timeout). Việc tạo tài liệu chi tiết (như Kế hoạch bài dạy, Đề thi) tốn rất nhiều thời gian. Vui lòng thử chia nhỏ yêu cầu, hoặc thiết lập API Key cá nhân để bỏ qua giới hạn của máy chủ proxy.");
       } else if (response.status === 413) {
         throw new Error("Dữ liệu quá lớn, đã bị hệ thống proxy/mạng từ chối. Vui lòng giảm dung lượng file hoặc nội dung yêu cầu.");
       } else if (lowerText.includes("aistudio_auth_flow") || lowerText.includes("action required") || lowerText.includes("aistudio-iframe") || lowerText.includes("cookie_check") || lowerText.includes("cookie check") || lowerText.includes("id=\"app\"") || lowerText.includes("id=\"root\"")) {
         throw new Error("Xác thực bảo mật của trình duyệt hết hạn hoặc API bị chặn (404). Vui lòng TẢI LẠI TRANG (nhấn F5) hoặc MỞ ỨNG DỤNG TRONG TAB MỚI. Nếu vẫn lỗi, hãy sử dụng tính năng 'Nhập mã API key' cá nhân.");
-      } else if (lowerText.includes("nginx")) {
-         throw new Error("Hệ thống máy chủ mạng (Nginx) đã chặn kết nối hoặc quá tải (Lỗi " + response.status + "). Vui lòng tải lại trang hoặc thiết lập API Key cá nhân để kết nối trực tiếp.");
+      } else if (lowerText.includes("warmup") || lowerText.includes("nginx")) {
+         throw new Error("Hệ thống máy chủ hoặc AI đang tạm thời khởi động / quá tải (Nginx Warmup). Thầy cô vui lòng bấm 'Thử tạo lại' sau ít phút hoặc nhập API Key cá nhân để kết nối trực tiếp.");
       } else {
-        throw new Error("Máy chủ trả về trang lỗi HTML thay vì JSON (Lỗi " + response.status + "). Hệ thống đang bảo trì, quá tải, hoặc xác thực bị lỗi.");
+        throw new Error("Máy chủ đang tạm thời bảo trì hoặc quá tải yêu cầu. Thầy cô vui lòng bấm 'Thử tạo lại' hoặc thiết lập API Key cá nhân trong phần Cài đặt.");
       }
     }
     if (response.ok) {

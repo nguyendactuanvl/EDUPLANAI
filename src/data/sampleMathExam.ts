@@ -11,6 +11,7 @@ export interface SampleQuestion {
   correctAnswer?: string;
   tfStatements?: { statement: string; correct: boolean }[];
   explanation?: string;
+  solution?: string;
 }
 
 export const SAMPLE_MATH_EXAM_NAME = "ĐỀ KIỂM TRA ĐỊNH KỲ TOÁN HỌC - KHUNG CHUẨN 2025";
@@ -309,3 +310,4 @@ export const SAMPLE_MATH_QUESTIONS: SampleQuestion[] = [
     explanation: "Gọi $x$ (m) là chiều rộng của khu đất (hai cạnh vuông góc với bờ tường), điều kiện $x > 0$.\nKhi đó chiều dài của khu đất (cạnh song song với bờ tường) là $y = \\frac{200}{x}$ (m).\n\nTổng chiều dài hàng rào lưới thép cần dùng là:\n$$L(x) = 2x + y = 2x + \\frac{200}{x} \\quad (x > 0).$$\n\nCách 1: Áp dụng bất đẳng thức Cauchy:\n$$L(x) = 2x + \\frac{200}{x} \\ge 2 \\sqrt{2x \\cdot \\frac{200}{x}} = 2 \\sqrt{400} = 40.$$\nDấu đẳng thức xảy ra khi:\n$$2x = \\frac{200}{x} \\Leftrightarrow 2x^2 = 200 \\Leftrightarrow x^2 = 100 \\Leftrightarrow x = 10 \\text{ (vì } x > 0\\text{)}.$$\nKhi đó $y = \\frac{200}{10} = 20\\text{ m}$.\n\nKết luận: Tổng chiều dài hàng rào ngắn nhất là $40\\text{ m}$ khi chiều rộng là $10\\text{ m}$ và chiều dài là $20\\text{ m}$."
   }
 ];
+

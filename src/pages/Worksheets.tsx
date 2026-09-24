@@ -12,8 +12,9 @@ import { ErrorBoundary } from "../components/ErrorBoundary";
 import { UploadTeacherExamModal } from "../components/UploadTeacherExamModal";
 import { saveToHistory, getHistory } from '../lib/history';
 import { HistoryItem } from '../types';
-import { cn, parseApiResponse } from "../lib/utils";
-import { printElement } from '../lib/print';
+import { cn, parseApiResponse, preProcessMathContent, sanitizeLatexString, fixMath, cleanQuestionStem, cleanOptionText } from "../lib/utils";
+import { parseRawExamText } from '../lib/examParser';
+import { printElement, ensureMathRendered } from '../lib/print';
 import { saveExamToCloud, saveExamToWebhook } from '../lib/cloudExamStore';
 
 export type LayoutStyle = 'a4_print' | 'infographic' | 'poster' | 'mindmap';
@@ -88,6 +89,36 @@ export function Worksheets() {
   const [suggestion, setSuggestion] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
+  
+  // Tùy chọn Lời giải chi tiết & Hiển thị
+  const [includeDetailedSolution, setIncludeDetailedSolution] = useState<boolean>(true);
+  const [showAllSolutions, setShowAllSolutions] = useState<boolean>(false);
+  const [openSolutions, setOpenSolutions] = useState<Record<string | number, boolean>>({});
+  const [worksheetQuestions, setWorksheetQuestions] = useState<any[]>([]);
+  const [viewMode, setViewMode] = useState<'document' | 'questions'>('document');
+
+  const toggleSolution = (id: string | number) => {
+    setOpenSolutions(prev => ({
+      ...prev,
+      [id]: !(prev[id] !== undefined ? prev[id] : showAllSolutions)
+    }));
+  };
+
+  const toggleAllSolutions = () => {
+    const nextState = !showAllSolutions;
+    setShowAllSolutions(nextState);
+    const updated: Record<string | number, boolean> = { 'doc-solution': nextState };
+    if (worksheetQuestions && worksheetQuestions.length > 0) {
+      worksheetQuestions.forEach((q, idx) => {
+        updated[q.id || idx + 1] = nextState;
+      });
+    }
+    setOpenSolutions(updated);
+  };
+
+  const isSolutionOpen = (id: string | number) => {
+    return openSolutions[id] !== undefined ? openSolutions[id] : showAllSolutions;
+  };
   
   useEffect(() => {
     setHistoryItems(getHistory().filter(item => item.type === 'PHT'));
@@ -247,6 +278,16 @@ export function Worksheets() {
       
       setShareLink(finalLink);
       
+      // Cập nhật danh sách câu hỏi để giáo viên kiểm tra lời giải chi tiết trực quan
+      const formattedQuestions = (examData.questions || []).map((q: any, idx: number) => ({
+        ...q,
+        id: q.id || idx + 1,
+        solution: (q.solution || q.explanation || "").trim(),
+        explanation: (q.explanation || q.solution || "").trim()
+      }));
+      setWorksheetQuestions(formattedQuestions);
+      setViewMode('questions');
+      
     } catch (err: any) {
       console.error(err);
       setError(err.message || "Không thể tạo phiếu bài tập tương tác lúc này.");
@@ -328,7 +369,21 @@ export function Worksheets() {
           throw new Error("Phản hồi từ máy chủ không đúng định dạng dữ liệu.");
         }
       }
-      setSuggestion(data.result);
+      const processedResult = preProcessMathContent(data.result);
+      setSuggestion(processedResult);
+      setViewMode('document');
+
+      // Tự động phân tích các câu hỏi để hiển thị accordion lời giải chi tiết
+      try {
+        const parsed = parseRawExamText(processedResult);
+        if (parsed && parsed.length > 0) {
+          setWorksheetQuestions(parsed);
+        } else {
+          setWorksheetQuestions([]);
+        }
+      } catch (e) {
+        setWorksheetQuestions([]);
+      }
       
       // Save to history
       saveToHistory({
@@ -336,7 +391,7 @@ export function Worksheets() {
         grade: selectedGrade,
         subject: subject,
         lessonName: customLessonName,
-        content: data.result
+        content: processedResult
       });
       setHistoryItems(getHistory().filter(item => item.type === 'PHT'));
     } catch (err: any) {
@@ -365,21 +420,25 @@ export function Worksheets() {
     }
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     if (isEditing) {
       alert("Vui lòng chuyển sang chế độ 'Xem trước' (con mắt) trước khi in hoặc xuất PDF.");
       return;
     }
     const cleanTitle = customLessonName ? `PhieuHocTap_${customLessonName.replace(/\s+/g, '_')}` : "PhieuHocTap";
+    if (exportRef.current) {
+      await ensureMathRendered(exportRef.current);
+    }
     printElement(exportRef.current, cleanTitle);
   };
 
-  const handleExportWord = () => {
+  const handleExportWord = async () => {
     if (isEditing) {
       if (window.confirm("Bạn đang ở chế độ chỉnh sửa (hiển thị mã Markdown). Bạn có muốn chuyển sang chế độ Xem trước để xuất file đẹp hơn không?")) {
         setIsEditing(false);
-        setTimeout(() => {
+        setTimeout(async () => {
           if (exportRef.current) {
+            await ensureMathRendered(exportRef.current);
             exportHtmlToWord(exportRef.current, `PhieuHocTap_${customLessonName.replace(/\s+/g, '_')}.doc`);
           }
         }, 500);
@@ -390,16 +449,18 @@ export function Worksheets() {
     }
 
     if (exportRef.current) {
+      await ensureMathRendered(exportRef.current);
       exportHtmlToWord(exportRef.current, `PhieuHocTap_${customLessonName.replace(/\s+/g, '_')}.doc`);
     }
   };
 
-  const handleExportWordLatex = () => {
+  const handleExportWordLatex = async () => {
     if (isEditing) {
       alert("Vui lòng chuyển sang chế độ 'Xem trước' (con mắt) trước khi tải xuống.");
       return;
     }
     if (exportRef.current) {
+      await ensureMathRendered(exportRef.current);
       exportHtmlToWord(exportRef.current, `PhieuHocTap_${customLessonName.replace(/\s+/g, '_')}_LaTeX.doc`, true);
     }
   };
@@ -777,28 +838,62 @@ export function Worksheets() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {suggestion && (
+            {(suggestion || worksheetQuestions.length > 0) && (
               <>
-                <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
-                  <button
-                    onClick={() => setIsEditing(false)}
-                    className={cn(
-                      "px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-colors flex items-center gap-1.5",
-                      !isEditing ? "bg-white text-emerald-700 shadow-xs" : "text-slate-500 hover:text-slate-700"
-                    )}
-                  >
-                    <Eye className="w-4 h-4" /> Xem trước
-                  </button>
-                  <button
-                    onClick={() => setIsEditing(true)}
-                    className={cn(
-                      "px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-colors flex items-center gap-1.5",
-                      isEditing ? "bg-white text-emerald-700 shadow-xs" : "text-slate-500 hover:text-slate-700"
-                    )}
-                  >
-                    <Edit3 className="w-4 h-4" /> Chỉnh sửa
-                  </button>
-                </div>
+                {suggestion && worksheetQuestions.length > 0 && (
+                  <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs">
+                    <button
+                      onClick={() => setViewMode('document')}
+                      className={cn(
+                        "px-2.5 py-1 rounded-md font-medium transition-all flex items-center gap-1",
+                        viewMode === 'document' ? "bg-white text-emerald-700 shadow-xs font-bold" : "text-slate-500 hover:text-slate-700"
+                      )}
+                    >
+                      <FileText className="w-3.5 h-3.5" /> Bản in phiếu
+                    </button>
+                    <button
+                      onClick={() => setViewMode('questions')}
+                      className={cn(
+                        "px-2.5 py-1 rounded-md font-medium transition-all flex items-center gap-1",
+                        viewMode === 'questions' ? "bg-white text-emerald-700 shadow-xs font-bold" : "text-slate-500 hover:text-slate-700"
+                      )}
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Chi tiết câu hỏi ({worksheetQuestions.length})
+                    </button>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={toggleAllSolutions}
+                  className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                  title="Bật/Tắt hiển thị lời giải chi tiết cho tất cả câu hỏi"
+                >
+                  <span>{showAllSolutions ? "🙈 Ẩn tất cả lời giải" : "👁️ Hiện tất cả lời giải"}</span>
+                </button>
+
+                {viewMode === 'document' && suggestion && (
+                  <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
+                    <button
+                      onClick={() => setIsEditing(false)}
+                      className={cn(
+                        "px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-colors flex items-center gap-1.5",
+                        !isEditing ? "bg-white text-emerald-700 shadow-xs" : "text-slate-500 hover:text-slate-700"
+                      )}
+                    >
+                      <Eye className="w-4 h-4" /> Xem trước
+                    </button>
+                    <button
+                      onClick={() => setIsEditing(true)}
+                      className={cn(
+                        "px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-colors flex items-center gap-1.5",
+                        isEditing ? "bg-white text-emerald-700 shadow-xs" : "text-slate-500 hover:text-slate-700"
+                      )}
+                    >
+                      <Edit3 className="w-4 h-4" /> Chỉnh sửa
+                    </button>
+                  </div>
+                )}
 
                 {/* Export Poster Image (PNG) */}
                 <button
@@ -864,6 +959,39 @@ export function Worksheets() {
             )}
           </div>
         </div>
+
+        {/* Tùy chọn In & Xuất file: Kèm lời giải (Bản GV) vs Không kèm lời giải (Bản HS) */}
+        {(suggestion || worksheetQuestions.length > 0) && (
+          <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex flex-wrap items-center gap-4 text-xs shrink-0">
+            <span className="font-bold text-slate-700 flex items-center gap-1">
+              📄 Chế độ In & Xuất file:
+            </span>
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input
+                type="radio"
+                name="worksheet-solution-mode"
+                checked={includeDetailedSolution}
+                onChange={() => setIncludeDetailedSolution(true)}
+                className="w-4 h-4 text-emerald-600 focus:ring-emerald-500"
+              />
+              <span className="font-bold text-emerald-800">
+                Kèm theo lời giải chi tiết (Bản dành cho Giáo viên)
+              </span>
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input
+                type="radio"
+                name="worksheet-solution-mode"
+                checked={!includeDetailedSolution}
+                onChange={() => setIncludeDetailedSolution(false)}
+                className="w-4 h-4 text-slate-600 focus:ring-slate-500"
+              />
+              <span className="font-medium text-slate-600">
+                Không kèm lời giải chi tiết (Bản dành cho Học sinh)
+              </span>
+            </label>
+          </div>
+        )}
         
         <div className="flex-1 overflow-y-auto bg-slate-100 p-4 sm:p-8">
           {isLoading ? (
@@ -876,28 +1004,20 @@ export function Worksheets() {
             </div>
           ) : (
             <div className="max-w-4xl mx-auto">
-              {suggestion ? (
-                isEditing ? (
-                  <textarea
-                    className="w-full h-[70vh] min-h-[500px] p-6 border border-slate-300 rounded-xl shadow-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none resize-none font-mono text-sm bg-white"
-                    value={suggestion}
-                    onChange={(e) => setSuggestion(e.target.value)}
-                  />
-                ) : (
-                  /* Preview Canvas Container Styled by LayoutStyle */
-                  <div 
-                    ref={exportRef}
-                    className={cn(
-                      "transition-all duration-300",
-                      layoutStyle === 'a4_print' && "bg-white p-8 md:p-12 shadow-sm border border-slate-300 rounded-xl min-h-[500px] font-serif text-slate-900 max-w-[210mm] mx-auto",
-                      layoutStyle === 'infographic' && "bg-gradient-to-b from-sky-50/40 via-white to-indigo-50/30 p-6 md:p-10 shadow-md border-2 border-indigo-200/80 rounded-2xl min-h-[500px]",
-                      layoutStyle === 'poster' && "bg-white p-6 md:p-10 shadow-xl border-4 border-indigo-500/80 rounded-3xl min-h-[500px]",
-                      layoutStyle === 'mindmap' && "bg-slate-50/80 p-6 md:p-10 shadow-md border-2 border-emerald-300/80 rounded-2xl min-h-[500px]"
-                    )}
-                  >
-                    {/* 1. Header decor for A4 Chuẩn In Ấn */}
-                    {layoutStyle === 'a4_print' && (
-                      <div className="border border-slate-800 mb-8 p-4 bg-white text-xs sm:text-sm text-slate-800 leading-normal">
+              {(() => {
+                const SOLUTION_DELIMITER_REGEX = /(?:\n\s*---+\s*(?:HƯỚNG DẪN CHẤM|ĐÁP ÁN CHI TIẾT|LỜI GIẢI CHI TIẾT|HƯỚNG DẪN GIẢI)[^\n]*---+\s*\n|\n\s*#{1,3}\s*(?:HƯỚNG DẪN CHẤM|ĐÁP ÁN CHI TIẾT|LỜI GIẢI CHI TIẾT|HƯỚNG DẪN GIẢI)\b[^\n]*\n)/i;
+                const delimiterMatch = suggestion ? suggestion.match(SOLUTION_DELIMITER_REGEX) : null;
+                const mainDocContent = delimiterMatch && delimiterMatch.index !== undefined ? suggestion.substring(0, delimiterMatch.index).trim() : suggestion;
+                const solutionDocContent = delimiterMatch && delimiterMatch.index !== undefined ? suggestion.substring(delimiterMatch.index).trim() : "";
+
+                if (viewMode === 'questions' && worksheetQuestions.length > 0) {
+                  return (
+                    <div 
+                      ref={exportRef}
+                      className="bg-white p-8 md:p-12 shadow-sm border border-slate-300 rounded-xl min-h-[500px] font-serif text-slate-900 max-w-[210mm] mx-auto space-y-6"
+                    >
+                      {/* School Exam Header for A4 Print */}
+                      <div className="border border-slate-800 mb-6 p-4 bg-white text-xs sm:text-sm text-slate-800 leading-normal">
                         <div className="grid grid-cols-2 gap-4 pb-3 border-b border-dashed border-slate-400">
                           <div>
                             <p className="font-semibold uppercase tracking-wider text-[11px] sm:text-xs">TRƯỜNG THPT / THCS: ................................................</p>
@@ -905,7 +1025,7 @@ export function Worksheets() {
                             <p className="mt-1 font-semibold">HỌ VÀ TÊN: ..............................................................</p>
                           </div>
                           <div className="text-right">
-                            <p className="font-bold uppercase text-slate-900 tracking-wide">PHIẾU HỌC TẬP: {customLessonName || "BÀI HỌC"}</p>
+                            <p className="font-bold uppercase text-slate-900 tracking-wide">PHIẾU BÀI TẬP: {customLessonName || "BÀI HỌC"}</p>
                             <p className="mt-1 text-slate-700">Môn: {subject} | Lớp {selectedGrade}</p>
                             <p className="mt-1 text-slate-600">Ngày: ...... / ...... / 202...</p>
                           </div>
@@ -921,116 +1041,302 @@ export function Worksheets() {
                           </div>
                         </div>
                       </div>
-                    )}
 
-                    {/* 2. Header decor for Infographic / Photographic */}
-                    {layoutStyle === 'infographic' && (
-                      <div className="mb-8">
-                        <div className="bg-gradient-to-r from-sky-600 via-indigo-600 to-purple-600 text-white p-6 sm:p-7 rounded-2xl shadow-md relative overflow-hidden">
-                          <div className="absolute right-0 top-0 translate-x-8 -translate-y-8 w-44 h-44 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
-                          <div className="flex flex-wrap items-center gap-2 mb-2.5">
-                            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-white/20 backdrop-blur-md text-sky-100 border border-white/20">
-                              {subject} • LỚP {selectedGrade}
-                            </span>
-                            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-400/20 text-emerald-200 border border-emerald-300/30 flex items-center gap-1">
-                              <Sparkles className="w-3.5 h-3.5" /> Infographic Học Tập Trực Quan
-                            </span>
+                      {/* Questions List with Accordion Toggle for Detailed Solution */}
+                      <div className="space-y-6">
+                        {worksheetQuestions.map((q, idx) => (
+                          <div key={idx} className="pb-4 border-b border-slate-200 last:border-0">
+                            <div className="font-medium text-slate-800 mb-3 flex items-start gap-2">
+                              <span className="font-bold whitespace-nowrap mt-1">Câu {idx + 1}:</span>
+                              <MarkdownRenderer className="markdown-body inline-block" content={cleanQuestionStem(q.content || (q as any).question || '', q.options, q.tfStatements)} />
+                              {q.level && <span className="text-xs text-emerald-600 font-normal mt-1 shrink-0">[{q.level}]</span>}
+                            </div>
+
+                            {/* TF */}
+                            {q.type === 'tf' && q.tfStatements && (
+                              <div className="flex flex-col gap-2 pl-4 mb-3">
+                                {q.tfStatements.map((stmt: any, sIdx: number) => (
+                                  <div key={sIdx} className="flex items-start gap-1 p-2 rounded-md bg-slate-50 border border-slate-200 text-sm">
+                                    <span className="shrink-0 font-medium">{['a)', 'b)', 'c)', 'd)'][sIdx] || String.fromCharCode(97 + sIdx) + ')'}</span>
+                                    <span className="flex-1"><MarkdownRenderer className="markdown-body inline-block" content={fixMath(stmt.statement || '')} /></span>
+                                    {includeDetailedSolution && (
+                                      <span className={`shrink-0 font-bold px-2 rounded text-xs ${stmt.correct ? 'text-emerald-700 bg-emerald-100' : 'text-red-700 bg-red-100'}`}>
+                                        {stmt.correct ? 'Đ' : 'S'}
+                                      </span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* MC */}
+                            {q.type === 'mc' && q.options && (() => {
+                              const cleanedOpts = q.options.map((opt: string) => cleanOptionText(opt));
+                              return (
+                                <div className="w-full space-y-2 pl-2 mt-2 mb-3">
+                                  {cleanedOpts.map((opt: string, oIdx: number) => (
+                                    <div key={oIdx} className={cn(
+                                      "w-full min-h-[38px] flex items-center px-4 py-2 text-left rounded-lg border text-sm break-words overflow-hidden",
+                                      includeDetailedSolution && oIdx === q.correctOptionIndex
+                                        ? "bg-emerald-50 border-emerald-300 font-medium text-emerald-950"
+                                        : "bg-slate-50/50 border-slate-200/80 text-slate-800"
+                                    )}>
+                                      <span className="shrink-0 font-semibold select-none min-w-[1.75rem]">{String.fromCharCode(65 + oIdx)}.</span>
+                                      <span className="flex-1 break-words overflow-hidden"><MarkdownRenderer className="markdown-body inline-block" content={fixMath(opt)} /></span>
+                                    </div>
+                                  ))}
+                                </div>
+                              );
+                            })()}
+
+                            {/* Short Answer / Essay answer */}
+                            {q.type !== 'mc' && q.type !== 'tf' && q.correctAnswer && includeDetailedSolution && (
+                              <div className="mt-2 pl-4 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm">
+                                <span className="font-semibold text-emerald-800">Đáp án:</span> <MarkdownRenderer className="markdown-body inline-block" content={fixMath(q.correctAnswer || '')} />
+                              </div>
+                            )}
+
+                            {/* Lời giải chi tiết - Accordion toggle trên màn hình */}
+                            <div className="mt-3 pl-2 no-print">
+                              <button
+                                type="button"
+                                onClick={() => toggleSolution(q.id || idx + 1)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 transition-colors cursor-pointer"
+                              >
+                                <span>{isSolutionOpen(q.id || idx + 1) ? "🙈 Ẩn lời giải" : "💡 Xem lời giải chi tiết"}</span>
+                              </button>
+
+                              {isSolutionOpen(q.id || idx + 1) && (
+                                <div 
+                                  style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '12px', marginTop: '8px' }}
+                                  className="text-slate-800 text-sm leading-relaxed"
+                                >
+                                  <div className="font-bold text-slate-900 mb-1.5 flex items-center gap-1.5">
+                                    <span>💡 Lời giải chi tiết:</span>
+                                  </div>
+                                  <div className="text-slate-800">
+                                    <MarkdownRenderer content={fixMath(q.solution || q.explanation || "Chưa có lời giải chi tiết cho câu hỏi này.")} />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Lời giải chi tiết - Kèm theo khi In và Xuất Word (Bản Giáo viên) */}
+                            {includeDetailedSolution && (q.solution || q.explanation) && (
+                              <div 
+                                className="only-print"
+                                style={{ 
+                                  backgroundColor: '#f8fafc', 
+                                  border: '1px solid #cbd5e1', 
+                                  borderRadius: '6px', 
+                                  padding: '8pt 10pt', 
+                                  marginTop: '6pt', 
+                                  marginBottom: '8pt',
+                                  pageBreakInside: 'avoid'
+                                }}
+                              >
+                                <div style={{ fontWeight: 'bold', color: '#0f172a', marginBottom: '3pt', fontSize: '11pt' }}>
+                                  💡 Lời giải chi tiết:
+                                </div>
+                                <div style={{ fontSize: '11pt', color: '#1e293b' }}>
+                                  <MarkdownRenderer className="markdown-body inline-block" content={fixMath(q.solution || q.explanation || '')} />
+                                </div>
+                              </div>
+                            )}
                           </div>
-                          <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white mb-2">
-                            {customLessonName || "PHIẾU HỌC TẬP TRỰC QUAN"}
-                          </h1>
-                          <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-indigo-100 font-medium">
-                            <span className="flex items-center gap-1 bg-white/15 px-2.5 py-1 rounded-lg backdrop-blur-xs">💡 Ghi nhớ nhanh</span>
-                            <span className="flex items-center gap-1 bg-white/15 px-2.5 py-1 rounded-lg backdrop-blur-xs">⚡ Bí kíp thực chiến</span>
-                            <span className="flex items-center gap-1 bg-white/15 px-2.5 py-1 rounded-lg backdrop-blur-xs">⚠️ Bẫy sai lầm</span>
-                            <span className="flex items-center gap-1 bg-white/15 px-2.5 py-1 rounded-lg backdrop-blur-xs">🎯 Bài tập thực tế</span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (suggestion) {
+                  return isEditing ? (
+                    <textarea
+                      className="w-full h-[70vh] min-h-[500px] p-6 border border-slate-300 rounded-xl shadow-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none resize-none font-mono text-sm bg-white"
+                      value={suggestion}
+                      onChange={(e) => setSuggestion(e.target.value)}
+                    />
+                  ) : (
+                    /* Preview Canvas Container Styled by LayoutStyle */
+                    <div 
+                      ref={exportRef}
+                      className={cn(
+                        "transition-all duration-300",
+                        layoutStyle === 'a4_print' && "bg-white p-8 md:p-12 shadow-sm border border-slate-300 rounded-xl min-h-[500px] font-serif text-slate-900 max-w-[210mm] mx-auto",
+                        layoutStyle === 'infographic' && "bg-gradient-to-b from-sky-50/40 via-white to-indigo-50/30 p-6 md:p-10 shadow-md border-2 border-indigo-200/80 rounded-2xl min-h-[500px]",
+                        layoutStyle === 'poster' && "bg-white p-6 md:p-10 shadow-xl border-4 border-indigo-500/80 rounded-3xl min-h-[500px]",
+                        layoutStyle === 'mindmap' && "bg-slate-50/80 p-6 md:p-10 shadow-md border-2 border-emerald-300/80 rounded-2xl min-h-[500px]"
+                      )}
+                    >
+                      {/* 1. Header decor for A4 Chuẩn In Ấn */}
+                      {layoutStyle === 'a4_print' && (
+                        <div className="border border-slate-800 mb-8 p-4 bg-white text-xs sm:text-sm text-slate-800 leading-normal">
+                          <div className="grid grid-cols-2 gap-4 pb-3 border-b border-dashed border-slate-400">
+                            <div>
+                              <p className="font-semibold uppercase tracking-wider text-[11px] sm:text-xs">TRƯỜNG THPT / THCS: ................................................</p>
+                              <p className="mt-1 font-semibold">LỚP: ............................ KHỐI: {selectedGrade}</p>
+                              <p className="mt-1 font-semibold">HỌ VÀ TÊN: ..............................................................</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-bold uppercase text-slate-900 tracking-wide">PHIẾU HỌC TẬP: {customLessonName || "BÀI HỌC"}</p>
+                              <p className="mt-1 text-slate-700">Môn: {subject} | Lớp {selectedGrade}</p>
+                              <p className="mt-1 text-slate-600">Ngày: ...... / ...... / 202...</p>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-12 gap-2 pt-2.5 items-center">
+                            <div className="col-span-3 border border-slate-700 p-2 text-center rounded bg-slate-50">
+                              <span className="font-bold block text-[11px] uppercase text-slate-700">ĐIỂM SỐ</span>
+                              <span className="text-sm sm:text-base text-slate-400 italic">......... / 10</span>
+                            </div>
+                            <div className="col-span-9 pl-2">
+                              <span className="font-semibold block text-slate-800">Lời phê & nhận xét của Thầy / Cô:</span>
+                              <p className="border-b border-dotted border-slate-400 mt-2 h-4"></p>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    )}
+                      )}
 
-                    {/* 3. Header decor for Poster tóm tắt tư duy */}
-                    {layoutStyle === 'poster' && (
-                      <div className="mb-8">
-                        <div className="bg-gradient-to-br from-slate-950 via-indigo-950 to-blue-950 text-white p-7 sm:p-9 rounded-2xl shadow-xl border-2 border-indigo-400/40 relative overflow-hidden">
-                          <div className="absolute top-0 right-0 -mt-10 -mr-10 w-52 h-52 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none"></div>
-                          <div className="flex items-center justify-between gap-3 mb-3">
-                            <div className="flex items-center gap-2">
-                              <span className="px-3 py-1 rounded-full text-xs font-black tracking-widest uppercase bg-amber-400 text-slate-950 shadow-sm flex items-center gap-1">
-                                <Zap className="w-3.5 h-3.5 fill-current" /> CHEAT SHEET TƯ DUY
+                      {/* 2. Header decor for Infographic / Photographic */}
+                      {layoutStyle === 'infographic' && (
+                        <div className="mb-8">
+                          <div className="bg-gradient-to-r from-sky-600 via-indigo-600 to-purple-600 text-white p-6 sm:p-7 rounded-2xl shadow-md relative overflow-hidden">
+                            <div className="absolute right-0 top-0 translate-x-8 -translate-y-8 w-44 h-44 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+                            <div className="flex flex-wrap items-center gap-2 mb-2.5">
+                              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-white/20 backdrop-blur-md text-sky-100 border border-white/20">
+                                {subject} • LỚP {selectedGrade}
                               </span>
-                              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-white/10 text-indigo-200 border border-indigo-400/30">
-                                {subject} {selectedGrade}
+                              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-400/20 text-emerald-200 border border-emerald-300/30 flex items-center gap-1">
+                                <Sparkles className="w-3.5 h-3.5" /> Infographic Học Tập Trực Quan
                               </span>
                             </div>
-                            <span className="text-xs text-indigo-300 font-mono hidden sm:inline-block">BẢN TỔNG HỢP CỐT LÕI KHỔ LỚN</span>
+                            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white mb-2">
+                              {customLessonName || "PHIẾU HỌC TẬP TRỰC QUAN"}
+                            </h1>
+                            <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-indigo-100 font-medium">
+                              <span className="flex items-center gap-1 bg-white/15 px-2.5 py-1 rounded-lg backdrop-blur-xs">💡 Ghi nhớ nhanh</span>
+                              <span className="flex items-center gap-1 bg-white/15 px-2.5 py-1 rounded-lg backdrop-blur-xs">⚡ Bí kíp thực chiến</span>
+                              <span className="flex items-center gap-1 bg-white/15 px-2.5 py-1 rounded-lg backdrop-blur-xs">⚠️ Bẫy sai lầm</span>
+                              <span className="flex items-center gap-1 bg-white/15 px-2.5 py-1 rounded-lg backdrop-blur-xs">🎯 Bài tập thực tế</span>
+                            </div>
                           </div>
-                          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white mb-2 uppercase">
-                            {customLessonName || "TỔNG HỢP KIẾN THỨC CỐT LÕI"}
-                          </h1>
-                          <p className="text-xs sm:text-sm text-indigo-200/90 font-medium max-w-2xl leading-relaxed">
-                            Toàn bộ công thức then chốt, quy trình các bước giải toán mẫu và mẹo thực chiến dán góc học tập hoặc lưu điện thoại.
-                          </p>
                         </div>
-                      </div>
-                    )}
+                      )}
 
-                    {/* 4. Header decor for Mindmap / Sơ đồ nhánh */}
-                    {layoutStyle === 'mindmap' && (
-                      <div className="mb-8 text-center">
-                        <div className="inline-flex flex-col items-center bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 text-white px-8 py-5 rounded-2xl shadow-lg border-2 border-emerald-300 ring-4 ring-emerald-100 max-w-2xl mx-auto">
-                          <span className="text-xs font-bold tracking-widest uppercase text-emerald-200 mb-1 flex items-center gap-1.5">
-                            <GitFork className="w-4 h-4" /> BẢN ĐỒ TƯ DUY & PHÂN NHÁNH
-                          </span>
-                          <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">
-                            🌳 {customLessonName || "CHỦ ĐỀ TRUNG TÂM"}
-                          </h1>
-                          <span className="text-xs text-emerald-100 mt-1 font-medium">
-                            Môn {subject} - Lớp {selectedGrade} • Chuẩn GDPT 2018
-                          </span>
+                      {/* 3. Header decor for Poster tóm tắt tư duy */}
+                      {layoutStyle === 'poster' && (
+                        <div className="mb-8">
+                          <div className="bg-gradient-to-br from-slate-950 via-indigo-950 to-blue-950 text-white p-7 sm:p-9 rounded-2xl shadow-xl border-2 border-indigo-400/40 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 -mt-10 -mr-10 w-52 h-52 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none"></div>
+                            <div className="flex items-center justify-between gap-3 mb-3">
+                              <div className="flex items-center gap-2">
+                                <span className="px-3 py-1 rounded-full text-xs font-black tracking-widest uppercase bg-amber-400 text-slate-950 shadow-sm flex items-center gap-1">
+                                  <Zap className="w-3.5 h-3.5 fill-current" /> CHEAT SHEET TƯ DUY
+                                </span>
+                                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-white/10 text-indigo-200 border border-indigo-400/30">
+                                  {subject} {selectedGrade}
+                                </span>
+                              </div>
+                              <span className="text-xs text-indigo-300 font-mono hidden sm:inline-block">BẢN TỔNG HỢP CỐT LÕI KHỔ LỚN</span>
+                            </div>
+                            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white mb-2 uppercase">
+                              {customLessonName || "TỔNG HỢP KIẾN THỨC CỐT LÕI"}
+                            </h1>
+                            <p className="text-xs sm:text-sm text-indigo-200/90 font-medium max-w-2xl leading-relaxed">
+                              Toàn bộ công thức then chốt, quy trình các bước giải toán mẫu và mẹo thực chiến dán góc học tập hoặc lưu điện thoại.
+                            </p>
+                          </div>
                         </div>
-                        <div className="flex flex-wrap justify-center items-center gap-2 mt-4 text-xs font-semibold text-emerald-800">
-                          <span className="bg-emerald-100/80 px-2.5 py-1 rounded-full border border-emerald-200">🌿 Khái niệm</span>
-                          <span className="text-emerald-500">➔</span>
-                          <span className="bg-teal-100/80 px-2.5 py-1 rounded-full border border-teal-200">⚡ Công thức</span>
-                          <span className="text-emerald-500">➔</span>
-                          <span className="bg-cyan-100/80 px-2.5 py-1 rounded-full border border-cyan-200">🎯 Dạng bài</span>
-                          <span className="text-emerald-500">➔</span>
-                          <span className="bg-amber-100/80 px-2.5 py-1 rounded-full border border-amber-200">⚠️ Bẫy sai lầm</span>
-                        </div>
-                      </div>
-                    )}
+                      )}
 
-                    {/* Content Renderer with Layout-specific typography */}
-                    <div className={cn(
-                      "prose max-w-none",
-                      layoutStyle === 'a4_print' && "prose-slate font-serif [&_h1]:font-serif [&_h2]:font-serif [&_h3]:font-serif [&_table]:border-collapse [&_th]:border [&_th]:border-slate-800 [&_td]:border [&_td]:border-slate-800 leading-relaxed",
-                      layoutStyle === 'infographic' && "prose-indigo [&_h2]:bg-indigo-50/80 [&_h2]:text-indigo-950 [&_h2]:p-3.5 [&_h2]:rounded-xl [&_h2]:border-l-4 [&_h2]:border-indigo-600 [&_h2]:shadow-2xs [&_blockquote]:bg-amber-50/80 [&_blockquote]:border-l-4 [&_blockquote]:border-amber-400 [&_blockquote]:p-4 [&_blockquote]:rounded-r-xl [&_blockquote]:text-amber-950 [&_blockquote]:font-medium",
-                      layoutStyle === 'poster' && "prose-blue [&_h2]:bg-gradient-to-r [&_h2]:from-slate-900 [&_h2]:to-indigo-900 [&_h2]:text-white [&_h2]:p-3.5 [&_h2]:rounded-xl [&_h2]:font-black [&_blockquote]:bg-blue-50/80 [&_blockquote]:border-l-4 [&_blockquote]:border-blue-600 [&_blockquote]:p-4 [&_blockquote]:rounded-r-xl [&_blockquote]:shadow-2xs",
-                      layoutStyle === 'mindmap' && "prose-emerald [&_h2]:bg-emerald-50 [&_h2]:text-emerald-950 [&_h2]:p-3.5 [&_h2]:rounded-xl [&_h2]:border-l-4 [&_h2]:border-emerald-600 [&_h2]:font-bold [&_blockquote]:bg-teal-50 [&_blockquote]:border-l-4 [&_blockquote]:border-teal-500 [&_blockquote]:p-4 [&_blockquote]:rounded-r-xl"
-                    )}>
-                      <ErrorBoundary><MarkdownRenderer content={suggestion} /></ErrorBoundary>
+                      {/* 4. Header decor for Mindmap / Sơ đồ nhánh */}
+                      {layoutStyle === 'mindmap' && (
+                        <div className="mb-8 text-center">
+                          <div className="inline-flex flex-col items-center bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 text-white px-8 py-5 rounded-2xl shadow-lg border-2 border-emerald-300 ring-4 ring-emerald-100 max-w-2xl mx-auto">
+                            <span className="text-xs font-bold tracking-widest uppercase text-emerald-200 mb-1 flex items-center gap-1.5">
+                              <GitFork className="w-4 h-4" /> BẢN ĐỒ TƯ DUY & PHÂN NHÁNH
+                            </span>
+                            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">
+                              🌳 {customLessonName || "CHỦ ĐỀ TRUNG TÂM"}
+                            </h1>
+                            <span className="text-xs text-emerald-100 mt-1 font-medium">
+                              Môn {subject} - Lớp {selectedGrade} • Chuẩn GDPT 2018
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap justify-center items-center gap-2 mt-4 text-xs font-semibold text-emerald-800">
+                            <span className="bg-emerald-100/80 px-2.5 py-1 rounded-full border border-emerald-200">🌿 Khái niệm</span>
+                            <span className="text-emerald-500">➔</span>
+                            <span className="bg-teal-100/80 px-2.5 py-1 rounded-full border border-teal-200">⚡ Công thức</span>
+                            <span className="text-emerald-500">➔</span>
+                            <span className="bg-cyan-100/80 px-2.5 py-1 rounded-full border border-cyan-200">🎯 Dạng bài</span>
+                            <span className="text-emerald-500">➔</span>
+                            <span className="bg-amber-100/80 px-2.5 py-1 rounded-full border border-amber-200">⚠️ Bẫy sai lầm</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Content Renderer with Layout-specific typography */}
+                      <div className={cn(
+                        "prose max-w-none",
+                        layoutStyle === 'a4_print' && "prose-slate font-serif [&_h1]:font-serif [&_h2]:font-serif [&_h3]:font-serif [&_table]:border-collapse [&_th]:border [&_th]:border-slate-800 [&_td]:border [&_td]:border-slate-800 leading-relaxed",
+                        layoutStyle === 'infographic' && "prose-indigo [&_h2]:bg-indigo-50/80 [&_h2]:text-indigo-950 [&_h2]:p-3.5 [&_h2]:rounded-xl [&_h2]:border-l-4 [&_h2]:border-indigo-600 [&_h2]:shadow-2xs [&_blockquote]:bg-amber-50/80 [&_blockquote]:border-l-4 [&_blockquote]:border-amber-400 [&_blockquote]:p-4 [&_blockquote]:rounded-r-xl [&_blockquote]:text-amber-950 [&_blockquote]:font-medium",
+                        layoutStyle === 'poster' && "prose-blue [&_h2]:bg-gradient-to-r [&_h2]:from-slate-900 [&_h2]:to-indigo-900 [&_h2]:text-white [&_h2]:p-3.5 [&_h2]:rounded-xl [&_h2]:font-black [&_blockquote]:bg-blue-50/80 [&_blockquote]:border-l-4 [&_blockquote]:border-blue-600 [&_blockquote]:p-4 [&_blockquote]:rounded-r-xl [&_blockquote]:shadow-2xs",
+                        layoutStyle === 'mindmap' && "prose-emerald [&_h2]:bg-emerald-50 [&_h2]:text-emerald-950 [&_h2]:p-3.5 [&_h2]:rounded-xl [&_h2]:border-l-4 [&_h2]:border-emerald-600 [&_h2]:font-bold [&_blockquote]:bg-teal-50 [&_blockquote]:border-l-4 [&_blockquote]:border-teal-500 [&_blockquote]:p-4 [&_blockquote]:rounded-r-xl"
+                      )}>
+                        <ErrorBoundary>
+                          <MarkdownRenderer content={includeDetailedSolution ? suggestion : mainDocContent} />
+                        </ErrorBoundary>
+
+                        {/* Document Solution Section Accordion Toggle on Screen */}
+                        {includeDetailedSolution && solutionDocContent && (
+                          <div className="mt-8 pt-6 border-t border-slate-200 no-print">
+                            <button
+                              type="button"
+                              onClick={() => toggleSolution('doc-solution')}
+                              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 transition-colors cursor-pointer shadow-2xs"
+                            >
+                              <span>{isSolutionOpen('doc-solution') ? "🙈 Ẩn lời giải chi tiết" : "💡 Xem lời giải chi tiết"}</span>
+                            </button>
+
+                            {isSolutionOpen('doc-solution') && (
+                              <div 
+                                style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '16px', marginTop: '10px' }}
+                                className="text-slate-800 text-sm leading-relaxed not-prose"
+                              >
+                                <div className="font-bold text-slate-900 mb-2 flex items-center gap-1.5 text-base">
+                                  <span>💡 Lời giải chi tiết & Hướng dẫn chấm:</span>
+                                </div>
+                                <div className="text-slate-800">
+                                  <MarkdownRenderer content={solutionDocContent} />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="h-full min-h-[500px] flex flex-col items-center justify-center text-slate-400 bg-white/50 rounded-xl border border-dashed border-slate-300 p-8">
+                    <div className="w-16 h-16 rounded-2xl bg-indigo-50 flex items-center justify-center mb-4 text-indigo-400">
+                      <BookOpen className="w-8 h-8" />
+                    </div>
+                    <p className="text-lg font-bold text-slate-700">Phiếu học tập sẽ xuất hiện ở đây</p>
+                    <p className="text-sm mt-1 text-slate-500 max-w-md text-center">
+                      Chọn môn học, chủ đề và phong cách trình bày mong muốn (A4 in ấn, Infographic, Poster tư duy hoặc Sơ đồ nhánh) rồi nhấn "Tạo bản Word/In".
+                    </p>
+                    <div className="flex flex-wrap justify-center gap-2 mt-4">
+                      {LAYOUT_STYLE_OPTIONS.map(s => (
+                        <span key={s.id} className="text-xs bg-white px-2.5 py-1 rounded-full border border-slate-200 text-slate-600 font-medium">
+                          {s.shortTitle}
+                        </span>
+                      ))}
                     </div>
                   </div>
-                )
-              ) : (
-                <div className="h-full min-h-[500px] flex flex-col items-center justify-center text-slate-400 bg-white/50 rounded-xl border border-dashed border-slate-300 p-8">
-                  <div className="w-16 h-16 rounded-2xl bg-indigo-50 flex items-center justify-center mb-4 text-indigo-400">
-                    <BookOpen className="w-8 h-8" />
-                  </div>
-                  <p className="text-lg font-bold text-slate-700">Phiếu học tập sẽ xuất hiện ở đây</p>
-                  <p className="text-sm mt-1 text-slate-500 max-w-md text-center">
-                    Chọn môn học, chủ đề và phong cách trình bày mong muốn (A4 in ấn, Infographic, Poster tư duy hoặc Sơ đồ nhánh) rồi nhấn "Tạo bản Word/In".
-                  </p>
-                  <div className="flex flex-wrap justify-center gap-2 mt-4">
-                    {LAYOUT_STYLE_OPTIONS.map(s => (
-                      <span key={s.id} className="text-xs bg-white px-2.5 py-1 rounded-full border border-slate-200 text-slate-600 font-medium">
-                        {s.shortTitle}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           )}
         </div>
