@@ -169,3 +169,8 @@ export function formatCubic(a: number, b: number, c: number, d: number): string 
   if (terms.length === 0) return "0";
   return terms.join(" ");
 }
+
+export { cleanMath, fixMath, formatMathContent } from './utils';
+export const cleanText = (str: string) => str || '';
+export const formatMath = (str: string) => str || '';
+

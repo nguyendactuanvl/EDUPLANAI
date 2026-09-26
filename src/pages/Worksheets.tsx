@@ -369,7 +369,8 @@ export function Worksheets() {
           throw new Error("Phản hồi từ máy chủ không đúng định dạng dữ liệu.");
         }
       }
-      const processedResult = preProcessMathContent(data.result);
+      const rawResult = (typeof data?.result === 'string' ? data.result : String(data?.result || '')).replace(/\s*(?:undefined|null)\s*$/gi, '').trim();
+      const processedResult = preProcessMathContent(rawResult);
       setSuggestion(processedResult);
       setViewMode('document');
 
@@ -1072,17 +1073,21 @@ export function Worksheets() {
                             {/* MC */}
                             {q.type === 'mc' && q.options && (() => {
                               const cleanedOpts = q.options.map((opt: string) => cleanOptionText(opt));
+                              const maxLen = Math.max(...cleanedOpts.map((o: string) => (o || '').length), 0);
+                              const gridCols = maxLen <= 18 ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4' : maxLen <= 45 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1';
                               return (
-                                <div className="w-full space-y-2 pl-2 mt-2 mb-3">
+                                <div className={cn("w-full grid gap-2 pl-2 mt-2 mb-3", gridCols)}>
                                   {cleanedOpts.map((opt: string, oIdx: number) => (
                                     <div key={oIdx} className={cn(
-                                      "w-full min-h-[38px] flex items-center px-4 py-2 text-left rounded-lg border text-sm break-words overflow-hidden",
+                                      "min-h-[38px] flex items-center px-3.5 py-1.5 text-left rounded-lg border text-sm break-words overflow-hidden",
                                       includeDetailedSolution && oIdx === q.correctOptionIndex
                                         ? "bg-emerald-50 border-emerald-300 font-medium text-emerald-950"
                                         : "bg-slate-50/50 border-slate-200/80 text-slate-800"
                                     )}>
-                                      <span className="shrink-0 font-semibold select-none min-w-[1.75rem]">{String.fromCharCode(65 + oIdx)}.</span>
-                                      <span className="flex-1 break-words overflow-hidden"><MarkdownRenderer className="markdown-body inline-block" content={fixMath(opt)} /></span>
+                                      <span className="shrink-0 font-bold select-none min-w-[1.75rem] whitespace-nowrap text-slate-900">{String.fromCharCode(65 + oIdx)}.</span>
+                                      <span className="flex-1 break-words overflow-hidden">
+                                        <MarkdownRenderer inline={true} className="markdown-body inline align-baseline" content={fixMath(opt)} />
+                                      </span>
                                     </div>
                                   ))}
                                 </div>
@@ -1284,7 +1289,7 @@ export function Worksheets() {
                         layoutStyle === 'mindmap' && "prose-emerald [&_h2]:bg-emerald-50 [&_h2]:text-emerald-950 [&_h2]:p-3.5 [&_h2]:rounded-xl [&_h2]:border-l-4 [&_h2]:border-emerald-600 [&_h2]:font-bold [&_blockquote]:bg-teal-50 [&_blockquote]:border-l-4 [&_blockquote]:border-teal-500 [&_blockquote]:p-4 [&_blockquote]:rounded-r-xl"
                       )}>
                         <ErrorBoundary>
-                          <MarkdownRenderer content={includeDetailedSolution ? suggestion : mainDocContent} />
+                          <MarkdownRenderer content={fixMath(includeDetailedSolution ? suggestion : mainDocContent)} />
                         </ErrorBoundary>
 
                         {/* Document Solution Section Accordion Toggle on Screen */}
@@ -1307,7 +1312,7 @@ export function Worksheets() {
                                   <span>💡 Lời giải chi tiết & Hướng dẫn chấm:</span>
                                 </div>
                                 <div className="text-slate-800">
-                                  <MarkdownRenderer content={solutionDocContent} />
+                                  <MarkdownRenderer content={fixMath(solutionDocContent)} />
                                 </div>
                               </div>
                             )}

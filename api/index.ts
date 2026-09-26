@@ -1,4 +1,3 @@
-
 import express from "express";
 import fs from "fs";
 import HTMLtoDOCX from "html-to-docx";
@@ -12,94 +11,55 @@ import LZString from 'lz-string';
 
 export const maxDuration = 60; // 1 minute max duration on Vercel Hobby
 
-const MATH_FORMATTING_RULES = `QUY TẮC ĐỊNH DẠNG TOÁN HỌC VÀ VĂN BẢN (BẮT BUỘC TUÂN THỦ NGHIÊM NGẶT):
-1. Mọi công thức Toán bắt buộc viết bằng cú pháp chuẩn LaTeX (tuyệt đối không dùng ký tự Unicode như √, ∫).
-2. Công thức nằm cùng dòng văn bản: Luôn kẹp trong cặp dấu $...$ (ví dụ: $y = \\dfrac{ax+b}{cx+d}$, $x \\in [1; 5]$). LUÔN CÓ KHOẢNG TRẮNG trước và sau dấu $ để không bị dính chữ.
-3. Công thức nằm riêng một dòng độc lập: Luôn kẹp trong cặp dấu $$...$$.
-4. Ký hiệu bắt buộc: Phân số dùng \\dfrac{a}{b}, hệ phương trình dùng \\begin{cases} ... \\end{cases}, dấu khác (không bằng) BẮT BUỘC dùng \\neq (tuyệt đối KHÔNG viết dạng "/ =", "/=", "!=" hay "=/=").
-   Ký hiệu vô cực (vô cùng) BẮT BUỘC dùng \\infty: $-\\infty, +\\infty$. Tuyệt đối KHÔNG viết thiếu dấu gạch chéo thành -infty, +infty hay in fty. Các khoảng như $(-\\infty; -1)$, $(-1; +\\infty)$ BẮT BUỘC có \\ trước infty.
-   KÝ HIỆU TẬP HỢP DÙNG DẤU NGOẶC NHỌN: Dấu ngoặc nhọn tập hợp { } BẮT BUỘC phải thoát bằng dấu gạch chéo ngược: \\{ và \\} (ví dụ: $A = \\{x \\in \\mathbb{Z} \\mid -2 \\le x < 3\\}$, $B = \\{1; 2; 3\\}$, $\\{x \\in \\mathbb{R} \\mid |x| \\le 3\\}$). Tuyệt đối KHÔNG viết thiếu gạch chéo { } vì KaTeX sẽ ẩn mất dấu ngoặc nhọn.
-   CÁC TOÁN TỬ SO SÁNH: BẮT BUỘC viết \\le, \\ge, \\neq (ví dụ: $x \\le 3$, $|x| \\le 3$, $-2 \\le x < 3$). Tuyệt đối KHÔNG viết dính liền chữ dạng "leqx", "leq3" hay thiếu dấu gạch chéo ngược.
-5. [CỰC KỲ QUAN TRỌNG] QUY ƯỚC CÔNG THỨC NGHIỆM PHƯƠNG TRÌNH LƯỢNG GIÁC (CHUẨN TOÁN HỌC & KATEX):
-   - Khi biểu diễn họ nghiệm tuyển của phương trình lượng giác (\\sin, \\cos, \\tan, \\cot hoặc các bài toán phương trình có nghiệm phân nhánh "hoặc"):
-     + BẮT BUỘC sử dụng dấu móc vuông \\left[ kết hợp \\begin{aligned} ... \\end{aligned}\\right. thay vì dấu móc nhọn \\begin{cases}.
-     + Cú pháp chuẩn KaTeX:
-       $$\\left[\\begin{aligned} x &= \\alpha + k2\\pi \\\\ x &= \\pi - \\alpha + k2\\pi \\end{aligned}\\right. \\quad (k \\in \\mathbb{Z})$$
-       (hoặc viết trong dòng: $\\left[\\begin{aligned} x &= \\alpha + k2\\pi \\\\ x &= \\pi - \\alpha + k2\\pi \\end{aligned}\\right.$).
-     + TUYỆT ĐỐI KHÔNG dùng \\begin{cases} cho họ nghiệm lượng giác (vì \\begin{cases} là dấu ngoặc nhọn biểu thị hệ 'và', trong khi các họ nghiệm lượng giác phân nhánh là tuyển 'hoặc', toán học quy chuẩn dùng dấu ngoặc vuông \\left[).
-   - GIỮ NGUYÊN dấu móc nhọn \\begin{cases} ... \\end{cases} cho hệ phương trình / hệ bất phương trình (điều kiện đồng thời xảy ra).
-6. Bố cục văn bản dùng định dạng Markdown rõ ràng.
-7. [CỰC KỲ QUAN TRỌNG] BẢNG BIẾN THIÊN VÀ ĐỒ THỊ BẰNG TIKZ:
-   - BẮT BUỘC đặt toàn bộ code vẽ bảng biến thiên hoặc đồ thị vào trong khối markdown \`\`\`tikz ... \`\`\`. 
-   - BẮT BUỘC phải bao bọc mã bên trong \\begin{tikzpicture} và \\end{tikzpicture}. KHÔNG DÙNG pgfplots (axis).
-   - VỚI BẢNG BIẾN THIÊN: Dùng gói tkz-tab chuẩn mực. KHÔNG dùng môi trường ma trận array.
-     + Cấu hình bắt buộc: \\tkzTabInit[lgt=1.5, espcl=3]...
-     + Điểm gián đoạn (không xác định) bắt buộc dùng 2 vạch song song: ký hiệu d, -d/, +d/ trong tkz-tab.
-     + Ký hiệu tổng quát: x_1, x_2, y_{CĐ}, y_{CT}, -\\infty, +\\infty.
-   - VỚI ĐỒ THỊ (ĐẶC BIỆT LÀ HÀM PHÂN THỨC BẬC 1/1 VÀ BẬC 2/1): 
-     + Tuyệt đối KHÔNG dùng đường cong Bezier (.. controls ..) kéo tự do làm sai tiếp tuyến đồ thị hàm số.
-     + Phải dùng hàm giải tích chuẩn (ví dụ: \\draw[domain=..., samples=100] plot (\\x, {hàm_số})).
-     + Với hàm phân thức có tiệm cận đứng tại $x = x_0$, BẮT BUỘC vẽ 2 nhánh riêng biệt ở 2 miền $x < x_0$ và $x > x_0$ (tuyệt đối không để domain chạy qua điểm gián đoạn $x_0$).
-     + BẮT BUỘC vẽ các đường tiệm cận đứng, tiệm cận ngang, tiệm cận xiên bằng NÉT ĐỨT (dashed):
-       Ví dụ tiệm cận đứng $x = 1$: \\draw[dashed, red, thick] (1, -4) -- (1, 4) node[above] {$x = 1$};
-       Ví dụ tiệm cận ngang $y = 2$: \\draw[dashed, blue, thick] (-4, 2) -- (4, 2) node[right] {$y = 2$};
-     + BẮT BUỘC có hệ trục tọa độ Oxy với mũi tên (->, >=stealth), nhãn $x$, $y$, gốc $O$ và chia vạch hoặc lưới tọa độ rõ ràng:
-       \\draw[->, >=stealth, thick] (-4.5,0) -- (4.5,0) node[right] {$x$};
-       \\draw[->, >=stealth, thick] (0,-4.5) -- (0,4.5) node[above] {$y$};
-       \\node[below left] at (0,0) {$O$};
-7. [CỰC KỲ QUAN TRỌNG] HÌNH VẼ HÌNH HỌC KHÔNG GIAN BẰNG TIKZ (Chuẩn GDPT 2018):
-   - BẮT BUỘC đặt code vào khối markdown \`\`\`tikz ... \`\`\` và bao bọc bởi \\begin{tikzpicture} và \\end{tikzpicture}.
-   - QUY ƯỚC NÉT VẼ:
-     + Nét liền (thick/solid): Tất cả các đường biên bao quanh hình và các cạnh nhìn thấy ở mặt trước. Tuyệt đối KHÔNG vẽ nét đứt cho cạnh biên ngoài cùng (ví dụ: đường cao SA dựng thẳng đứng từ mép ngoài luôn là nét liền).
-     + Nét đứt (dashed): CHỈ dành cho các cạnh nằm ở đáy phía sau, đường cao hoặc đường chéo bị các mặt phía trước che khuất.
-   - BỐ CỤC ĐIỂM VÀ TỌA ĐỘ CHUẨN:
-     + Khối chóp đáy tam giác (S.ABC) có SA vuông góc đáy: Đặt A ở góc phía sau (0,0); B lệch sang phải (4,0); C chúc về phía trước (1.5,-1.8). SA dựng thẳng đứng (0,h). Cạnh khuất DUY NHẤT là AB (nét đứt). Các cạnh SA, SB, SC, AC, BC là nét liền.
-     + Khối chóp đáy tứ giác (S.ABCD) có SA vuông góc đáy: Đáy vẽ hình bình hành phối cảnh: A(0,0), B(3.5,0), D(-1,-1.5), C(2.5,-1.5). Các cạnh khuất đáy: AB, AD (nét đứt). Chiều cao SA nét liền nếu ở biên ngoài.
-     + Khối lăng trụ / hình hộp: Đáy dưới vẽ phối cảnh, 3 cạnh phía sau đáy dưới và các đường chéo khuất vẽ nét đứt. Các cạnh bên và mặt trước vẽ nét liền.
-   - KÝ HIỆU TOÁN HỌC: Vẽ đầy đủ góc vuông ở chân đường cao, ký hiệu góc giữa đường và mặt, góc giữa hai mặt phẳng khi có yêu cầu. Các nhãn đỉnh (above, below, left, right) phải hợp lý, không bị đường kẻ cắt ngang chữ.
-8. [CỰC KỲ QUAN TRỌNG] VẼ MIỀN NGHIỆM BẤT PHƯƠNG TRÌNH (BPT) VÀ HỆ BPT BẬC NHẤT HAI ẨN (Chuẩn GDPT 2018):
-   - Đặt code vào khối markdown \`\`\`tikz ... \`\`\` và bao bọc bởi \\begin{tikzpicture} và \\end{tikzpicture}.
-   - TUYỆT ĐỐI KHÔNG dùng \\usetikzlibrary hay \\usepackage (môi trường Web trình duyệt không hỗ trợ nạp thư viện ngoài). Dùng các tùy chọn chuẩn TikZ như [->] hoặc [>=stealth].
-   - QUY ƯỚC ĐƯỜNG BIÊN:
-     + Dấu bằng (>= hoặc <=): Đường biên vẽ NÉT LIỀN (thick, solid).
-     + Dấu ngặt (> hoặc <): Đường biên vẽ NÉT ĐỨT (dashed, thick).
-     + Phải đặt nhãn tên đường thẳng ($d_1, d_2,...$) ở đầu mút.
-   - MIỀN NGHIỆM VÀ PHẦN GẠCH BỎ:
-     + Phần KHÔNG thuộc miền nghiệm: Dùng tô màu xám nhẹ [fill=gray!25, fill opacity=0.7] (TUYỆT ĐỐI KHÔNG dùng pattern=... vì trình duyệt không nạp được thư viện patterns).
-     + Phần THUỘC miền nghiệm: Giữ trắng hoặc tô nền sáng (ví dụ: fill=cyan!15).
-     + Đối với Hệ BPT: Vẽ viền đậm quanh đa giác miền nghiệm (tuân thủ nét liền/đứt tương ứng) và đánh dấu rõ các đỉnh kèm tọa độ chính xác.
-   - NGUYÊN TẮC GIẢI TÍCH (CẤM VẼ TỰ DO / CẤM ĐOÁN TỌA ĐỘ):
-     + Trước khi vẽ bất kỳ đường thẳng ax + by = c nào, BẮT BUỘC phải tính chính xác: Giao điểm với Ox (Cho y = 0 -> x = c/a) và Giao điểm với Oy (Cho x = 0 -> y = c/b).
-     + Tọa độ các đỉnh đa giác miền nghiệm phải là nghiệm giải tích thực sự của hệ 2 phương trình đường thẳng giao nhau (Ví dụ: x + y = 4 và y = 3 thì giao điểm BẮT BUỘC là (1; 3), không được vẽ giao điểm nằm ngoài đường thẳng).
-9. [CỰC KỲ QUAN TRỌNG] TRÌNH BÀY ĐÁP ÁN TRẮC NGHIỆM:
+const MATH_FORMATTING_RULES = `QUY TẮC ĐỊNH DẠNG TOÁN HỌC VÀ VĂN BẢN (BẮT BUỘC TUÂN THỦ NGHIÊM NGẶT 100%):
+1. TOÁN HỌC & CÔNG THỨC (BẮT BUỘC):
+   - Mọi biểu thức, số liệu, biến số đơn lẻ ($x$, $y$, $z$, $m$, $a$, $b$, $c$, $\\alpha$, $\\beta$, $\\pi$, $\\Delta$...) PHẢI bọc bằng $...$ (inline) hoặc $$...$$ (display block).
+   - CẤM TUYỆT ĐỐI viết mã LaTeX trần không có $.
+   - Không viết tắt hay dùng text thường cho công thức (ví dụ: TUYỆT ĐỐI KHÔNG viết "sin x = 0", BẮT BUỘC phải viết "$\\sin x = 0$"; không viết "x = 2", phải viết "$x = 2$").
+   - LUÔN DÙNG \\frac THAY CHO \\dfrac (TUYỆT ĐỐI KHÔNG DÙNG \\dfrac, luôn dùng \\frac{a}{b}).
+   - Dùng cú pháp LaTeX chuẩn: \\sin, \\cos, \\tan, \\cot, \\frac{a}{b}, \\sqrt{...}, \\pi, \\Leftrightarrow, \\Rightarrow, \\ge, \\le, \\in, \\notin, \\cap, \\cup, \\subset.
+   - VỚI HỆ PHƯƠNG TRÌNH / BẤT PHƯƠNG TRÌNH (BẮT BUỘC): BẮT BUỘC dùng cú pháp khối riêng:
+     $\\begin{cases} ax + by \\le c \\\\ dx + ey \\ge f \\end{cases}$
+     (hoặc \\left[\\begin{aligned} ... \\end{aligned}\\right. đối với dấu ngoặc vuông chọn họ nghiệm/phương trình phân nhánh).
+     TUYỆT ĐỐI KHÔNG viết dấu ngoặc nhọn { đơn lẻ ngoài công thức, không để dấu hệ bị tách riêng dòng so với các phương trình. Mỗi phương trình trong hệ BẮT BUỘC kết thúc bằng \\\\ để ngắt dòng đẹp.
+   - KÝ HIỆU ĐỒ THỊ (C), ĐƯỜNG TRÒN (C): BẮT BUỘC bọc trong cặp dấu $ như "$(C)" (ví dụ: "Cho hàm số có đồ thị $(C)$"). TUYỆT ĐỐI KHÔNG viết trần (C) để tránh xung đột làm nhảy chữ C của phương án trắc nghiệm.
+   - Dấu khác (không bằng) BẮT BUỘC dùng \\neq hoặc \\ne (tuyệt đối KHÔNG viết dạng "/ =", "/=", "!=" hay "=/=").
+   - Ký hiệu vô cực (vô cùng) BẮT BUỘC dùng \\infty: $-\\infty, +\\infty$. Tuyệt đối KHÔNG viết thiếu dấu gạch chéo thành -infty, +infty hay in fty. Các khoảng như $(-\\infty; -1)$, $(-1; +\\infty)$ BẮT BUỘC có \\ trước infty.
+   - KÝ HIỆU TẬP HỢP DÙNG DẤU NGOẶC NHỌN: Dấu ngoặc nhọn tập hợp { } BẮT BUỘC phải thoát bằng dấu gạch chéo ngược: \\{ và \\} (ví dụ: $A = \\{x \\in \\mathbb{Z} \\mid -2 \\le x < 3\\}$, $B = \\{1; 2; 3\\}$).
+   - CÁC TOÁN TỬ SO SÁNH: BẮT BUỘC viết \\le, \\ge, \\neq (ví dụ: $x \\le 3$, $|x| \\le 3$, $-2 \\le x < 3$).
+   - Giữ nguyên vẹn font tiếng Việt UTF-8 chuẩn.
+
+2. BẢNG BIẾN THIÊN (BBT):
+   - Tuyệt đối KHÔNG để khung rỗng hoặc để trống.
+   - Khi câu hỏi hoặc bài giải cần bảng biến thiên, BẮT BUỘC vẽ bảng biến thiên trực quan bằng Markdown Table chuẩn:
+     | $x$ | $-\\infty$ | | $x_0$ | | $+\\infty$ |
+     |---|---|---|---|---|---|
+     | $y'$ | | $+$ | $0$ | $-$ | |
+     | $y$ | $-\\infty$ | $\\nearrow$ | $y_{CĐ}$ | $\\searrow$ | $-\\infty$ |
+   - Điền đầy đủ các mũi tên chiều biến thiên $\\nearrow$, $\\searrow$, các dấu $+$, $-$, giá trị $0$, các điểm cực trị $y_{CĐ}, y_{CT}$, giới hạn $-\\infty, +\\infty$. Điểm gián đoạn/không xác định dùng hai vạch $\\|$.
+
+3. HÌNH VẼ ĐỒ THỊ:
+   - Nếu câu hỏi trích dẫn hình vẽ mà không có URL ảnh thực tế: BẮT BUỘC phải mô tả rõ đặc điểm đồ thị bằng lời trong đề (ví dụ: "Đồ thị đi qua điểm $A(0; -1)$, đỉnh $I(1; -2)$, cắt trục hoành tại...") HOẶC sinh kèm mã SVG đồ thị nội tuyến, KHÔNG để thẻ img/div trống rỗng.
+
+4. CẤM TUYỆT ĐỐI SINH MÃ HTML INLINE PHỨC TẠP:
+   - CẤM TUYỆT ĐỐI sinh mã HTML inline phức tạp (<mark style="...">, <span>, <div style="...">).
+   - Chỉ dùng Markdown chuẩn (**in đậm**, *in nghiêng*, bảng biểu Markdown table).
+
+5. HÌNH VẼ HÌNH HỌC KHÔNG GIAN VÀ MIỀN NGHIỆM BPT BẬC NHẤT:
+   - Nếu cần vẽ hình học không gian hoặc miền nghiệm hệ BPT: đặt code vào khối markdown \`\`\`tikz ... \`\`\` và bao bọc bởi \\begin{tikzpicture} và \\end{tikzpicture}.
+   - Hình học không gian: Nét liền cho các cạnh nhìn thấy, nét đứt cho các cạnh khuất đáy hoặc sau.
+   - Miền nghiệm BPT: Nét liền cho dấu có bằng (<=, >=), nét đứt cho dấu ngặt (<, >). Phần không thuộc miền nghiệm tô màu xám nhẹ fill=gray!25.
+
+6. TRÌNH BÀY ĐÁP ÁN TRẮC NGHIỆM:
    - TUYỆT ĐỐI KHÔNG viết các đáp án A, B, C, D dính liền nhau trên cùng một dòng.
    - BẮT BUỘC mỗi đáp án phải nằm trên một dòng riêng biệt.
-   - TUYỆT ĐỐI KHÔNG xuống dòng ngay sau dấu $ hoặc để thừa ký tự $ (ví dụ viết $\\begin{cases} ... \\end{cases}$ liền mạch, không viết $ \n \\begin{cases}...\\end{cases} \n $).
-10. [QUY CHUẨN CẤU TRÚC ĐỀ THI / PHIẾU HỌC TẬP CHUẨN GDPT 2018 - TUYỆT ĐỐI TUÂN THỦ]:
-    - TUYỆT ĐỐI KHÔNG ĐƯỢC tóm tắt, không được bỏ qua bất kỳ câu nào, TUYỆT ĐỐI KHÔNG ĐƯỢC sinh placeholder như "(Các câu tương tự...)", "(Tương tự cho các câu sau...)", "(Các câu 5 đến 12 tương tự...)", "... (tiếp tục)" hoặc viết tắt câu.
-    - Yêu cầu N câu thì hệ thống BẮT BUỘC PHẢI SINH ĐỦ 100% ĐÚNG N CÂU HOÀN CHỈNH từ câu 1 đến câu N. Mỗi câu phải có đề bài chi tiết, số liệu cụ thể và lời giải/đáp án rõ ràng.
-    - PHẦN TRẮC NGHIỆM ĐÚNG/SAI (loại "tf"): Mỗi câu BẮT BUỘC phải gồm ĐÚNG 4 mệnh đề con:
-      a) [Mệnh đề 1]
-      b) [Mệnh đề 2]
-      c) [Mệnh đề 3]
-      d) [Mệnh đề 4]
-      (Mỗi ý trên 1 dòng riêng biệt, rõ ràng, không gộp dòng với đề bài, không được thiếu ý nào).
-      Trong mảng "tfStatements": BẮT BUỘC có ĐỦ ĐÚNG 4 phần tử:
-      [
-        { "statement": "Nội dung ý a", "correct": true/false },
-        { "statement": "Nội dung ý b", "correct": true/false },
-        { "statement": "Nội dung ý c", "correct": true/false },
-        { "statement": "Nội dung ý d", "correct": true/false }
-      ]
-    - PHẦN TRẮC NGHIỆM 4 LỰA CHỌN (loại "mc"): BẮT BUỘC đủ 4 phương án A, B, C, D hoàn chỉnh trong mảng "options".
-    - PHẦN TRẢ LỜI NGẮN (loại "sa"): Đưa ra câu hỏi định lượng và giá trị số/kết quả chính xác trong "correctAnswer".
-      + [RÀNG BUỘC ĐẶC BIỆT CHO CHỦ ĐỀ TẬP HỢP]:
-        * TUYỆT ĐỐI KHÔNG ra đề yêu cầu "Tìm tập hợp", "Viết kết quả dưới dạng khoảng/đoạn/nửa khoảng" hay biểu diễn nghiệm dưới dạng tập hợp.
-        * BẮT BUỘC câu hỏi phải có đáp số là MỘT CON SỐ CỤ THỂ, ví dụ:
-          . "Tập hợp $A \cap B$ có bao nhiêu phần tử là số nguyên?"
-          . "Biết $A \cap B = (a; b)$. Tính giá trị của biểu thức $T = a + b$ (hoặc $T = 2a - b$)?"
-          . "Tính độ dài của khoảng/đoạn..."
-        * Đảm bảo đáp số luôn là MỘT SỐ NGUYÊN hoặc SỐ THẬP PHÂN có ĐỘ DÀI TỐI ĐA 4 KÝ TỰ (ví dụ: "3", "-2", "15", "2.5", "-0.5").`;
+
+7. QUY CHUẨN CẤU TRÚC ĐỀ THI / PHIẾU HỌC TẬP CHUẨN GDPT 2018:
+   - TUYỆT ĐỐI KHÔNG ĐƯỢC tóm tắt, không được bỏ qua bất kỳ câu nào, TUYỆT ĐỐI KHÔNG ĐƯỢC sinh placeholder như "(Các câu tương tự...)".
+   - Yêu cầu N câu thì hệ thống BẮT BUỘC PHẢI SINH ĐỦ 100% ĐÚNG N CÂU HOÀN CHỈNH từ câu 1 đến câu N.
+   - Trắc nghiệm Đúng/Sai (tf): mỗi câu gồm ĐÚNG 4 mệnh đề con a, b, c, d trên các dòng riêng biệt, mảng tfStatements có ĐỦ 4 phần tử.
+   - Trắc nghiệm 4 lựa chọn (mc): đầy đủ 4 phương án trong options.
+   - Trả lời ngắn (sa): "correctAnswer" là một con số cụ thể có độ dài tối đa 4 ký tự. Với chủ đề Tập hợp: không hỏi tìm tập hợp mà hỏi số phần tử nguyên, tính giá trị biểu thức T = a+b hoặc độ dài khoảng để đáp số luôn là một số cụ thể.`;
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
@@ -948,7 +908,15 @@ ${totalQuestions === 0 ? 'Nếu không chỉ định số lượng, hãy tạo 1
 
 QUY TẮC BẮT BUỘC VỀ TOÁN HỌC VÀ KỸ THUẬT:
 ${MATH_FORMATTING_RULES}
-- Mọi công thức, ký hiệu toán, biến số đơn lẻ (như $x, y, z, m, a, b, c, \\alpha, \\beta, \\pi, \\in, \\le, \\ge, -\\infty, +\\infty...$) BẮT BUỘC đặt trong cặp dấu đô la $...$ hoặc $$...$$.
+- Mọi công thức, ký hiệu toán, biến số đơn lẻ (như $x, y, z, m, a, b, c, \\alpha, \\beta, \\pi, \\in, \\le, \\ge, -\\infty, +\\infty...$) BẮT BUỘC đặt trong cặp dấu đô la $...$ hoặc $$...$$. CẤM viết LaTeX trần.
+- LUÔN DÙNG \\frac THAY CHO \\dfrac (CẤM dùng \\dfrac).
+- BẢNG BIẾN THIÊN (BBT): Tuyệt đối KHÔNG để khung rỗng. Khi câu hỏi cần BBT, BẮT BUỘC vẽ bảng biến thiên trực quan bằng Markdown Table chuẩn:
+  | $x$ | $-\\infty$ | | $x_0$ | | $+\\infty$ |
+  |---|---|---|---|---|---|
+  | $y'$ | | $+$ | $0$ | $-$ | |
+  | $y$ | $-\\infty$ | $\\nearrow$ | $y_{CĐ}$ | $\\searrow$ | $-\\infty$ |
+- HÌNH VẼ ĐỒ THỊ: Nếu trích dẫn đồ thị mà không có URL ảnh thực tế, BẮT BUỘC mô tả rõ đặc điểm đồ thị bằng lời trong đề (ví dụ: "Đồ thị đi qua điểm A(0; -1), đỉnh I(1; -2)...") hoặc sinh kèm mã SVG đồ thị nội tuyến, KHÔNG để thẻ img/div trống rỗng.
+- CẤM TUYỆT ĐỐI sinh mã HTML inline phức tạp (<mark style="...">, <span>). Chỉ dùng Markdown chuẩn (**in đậm**, *in nghiêng*).
 - Ký hiệu vô cùng/vô cực BẮT BUỘC viết chuẩn LaTeX là \\infty (ví dụ: $(-\\infty; -1)$, $(-1; +\\infty)$, $[0; +\\infty)$, $(-\\infty; +\\infty)$). Tuyệt đối KHÔNG viết thiếu dấu gạch chéo ngược thành -infty, +infty, in fty.
 - TUYỆT ĐỐI KHÔNG lặp lại các chữ A, B, C, D vào nội dung của câu hỏi hoặc phương án (hệ thống sẽ tự động gán nhãn A, B, C, D).
 - Câu trắc nghiệm (mc): mảng "options" phải có ĐÚNG 4 phần tử dạng chuỗi. "correctOptionIndex" là chỉ số đáp án đúng (0, 1, 2, 3).
@@ -1095,7 +1063,7 @@ HƯỚNG DẪN CHI TIẾT:
        * Bước 2: Thực hiện nhiệm vụ (thời gian làm việc cá nhân/nhóm, dự kiến khó khăn/sai lầm học sinh thường mắc phải và cách GV gợi mở).
        * Bước 3: Báo cáo, thảo luận (chỉ định nhóm/HS trình bày, các nhóm phản biện và đối chiếu kết quả phản biện từ công cụ AI/phần mềm).
        * Bước 4: Kết luận, nhận định (GV chốt kiến thức, ghi rõ bảng tổng kết kiến thức hoặc nội dung cần ghi chép vào vở).
-4. **Tô màu Năng lực số và Năng lực AI**: Khi nhắc đến bất kỳ phần mềm, công cụ thiết bị số, Năng lực số hoặc công cụ AI nào (đặc biệt là những cái bạn vừa bổ sung), BẮT BUỘC phải bọc trong thẻ HTML \`<mark style="background-color: #dbeafe; color: #1d4ed8; font-weight: bold; padding: 2px 4px; border-radius: 4px;">Tên công cụ / NLS</mark>\` để tô màu nổi bật.
+4. **Nổi bật Năng lực số và Năng lực AI**: Khi nhắc đến bất kỳ phần mềm, công cụ thiết bị số, Năng lực số hoặc công cụ AI nào (đặc biệt là những cái bạn vừa bổ sung), BẮT BUỘC định dạng bằng Markdown in đậm chuẩn: **[Tên công cụ / NLS / AI]** (TUYỆT ĐỐI CẤM dùng mã HTML inline như <mark style="..."> hay <span>).
 ${MATH_FORMATTING_RULES}
 5. TUYỆT ĐỐI KHÔNG sử dụng thẻ HTML \`<br>\` hoặc \`<br/>\`. Sử dụng dấu xuống dòng chuẩn Markdown.
 6. Soạn chi tiết đầy đủ 100%, không tóm tắt, không dùng dấu ba chấm (...).`;
@@ -1268,8 +1236,8 @@ CÁC NGUYÊN TẮC CỐT LÕI BẮT BUỘC TUÂN THỦ NGHIÊM NGẶT:
   + [Năng lực số (NLS)]: Chỉ rõ phần mềm (Google Forms, Quizizz, GeoGebra, Desmos, Padlet, Canva...) và sản phẩm số đầu ra.
   + [Năng lực AI]: Kịch bản tương tác với AI (ChatGPT/Gemini), câu lệnh prompt mẫu, so sánh đối chiếu kết quả của AI với SGK, đánh giá tính chính xác và phản biện giới hạn của AI.
   + [Tích hợp STEM/STEAM]: Giao nhiệm vụ thực tiễn gắn với kỹ thuật và đời sống.
-- TÔ MÀU NỔI BẬT: BẮT BUỘC bọc mọi công cụ số, phần mềm, NLS hoặc AI trong thẻ HTML:
-  <mark style="background-color: #dbeafe; color: #1d4ed8; font-weight: bold; padding: 2px 4px; border-radius: 4px;">Tên công cụ / NLS / AI</mark>
+- NỔI BẬT NLS VÀ AI: BẮT BUỘC định dạng mọi công cụ số, phần mềm, NLS hoặc AI bằng Markdown in đậm chuẩn:
+  **[Tên công cụ / NLS / AI]** (TUYỆT ĐỐI CẤM dùng mã HTML inline như <mark style="..."> hay <span>).
 
 5. CHUẨN MỰC TRÌNH BÀY VÀ TOÀN VẸN 100%:
 - Soạn đầy đủ, chi tiết từ đầu đến cuối cho tất cả các tiết (từ Tiết 1 đến Tiết ${periods}).
@@ -1338,7 +1306,7 @@ d) Tổ chức thực hiện: BẮT BUỘC VIẾT RÕ 4 BƯỚC KÈM LỜI THO�
 
 LƯU Ý ĐẶC BIỆT:
 - Lồng ghép trực tiếp các kịch bản [Năng lực số], [Năng lực AI] và [Tích hợp STEM/STEAM] vào từng hoạt động và sản phẩm cụ thể của học sinh.
-- Tô màu mọi công cụ số, NLS, AI bằng: <mark style="background-color: #dbeafe; color: #1d4ed8; font-weight: bold; padding: 2px 4px; border-radius: 4px;">Tên công cụ / NLS / AI</mark>.
+- Nổi bật mọi công cụ số, NLS, AI bằng Markdown in đậm chuẩn: **[Tên công cụ / NLS / AI]** (TUYỆT ĐỐI CẤM dùng mã HTML inline như <mark style="..."> hay <span>).
 - Viết chi tiết đầy đủ 100%, không tóm tắt, không dùng dấu ba chấm (...).
 ${MATH_FORMATTING_RULES}`;
 
@@ -1647,7 +1615,7 @@ YÊU CẦU NGHIÊM NGẶT:
 1. TUYỆT ĐỐI GIỮ NGUYÊN cấu trúc, số thứ tự câu, các mục lục, phân chương phân bài. Không được tự ý tóm tắt hay lược bỏ bất kỳ từ nào.
 ${MATH_FORMATTING_RULES}
 2. HÌNH ẢNH / HÌNH VẼ: Do hạn chế kỹ thuật số hóa, nếu gặp biểu đồ, hình vẽ, đồ thị, hãy thêm một chú thích rõ ràng bằng chữ ở vị trí đó (Ví dụ: [Hình vẽ đồ thị hàm số...] hoặc [Hình ảnh mô tả...]) để giáo viên biết vị trí cần chèn lại ảnh gốc.
-3. GIỮ NGUYÊN BẢNG BIỂU: Dùng cú pháp Markdown table để tạo lại chính xác các bảng biểu thông thường. ĐỐI VỚI BẢNG BIẾN THIÊN HOẶC BẢNG XÉT DẤU TOÁN HỌC, TUYỆT ĐỐI KHÔNG DÙNG Markdown Table, HÃY DÙNG CÚ PHÁP LaTeX array (như đã quy định ở trên).
+3. GIỮ NGUYÊN BẢNG BIỂU VÀ BẢNG BIẾN THIÊN: Dùng cú pháp Markdown table để tạo lại chính xác các bảng biểu thông thường cũng như BẢNG BIẾN THIÊN (hàng $x$, $y'$, $y$ với các mũi tên $\nearrow$, $\searrow$, ký hiệu $\|$ tại điểm gián đoạn). Tuyệt đối không để khung rỗng.
 4. Nếu trong tài liệu gốc có các thẻ HTML (như <img>) được truyền vào, TUYỆT ĐỐI GIỮ NGUYÊN Y HỆT các thẻ đó ở đúng vị trí.
 
 Đầu ra của bạn phải hoàn toàn là nội dung tài liệu đã được số hóa, không thêm các câu chào hỏi thừa.`;
@@ -1707,12 +1675,7 @@ YÊU CẦU:
 
 ${MATH_FORMATTING_RULES}
 5. BẮT BUỘC kiểm tra và SỬA LỖI CHÍNH TẢ tiếng Việt thật cẩn thận trước khi trả kết quả.
-6. [QUAN TRỌNG] BẮT BUỘC vẽ bảng biến thiên (BBT), đồ thị hàm số, hoặc hình học (nếu có yêu cầu hoặc cần thiết cho bài toán) bằng code TikZ. Đặt toàn bộ code TikZ (bắt đầu bằng \\\begin{tikzpicture} và kết thúc bằng \\\end{tikzpicture}) vào trong một block markdown có định dạng:
-\`\`\`tikz
-\\begin{tikzpicture}
-...
-\\end{tikzpicture}
-\`\`\``;
+6. [QUAN TRỌNG] BẢNG BIẾN THIÊN (BBT): BẮT BUỘC vẽ bằng Markdown Table chuẩn trực quan (hàng $x$, $y'$, $y$ kèm mũi tên $\nearrow$, $\searrow$, dấu $+$, $-$, $0$, cực trị, tuyệt đối không để trống). Nếu bài toán trích dẫn đồ thị hoặc hình học: hãy sinh mã SVG nội tuyến hoặc code TikZ; nếu không có URL hình ảnh thực tế thì BẮT BUỘC mô tả chi tiết bằng lời các đặc điểm đồ thị (tọa độ các điểm đi qua, đỉnh, tiệm cận...), tuyệt đối không để thẻ img/div hay khung trống rỗng. Code TikZ nếu có phải đặt trong khối \`\`\`tikz ... \`\`\`.`;
 
       const response = await generateWithFallback(req, {
         contents: [

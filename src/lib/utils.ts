@@ -435,7 +435,7 @@ export function isInsideMath(text: string, pos: number): boolean {
  */
 export function sanitizeLatexString(text: string): string {
   if (!text) return '';
-  let s = text;
+  let s = text.replace(/\\dfrac\b/g, '\\frac');
 
   // 1. Chuẩn hóa ký hiệu Hy Lạp viết thiếu backslash:
   // Thay thế từ độc lập Delta thành \Delta (nếu chưa có dấu \)
@@ -481,6 +481,16 @@ export function wrapNakedMathEnvironments(text: string): string {
     }
     const isBlock = safeEnv.includes('\n') || safeEnv.length > 35;
     return isBlock ? `\n\n$$\n${safeEnv}\n$$\n\n` : ` $${safeEnv}$ `;
+  });
+
+  // 1.5 Tự động chuẩn hóa và bọc \left\{ ... \\ ... \right. thành \begin{cases}...\end{cases}
+  s = s.replace(/\\left\s*\\\{([\s\S]*?)\\right\.?/g, (match, body, offset) => {
+    if (!body.includes('\\\\') && !body.includes('\n')) return match;
+    const safeBody = normalizeCasesBody(body);
+    if (isInsideMath(s, offset)) {
+      return `\\begin{cases}\n${safeBody}\n\\end{cases}`;
+    }
+    return `\n\n$$\n\\begin{cases}\n${safeBody}\n\\end{cases}\n$$\n\n`;
   });
 
   // 2. Tự động bọc các môi trường trần khác: cases, aligned, array, matrix... (trừ khi nằm sau \left[ hoặc đã nằm trong math)
@@ -1211,7 +1221,7 @@ export const normalizeMathContent = sanitizeMathBeforeRender;
  */
 export const normalizeMathLatex = (rawText: string): string => {
   if (!rawText) return '';
-  let text = normalizeLogicAndSetSymbols(sanitizeMathBeforeRender(rawText));
+  let text = normalizeLogicAndSetSymbols(sanitizeMathBeforeRender(rawText)).replace(/\\dfrac\b/g, '\\frac');
 
   // BƯỚC 0: Tách rời các từ nối tiếng Việt bị dính liền với ký tự toán và sửa rách dấu $$ (vd: 3hoặcm -> 3 hoặc m, $$hoặc$$ -> hoặc)
   text = text
@@ -1354,16 +1364,27 @@ export function formatMathContent(raw?: string | null): string {
   // 1. Chuẩn hóa họ nghiệm lượng giác (đổi \begin{cases} có chứa k2\pi, k\pi, k \in \mathbb{Z}... sang \left[\begin{aligned}...\end{aligned}\right.)
   str = normalizeTrigSolutions(str);
 
-  // 2. Chuẩn hóa thân môi trường cases còn lại (hệ phương trình / hệ bất phương trình)
+  // 2. Chuẩn hóa \left\{ \begin{aligned} ... \end{aligned} \right. hoặc \left\{ \begin{array} ... \end{array} \right. sang \begin{cases} ... \end{cases}
+  str = str.replace(/\\left\s*\\\{\s*\\begin\s*\{(?:aligned|array|matrix)\*?\}([\s\S]*?)\\end\s*\{(?:aligned|array|matrix)\*?\}\s*\\right\.?/g, (_m, body) => {
+    return `\\begin{cases}\n${normalizeCasesBody(body)}\n\\end{cases}`;
+  });
+  str = str.replace(/\\left\s*\\\{\s*\\begin\s*\{cases\*?\}([\s\S]*?)\\end\s*\{cases\*?\}\s*\\right\.?/g, (_m, body) => {
+    return `\\begin{cases}\n${normalizeCasesBody(body)}\n\\end{cases}`;
+  });
+
+  // 3. Chuẩn hóa thân môi trường cases còn lại (hệ phương trình / hệ bất phương trình)
   str = str.replace(/\\begin\s*\{cases\*?\}([\s\S]*?)\\end\s*\{cases\*?\}/g, (_match, inner) => {
     const fixedInner = normalizeCasesBody(inner);
     return `\\begin{cases}\n${fixedInner}\n\\end{cases}`;
   });
 
-  // 3. Tự động bọc naked math environments (bao gồm \left[\begin{aligned}...\end{aligned}\right. và \begin{cases})
+  // 4. Tự động bọc naked math environments (bao gồm \left[\begin{aligned}...\end{aligned}\right. và \begin{cases})
   str = wrapNakedMathEnvironments(str);
 
-  // 4. Dọn dẹp rách/thừa dấu $ (vd: $$$ -> $, $$$$ -> $$)
+  // 5. Nếu cases bị bọc trong single $...$ ngoài danh sách phương án A-D hoặc bảng, nâng cấp lên display block $$...$$
+  str = str.replace(/(^|\n)(?!\s*\||\s*[-\*]\s*\*{0,2}[A-D][\.\:\)])\s*(?<!\$)\$\s*(\\begin\s*\{cases\*?\}[\s\S]*?\\end\s*\{cases\*?\})\s*\$(?!\$)/g, '$1\n\n$$\n$2\n$$\n\n');
+
+  // 6. Dọn dẹp rách/thừa dấu $ (vd: $$$ -> $, $$$$ -> $$)
   str = str.replace(/\${3,}/g, (m) => m.length % 2 === 1 ? '$' : '$$');
 
   return str;
@@ -1403,8 +1424,12 @@ export function cleanOptionText(opt: any): string {
   // Tách rời chữ tiếng Việt bị dính vào công thức và sửa rách dấu $$
   text = fixInlineOptionText(text);
 
-  // 1. Remove leading option prefixes like "A.", "A)", "A:", "a.", "a)", "C. ", "c. "
-  text = text.replace(/^[A-Da-d][\.\:\)]\s*/, '').replace(/^[a-d]\.\s*/i, '').trim();
+  // 1. Remove leading option prefixes like "A.", "A)", "A:", "a.", "a)", "**A.**", "<b>A.</b>", "- A."
+  // Triệt tiêu hoàn toàn nguy cơ lặp lại nhãn phương án làm nhảy chữ C xuống dòng dưới
+  text = text
+    .replace(/^(?:[-*]\s*)?(?:<b>|\*{1,2})?\s*[A-Da-d][\.\:\)]\s*(?:<\/b>|\*{1,2})?\s*/, '')
+    .replace(/^\([A-Da-d]\)\s*/, '')
+    .trim();
 
   // 2. Remove trailing orphan dollar signs after punctuation (e.g. ". $", ".$", ";$", ",$")
   text = text.replace(/([\.\;\,])\s*\$+$/g, '$1').trim();
@@ -1769,8 +1794,11 @@ export const fixMath = (text: any) => {
         return `${prefix}${label} $${expr.trim()}$ ${suffix}`;
     });
 
-    // 2.5. If wrapped in single $...$, upgrade to display block $$...$$ ONLY for aligned when NOT inside table row '|', list bullet, or option label
+    // 2.5. If wrapped in single $...$, upgrade to display block $$...$$ for aligned and cases when NOT inside table row '|', list bullet, or option label
     t = t.replace(/(^|\n)(?!\s*\||\s*[-\*]|\s*[A-D][\.\:\)]|\s*[a-d][\.\:\)])\s*(?<!\$)\$\s*(\\left\s*\[\s*\\begin\s*\{aligned\*?\}[\s\S]*?\\end\s*\{aligned\*?\}\s*\\right\.?(?:\s*\\quad\s*\([^\)]+\))?)\s*\$(?!\$)\s*($|\n)/g, (_m, p1, p2, p3) => `${p1}\n\n$$\n${p2.trim()}\n$$\n\n${p3}`);
+    t = t.replace(/(^|\n)(?!\s*\||\s*[-\*]|\s*[A-D][\.\:\)]|\s*[a-d][\.\:\)])\s*(?<!\$)\$\s*(\\begin\s*\{cases\*?\}[\s\S]*?\\end\s*\{cases\*?\})\s*\$(?!\$)\s*($|\n)/g, (_m, p1, p2, p3) => `${p1}\n\n$$\n${p2.trim()}\n$$\n\n${p3}`);
+    // Đảm bảo trong hướng dẫn giải / lời giải: các câu dẫn như "Ta có hệ phương trình: $\begin{cases}..." được nâng cấp lên display block $$...$$
+    t = t.replace(/((?:Ta có|Xét|Giải|Do đó|Suy ra|Từ đó)\s+hệ(?:\s+phương\s+trình|\s+bất\s+phương\s+trình)?[:\.]?\s*)\${1,2}\s*(\\begin\s*\{cases\*?\}[\s\S]*?\\end\s*\{cases\*?\})\s*\${1,2}/gi, '$1\n\n$$\n$2\n$$\n\n');
 
     // 2.7. Clean stray single $ lines before or after $$...$$
     t = t.replace(/(^|\n)\s*\$\s*\n+(\$\$[\s\S]*?\$\$)/g, '$1$2');
@@ -1951,13 +1979,15 @@ export function formatMultipleChoiceInMarkdown(content: string): string {
   //   b) [Mệnh đề 2]
   //   c) [Mệnh đề 3]
   //   d) [Mệnh đề 4]
-  text = text.replace(/([^\n])\s*(?:\r?\n)?(?:\b|\s)([a-d]\))\s+/g, '$1\n\n$2 ');
-  text = text.replace(/([^\n])\s*(?:\r?\n)?(?:\b|\s)([a-d]\.)\s+(?=[A-ZÀ-Ỹ\$])/g, '$1\n\n$2 ');
+  // Lưu ý: Không khớp nhầm nếu c) nằm trong cụm ngoặc tròn như (c) hoặc công thức toán
+  text = text.replace(/([^\n])\s*(?:\r?\n)?(?<![\(\$a-zA-Z0-9])([a-d]\))\s+(?=[A-ZÀ-Ỹ\$])/g, '$1\n\n$2 ');
+  text = text.replace(/([^\n])\s*(?:\r?\n)?(?<![\(\$a-zA-Z0-9])([a-d]\.)\s+(?=[A-ZÀ-Ỹ\$])/g, '$1\n\n$2 ');
 
   // 3. TÁCH DÒNG ĐỀ BÀI VÀ 4 PHƯƠNG ÁN LỰA CHỌN (PHẦN I):
   // Tuyệt đối KHÔNG để phương án A. dính liền ngay sau câu hỏi.
   // Đảm bảo chỉ bắt A. B. C. D. in HOA, không trùng với tiêu đề phần "A. Trắc nghiệm..."
-  text = text.replace(/([^\n])\s+((?:[\*\-]\s*)?(?:\*{0,2})A[\.\)](?:\*{0,2})\s+(?!Trắc nghiệm|Tự luận|Khẳng định|Mệnh đề)[\s\S]*?(?:[\*\-]\s*)?(?:\*{0,2})B[\.\)](?:\*{0,2})\s+[\s\S]*?(?:[\*\-]\s*)?(?:\*{0,2})C[\.\)](?:\*{0,2})\s+[\s\S]*?(?:[\*\-]\s*)?(?:\*{0,2})D[\.\)](?:\*{0,2})\s+)/g, '$1\n\n$2');
+  // và TUYỆT ĐỐI KHÔNG bắt nhầm ký hiệu đồ thị (C), mặt cầu (S), hay biến c trong toán
+  text = text.replace(/([^\n])\s+((?:[\*\-]\s*)?(?:\*{0,2})A[\.\)](?:\*{0,2})\s+(?!Trắc nghiệm|Tự luận|Khẳng định|Mệnh đề)[\s\S]*?(?:[\*\-]\s*)?(?:\*{0,2})B[\.\)](?:\*{0,2})\s+[\s\S]*?(?:[\*\-]\s*)?(?:\*{0,2})(?<!\()C[\.\)](?:\*{0,2})\s+[\s\S]*?(?:[\*\-]\s*)?(?:\*{0,2})(?<!\()D[\.\)](?:\*{0,2})\s+)/g, '$1\n\n$2');
 
   // 4. CHUẨN HÓA 4 ĐÁP ÁN (PHẦN I) SANG CÚ PHÁP DANH SÁCH MARKDOWN:
   // TUYỆT ĐỐI KHÔNG sinh chuỗi HTML <div class="choice-item"> vào text.
@@ -1966,7 +1996,7 @@ export function formatMultipleChoiceInMarkdown(content: string): string {
   // - **B.** [Phương án B]
   // - **C.** [Phương án C]
   // - **D.** [Phương án D]
-  const choicePattern = /(?:(?:\r?\n)+\s*|^\s*)((?:[\*\-]\s*)?(?:\*{0,2})A[\.\)](?:\*{0,2})\s+(?!Trắc nghiệm|Tự luận|Khẳng định|Mệnh đề)[\s\S]*?)(?:[\*\-]\s*)?(?:\*{0,2})B[\.\)](?:\*{0,2})\s+([\s\S]*?)(?:[\*\-]\s*)?(?:\*{0,2})C[\.\)](?:\*{0,2})\s+([\s\S]*?)(?:[\*\-]\s*)?(?:\*{0,2})D[\.\)](?:\*{0,2})\s+([\s\S]*?)(?=(?:\r?\n\s*(?:(?:###?\s*|\*\*)?(?:Câu\s*\d+|Bài\s*\d+|\d+\.)|Lời giải|Hướng dẫn|Đáp án|\*\*Lời giải|\*\*Hướng dẫn|\*\*Đáp án|---)|(?:\r?\n){2,}|$))/g;
+  const choicePattern = /(?:(?:\r?\n)+\s*|^\s*)((?:[\*\-]\s*)?(?:\*{0,2})A[\.\)](?:\*{0,2})\s+(?!Trắc nghiệm|Tự luận|Khẳng định|Mệnh đề)[\s\S]*?)(?:(?:\r?\n)+\s*|\s{2,}|\t)(?:[\*\-]\s*)?(?:\*{0,2})B[\.\)](?:\*{0,2})\s+([\s\S]*?)(?:(?:\r?\n)+\s*|\s{2,}|\t)(?:[\*\-]\s*)?(?:\*{0,2})(?<!\()C[\.\)](?:\*{0,2})\s+([\s\S]*?)(?:(?:\r?\n)+\s*|\s{2,}|\t)(?:[\*\-]\s*)?(?:\*{0,2})(?<!\()D[\.\)](?:\*{0,2})\s+([\s\S]*?)(?=(?:\r?\n\s*(?:(?:###?\s*|\*\*)?(?:Câu\s*\d+|Bài\s*\d+|\d+\.)|Lời giải|Hướng dẫn|Đáp án|\*\*Lời giải|\*\*Hướng dẫn|\*\*Đáp án|---)|(?:\r?\n){2,}|$))/g;
 
   text = text.replace(choicePattern, (match, rawA, rawB, rawC, rawD) => {
     let optA = rawA.replace(/^(?:[\*\-]\s*)?(?:\*{0,2})A[\.\)](?:\*{0,2})\s*/, '').trim();

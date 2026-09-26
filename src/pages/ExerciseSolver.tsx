@@ -219,7 +219,10 @@ const handleSolve = async () => {
 
       const text = await response.text();
       const data = parseApiResponse<any>(text);
-      const newSolution = typeof data.result === 'string' ? data.result : (data.result?.candidates?.[0]?.content?.parts?.[0]?.text || JSON.stringify(data.result));
+      let newSolution = typeof data.result === 'string' 
+        ? data.result 
+        : (data.result?.candidates?.[0]?.content?.parts?.[0]?.text || (data.result ? JSON.stringify(data.result) : ''));
+      newSolution = (newSolution || '').replace(/\s*(?:undefined|null)\s*$/gi, '').trim();
       setSolution(newSolution);
       saveToHistory({
         type: "GBT",

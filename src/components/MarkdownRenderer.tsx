@@ -403,7 +403,10 @@ export const MarkdownRenderer = ({
             }
           },
           img: ({node, src, alt, ...props}: any) => {
-            let cleanSrc = src || '';
+            let cleanSrc = (src || '').trim();
+            if (!cleanSrc || cleanSrc === '#' || cleanSrc === 'about:blank' || cleanSrc === '...' || cleanSrc === 'undefined') {
+              return null;
+            }
             // Auto convert Google Drive preview/view links to direct streaming image links
             if (cleanSrc.includes('drive.google.com/file/d/')) {
               const fileId = cleanSrc.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)?.[1];
@@ -419,12 +422,30 @@ export const MarkdownRenderer = ({
                 referrerPolicy="no-referrer"
                 className="max-w-full h-auto rounded-lg mx-auto my-3 border border-slate-200 shadow-sm"
                 onError={(e) => {
-                  (e.target as HTMLElement).setAttribute('data-error', 'true');
+                  // Do not show empty broken img frame
+                  (e.target as HTMLElement).style.display = 'none';
                 }}
                 {...props}
               />
             );
           },
+          table: ({ node, children, ...props }: any) => (
+            <div className="overflow-x-auto my-4 max-w-full">
+              <table className="min-w-fit mx-auto border-collapse border border-slate-300 text-sm text-center shadow-xs rounded-md overflow-hidden bg-white" {...props}>
+                {children}
+              </table>
+            </div>
+          ),
+          th: ({ node, children, ...props }: any) => (
+            <th className="border border-slate-300 bg-slate-100 px-3.5 py-2 font-semibold text-slate-800 text-center whitespace-nowrap" {...props}>
+              {children}
+            </th>
+          ),
+          td: ({ node, children, ...props }: any) => (
+            <td className="border border-slate-300 px-3.5 py-2 text-slate-800 text-center whitespace-nowrap" {...props}>
+              {children}
+            </td>
+          ),
           code({node, inline, className, children, ...props}: any) {
             return <code className={className} {...props}>{children}</code>;
           },

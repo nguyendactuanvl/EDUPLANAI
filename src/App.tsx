@@ -20,8 +20,18 @@ function safeLazy<T extends React.ComponentType<any>>(
           .then(resolve)
           .catch((error) => {
             if (left > 0) {
-              setTimeout(() => attempt(left - 1), 700);
+              setTimeout(() => attempt(left - 1), 500);
             } else {
+              const isChunkLoadFailed = error?.message && (
+                error.message.includes('Failed to fetch dynamically imported module') ||
+                error.message.includes('Importing a module script failed') ||
+                error.message.includes('error loading dynamically imported module')
+              );
+              if (isChunkLoadFailed && typeof window !== 'undefined' && !sessionStorage.getItem('chunk_retry_done')) {
+                sessionStorage.setItem('chunk_retry_done', '1');
+                window.location.reload();
+                return;
+              }
               reject(error);
             }
           });

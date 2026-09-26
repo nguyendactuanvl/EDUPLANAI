@@ -61,9 +61,41 @@
   line-height: normal !important;
   text-rendering: auto;
   background: transparent !important;
+  white-space: nowrap !important;
 }
 .katex * {
   line-height: normal !important;
+}
+
+/* Khóa chặt dấu ngoặc nhọn hệ phương trình/bất phương trình (\begin{cases}, \left\{...) cùng dòng với các phương trình bên trong */
+.katex .minner {
+  display: inline-flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  white-space: nowrap !important;
+}
+
+.katex .mopen,
+.katex .mclose,
+.katex .mtable,
+.katex .mord {
+  flex-shrink: 0 !important;
+  vertical-align: middle !important;
+}
+
+.katex-display {
+  display: block !important;
+  margin: 1em 0 !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  max-width: 100% !important;
+  text-align: center;
+}
+
+.katex-display > .katex {
+  white-space: nowrap !important;
+  display: inline-block !important;
+  text-align: initial !important;
 }
 
 /* KaTeX safe fallback - strictly inherit color, never display red error text */

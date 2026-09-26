@@ -1,4 +1,20 @@
-import { saveAs } from 'file-saver';
+const saveAs = (blob: Blob | any, filename: string) => {
+  if (typeof window === 'undefined') return;
+  try {
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(() => {
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    }, 1000);
+  } catch (err) {
+    console.error('Error saving file:', err);
+  }
+};
 import html2canvas from 'html2canvas';
 import katex from 'katex';
 import { mml2omml } from 'mathml2omml-plus';
@@ -635,7 +651,7 @@ function buildInvisibleChoiceTable(
   });
 
   const maxLen = Math.max(...texts.map((t) => t.length), 0);
-  const use4Cols = maxLen <= 32;
+  const use4Cols = maxLen <= 18;
 
   const createCell = (opt: { label: string; node?: Node; text?: string }, colPct: number) => {
     let childRuns: ParagraphChild[] = [];
@@ -1047,7 +1063,8 @@ async function parseDomToDocxChildren(
       const rawText = stripInternalTags(getNodeLatexOrText(el));
 
       // Check if paragraph contains embedded multiple choice options A. ... B. ... C. ... D. ...
-      const mcRegex = /^(.*?)\s*(?:[-*]\s*)?(?:\*{0,2})A[\.\)](?:\*{0,2})\s+([\s\S]*?)(?:[-*]\s*)?(?:\*{0,2})B[\.\)](?:\*{0,2})\s+([\s\S]*?)(?:[-*]\s*)?(?:\*{0,2})C[\.\)](?:\*{0,2})\s+([\s\S]*?)(?:[-*]\s*)?(?:\*{0,2})D[\.\)](?:\*{0,2})\s+([\s\S]*)$/i;
+      // Sử dụng (?<!\() để tuyệt đối không bắt nhầm ký hiệu đồ thị (C) làm phương án C
+      const mcRegex = /^(.*?)\s*(?:[-*]\s*)?(?:\*{0,2})A[\.\)](?:\*{0,2})\s+([\s\S]*?)(?:[-*]\s*)?(?:\*{0,2})B[\.\)](?:\*{0,2})\s+([\s\S]*?)(?:[-*]\s*)?(?:\*{0,2})(?<!\()C[\.\)](?:\*{0,2})\s+([\s\S]*?)(?:[-*]\s*)?(?:\*{0,2})(?<!\()D[\.\)](?:\*{0,2})\s+([\s\S]*)$/i;
       const mcMatch = rawText.match(mcRegex);
 
       if (mcMatch) {

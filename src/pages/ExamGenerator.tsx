@@ -11,7 +11,7 @@ import { Link } from 'lucide-react';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import { exportHtmlToWord } from '../lib/exportUtils';
-import { fixMath, cleanQuestionStem, parseApiResponse, cleanOptionText, getPublicAppUrl, isRealWorldQuestion, sanitizeShortAnswerInput, validateShortAnswer, compareShortAnswers, sanitizeLatexString } from '../lib/utils';
+import { cn, fixMath, cleanQuestionStem, parseApiResponse, cleanOptionText, getPublicAppUrl, isRealWorldQuestion, sanitizeShortAnswerInput, validateShortAnswer, compareShortAnswers, sanitizeLatexString } from '../lib/utils';
 import { ensureMathRendered } from '../lib/print';
 import { saveExamToCloud, SYSTEM_EXAM_WEBHOOK } from '../lib/cloudExamStore';
 import { STANDARDIZED_EXAM_TYPES, getDefaultDurationForExamType, formatExamTitle, normalizeExamType } from '../lib/examConfig';
@@ -19,6 +19,7 @@ import { OnlineExamConfigModal } from "../components/OnlineExamConfigModal";
 import { SAMPLE_MATH_QUESTIONS, SAMPLE_MATH_EXAM_NAME, SAMPLE_MATH_DURATION } from '../data/sampleMathExam';
 import { parseRawExamText } from '../lib/examParser';
 import { UploadTeacherExamModal } from "../components/UploadTeacherExamModal";
+import { WordEquationModal } from "../components/WordEquationModal";
 import {
   mixExam,
   identifyQuestionSection,
@@ -31,7 +32,7 @@ import {
 } from '../lib/examMixer';
 import React, { useState, useRef, useEffect } from "react";
 import * as XLSX from 'xlsx';
-import { FileCheck, Sparkles, Shuffle, Download, Share2, Plus, Trash2, Printer, UploadCloud, FileSpreadsheet, FileText, X, ExternalLink, Smartphone, Copy, Check, Edit3, ListPlus, Globe, Compass, RefreshCw, Eye, RotateCw, ZoomIn, ZoomOut, CheckCircle2, XCircle, AlertCircle, Save, MessageSquare, Award, Maximize2, Camera } from "lucide-react";
+import { FileCheck, Sparkles, Shuffle, Download, Share2, Plus, Trash2, Printer, UploadCloud, FileSpreadsheet, FileText, FileCode, X, ExternalLink, Smartphone, Copy, Check, Edit3, ListPlus, Globe, Compass, RefreshCw, Eye, RotateCw, ZoomIn, ZoomOut, CheckCircle2, XCircle, AlertCircle, Save, MessageSquare, Award, Maximize2, Camera } from "lucide-react";
 
 interface Question {
   type?: "mc" | "tf" | "sa" | "essay" | "MULTIPLE_CHOICE" | "TRUE_FALSE" | "SHORT_ANSWER" | "ESSAY";
@@ -869,6 +870,7 @@ const [examName, setExamName] = useState("");
   const [showAllSolutions, setShowAllSolutions] = useState(false);
   const [expandedSolutionIds, setExpandedSolutionIds] = useState<Record<number, boolean>>({});
   const [includeDetailedSolution, setIncludeDetailedSolution] = useState(true);
+  const [showWordEquationModal, setShowWordEquationModal] = useState(false);
 
   const toggleSolution = (qId: number) => {
     setExpandedSolutionIds(prev => ({
@@ -2387,12 +2389,14 @@ ${realWorldPrompt ? `${realWorldPrompt}\n\n` : ""}${qEnabled.sa ? `RÀNG BUỘC 
                         )}
                         {q.type === 'mc' && q.options && (() => {
                           const cleanedOpts = q.options.map((opt: string) => cleanOptionText(opt));
+                          const maxLen = Math.max(...cleanedOpts.map((o: string) => (o || '').length), 0);
+                          const gridCols = maxLen <= 18 ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4' : maxLen <= 45 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1';
                           return (
-                            <div className="w-full space-y-2 pl-2 mt-2 mb-3">
+                            <div className={cn("w-full grid gap-2 pl-2 mt-2 mb-3", gridCols)}>
                               {cleanedOpts.map((opt, oIdx) => (
-                                <div key={oIdx} className={`w-full min-h-[44px] flex items-center px-4 py-2 text-left rounded-lg border transition-colors break-words overflow-hidden ${oIdx === q.correctOptionIndex ? 'bg-emerald-50 border-emerald-300 font-medium text-emerald-950' : 'bg-slate-50/50 border-slate-200/80 text-slate-800'}`}>
-                                  <span className="shrink-0 font-semibold select-none min-w-[1.75rem]">{String.fromCharCode(65 + oIdx)}.</span>
-                                  <span className="flex-1 break-words overflow-hidden"><MarkdownRenderer className="markdown-body inline-block" content={fixMath(opt)} /></span>
+                                <div key={oIdx} className={`min-h-[40px] flex items-center px-3.5 py-1.5 text-left rounded-lg border transition-colors break-words overflow-hidden ${oIdx === q.correctOptionIndex ? 'bg-emerald-50 border-emerald-300 font-medium text-emerald-950' : 'bg-slate-50/50 border-slate-200/80 text-slate-800'}`}>
+                                  <span className="shrink-0 font-bold select-none min-w-[1.75rem] whitespace-nowrap text-slate-900">{String.fromCharCode(65 + oIdx)}.</span>
+                                  <span className="flex-1 break-words overflow-hidden"><MarkdownRenderer inline={true} className="markdown-body inline align-baseline" content={fixMath(opt)} /></span>
                                 </div>
                               ))}
                             </div>
@@ -2553,6 +2557,14 @@ ${realWorldPrompt ? `${realWorldPrompt}\n\n` : ""}${qEnabled.sa ? `RÀNG BUỘC 
                       </button>
                       <button onClick={() => setShowBubbleSheetModal(true)} className="px-3 sm:px-4 py-2 bg-white border border-emerald-600 text-emerald-700 font-medium rounded-lg hover:bg-emerald-50 flex items-center gap-2 shadow-sm">
                         <FileText className="w-4 h-4" /> <span className="hidden sm:inline">In Phiếu Tô</span>
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => setShowWordEquationModal(true)}
+                        className="px-3 sm:px-4 py-2 bg-white border border-teal-600 text-teal-700 font-semibold rounded-lg hover:bg-teal-50 flex items-center gap-2 shadow-sm cursor-pointer"
+                        title="Chuyển đổi công thức sang định dạng Word Equation (Alt += / MathML / OMML)"
+                      >
+                        <FileCode className="w-4 h-4" /> <span className="hidden sm:inline">Mã Word (Alt +=)</span>
                       </button>
                       <button 
                         type="button"
@@ -2985,8 +2997,8 @@ ${realWorldPrompt ? `${realWorldPrompt}\n\n` : ""}${qEnabled.sa ? `RÀNG BUỘC 
                                     </div>
                                 {q.type === 'mc' && q.options && (() => {
                                   const cleanedOpts = q.options.map((opt: string) => cleanOptionText(opt));
-                                  const maxLen = Math.max(...cleanedOpts.map((o: string) => (o || '').length));
-                                  const cols = maxLen <= 25 ? 4 : maxLen <= 60 ? 2 : 1;
+                                  const maxLen = Math.max(...cleanedOpts.map((o: string) => (o || '').length), 0);
+                                  const cols = maxLen <= 18 ? 4 : maxLen <= 45 ? 2 : 1;
 
                                   if (cols === 4) {
                                     return (
@@ -2995,7 +3007,7 @@ ${realWorldPrompt ? `${realWorldPrompt}\n\n` : ""}${qEnabled.sa ? `RÀNG BUỘC 
                                           <tr>
                                             {cleanedOpts.map((opt: string, oIdx: number) => (
                                               <td key={oIdx} style={{ width: '25%', border: 'none', padding: '2pt 4pt', verticalAlign: 'top', fontSize: '12pt' }}>
-                                                <b>{String.fromCharCode(65 + oIdx)}.</b> <MarkdownRenderer className="markdown-body inline-block" content={fixMath(opt)} />
+                                                <b style={{ whiteSpace: 'nowrap' }}>{String.fromCharCode(65 + oIdx)}.</b> <MarkdownRenderer inline={true} className="markdown-body inline align-baseline" content={fixMath(opt)} />
                                               </td>
                                             ))}
                                           </tr>
@@ -3010,18 +3022,18 @@ ${realWorldPrompt ? `${realWorldPrompt}\n\n` : ""}${qEnabled.sa ? `RÀNG BUỘC 
                                         <tbody>
                                           <tr>
                                             <td style={{ width: '50%', border: 'none', padding: '2pt 4pt', verticalAlign: 'top', fontSize: '12pt' }}>
-                                              <b>A.</b> <MarkdownRenderer className="markdown-body inline-block" content={fixMath(cleanedOpts[0] || '')} />
+                                              <b style={{ whiteSpace: 'nowrap' }}>A.</b> <MarkdownRenderer inline={true} className="markdown-body inline align-baseline" content={fixMath(cleanedOpts[0] || '')} />
                                             </td>
                                             <td style={{ width: '50%', border: 'none', padding: '2pt 4pt', verticalAlign: 'top', fontSize: '12pt' }}>
-                                              <b>B.</b> <MarkdownRenderer className="markdown-body inline-block" content={fixMath(cleanedOpts[1] || '')} />
+                                              <b style={{ whiteSpace: 'nowrap' }}>B.</b> <MarkdownRenderer inline={true} className="markdown-body inline align-baseline" content={fixMath(cleanedOpts[1] || '')} />
                                             </td>
                                           </tr>
                                           <tr>
                                             <td style={{ width: '50%', border: 'none', padding: '2pt 4pt', verticalAlign: 'top', fontSize: '12pt' }}>
-                                              <b>C.</b> <MarkdownRenderer className="markdown-body inline-block" content={fixMath(cleanedOpts[2] || '')} />
+                                              <b style={{ whiteSpace: 'nowrap' }}>C.</b> <MarkdownRenderer inline={true} className="markdown-body inline align-baseline" content={fixMath(cleanedOpts[2] || '')} />
                                             </td>
                                             <td style={{ width: '50%', border: 'none', padding: '2pt 4pt', verticalAlign: 'top', fontSize: '12pt' }}>
-                                              <b>D.</b> <MarkdownRenderer className="markdown-body inline-block" content={fixMath(cleanedOpts[3] || '')} />
+                                              <b style={{ whiteSpace: 'nowrap' }}>D.</b> <MarkdownRenderer inline={true} className="markdown-body inline align-baseline" content={fixMath(cleanedOpts[3] || '')} />
                                             </td>
                                           </tr>
                                         </tbody>
@@ -3035,7 +3047,7 @@ ${realWorldPrompt ? `${realWorldPrompt}\n\n` : ""}${qEnabled.sa ? `RÀNG BUỘC 
                                         {cleanedOpts.map((opt: string, oIdx: number) => (
                                           <tr key={oIdx}>
                                             <td style={{ width: '100%', border: 'none', padding: '2pt 4pt', verticalAlign: 'top', fontSize: '12pt' }}>
-                                              <b>{String.fromCharCode(65 + oIdx)}.</b> <MarkdownRenderer className="markdown-body inline-block" content={fixMath(opt)} />
+                                              <b style={{ whiteSpace: 'nowrap' }}>{String.fromCharCode(65 + oIdx)}.</b> <MarkdownRenderer inline={true} className="markdown-body inline align-baseline" content={fixMath(opt)} />
                                             </td>
                                           </tr>
                                         ))}
@@ -4581,6 +4593,12 @@ Lời giải: Tiệm cận ngang là $y = 1$ nên ý c sai.`);
           </button>
         </div>
       )}
+
+      {/* Word Equation Converter Modal */}
+      <WordEquationModal
+        isOpen={showWordEquationModal}
+        onClose={() => setShowWordEquationModal(false)}
+      />
     </div>
     </div>
   );
