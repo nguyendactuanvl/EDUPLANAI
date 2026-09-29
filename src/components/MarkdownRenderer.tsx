@@ -53,17 +53,15 @@ export {
 };
 
 /**
- * Khắc phục triệt để lỗi rách dấu $$ và dính chữ tiếng Việt ("hoặc", "và", "hay") trong 4 phương án trắc nghiệm:
- * 1. Tách rời các từ nối tiếng Việt bị dính liền với số/ký tự (vd: 3hoặcm -> 3 hoặc m, avàa -> a và a)
- * 2. Sửa lỗi đóng/mở $$ bị rách giữa biểu thức (vd: \ge 3$$ hoặc $$m \le -1)
- * 3. Tách từ nối ra ngoài dấu $ và tự động bọc $ cho các vế công thức
+ * Khắc phục triệt để lỗi rách dấu $$ và dính chữ tiếng Việt ("hoặc", "và", "hay", "với", "khi", "điều kiện") trong 4 phương án trắc nghiệm:
+ * 1. Sửa lỗi đóng/mở $$ bị rách dính dấu phẩy (vd: 0^\circ$$,180^\circ -> $0^\circ$, $180^\circ$)
+ * 2. Tách rời các từ nối tiếng Việt bị dính liền với số/ký tự (vd: 3hoặcm -> 3 hoặc m, avàa -> a và a)
+ * 3. Tách từ nối ra ngoài dấu $ và tự động bọc $ chuẩn xác cho từng vế công thức
  */
 export const fixInlineOptionText = (text: string): string => {
   if (!text) return '';
   let res = text;
 
-  // Giữ lại nhãn phương án nếu có (vd: A., B., C., D. hoặc **A.**, - A.)
-  // KHÔNG bóc nhầm tên tập hợp như A = {1; 2} hoặc A = [-1; 3]
   let prefix = '';
   const prefixMatch = res.match(/^(\s*(?:[-*]\s*)?(?:\*{0,2})[A-Da-d][\.\:\)](?:\*{0,2})\s*(?!=\s*))/);
   if (prefixMatch) {
@@ -71,59 +69,51 @@ export const fixInlineOptionText = (text: string): string => {
     res = res.slice(prefix.length);
   }
 
-  // Bảo vệ tạm thời các khối \text{...} để không bị bóc tách nhầm các từ hoặc, và, hay bên trong \text{}
   const textTokens: string[] = [];
   res = res.replace(/\\text\{[^{}]*\}/g, (match) => {
     textTokens.push(match);
     return `___TEXT_TOKEN_${textTokens.length - 1}___`;
   });
 
-  // Bước 1: Tách rời các từ nối tiếng Việt bị dính liền với số/ký tự (vd: 3hoặcm -> 3 hoặc m, avàa -> a và a)
+  res = res.replace(/\$\$([,;])/g, '$$ $1 ').replace(/([,;])\$\$/g, ' $1$$');
+
   res = res
-    .replace(/\b([a-z])(hoặc|hay)\b/gi, (match, letter, conj) => {
+    .replace(/\b([a-z])(hoặc|hay|với|khi)\b/gi, (match, letter, conj) => {
       if (/^(thay|chay)$/i.test(match)) return match;
       return `${letter} ${conj}`;
     })
-    .replace(/([0-9\$\)\]\}])(?<!\s)(hoặc|hay)(?=[a-zA-Z0-9\$\\])/gi, '$1 $2 ')
+    .replace(/([0-9\$\)\]\}])(?<!\s)(hoặc|hay|với|khi)(?=[a-zA-Z0-9\$\\])/gi, '$1 $2 ')
     .replace(/([0-9\$\)\]\}])(?<!\s)và(?!(?:o|i|ng|c|t)\b)(?=[a-zA-Z0-9\$\\])/gi, '$1 và ')
-    .replace(/(?<=[0-9\$\)\]\}])(hoặc|hay)/gi, ' $1')
+    .replace(/(?<=[0-9\$\)\]\}])(hoặc|hay|với|khi)/gi, ' $1')
     .replace(/(?<=[0-9\$\)\]\}])và(?!(?:o|i|ng|c|t)\b)/gi, ' và');
 
-  // Bước 2: Đảm bảo khoảng trắng rõ ràng giữa các biểu thức toán nối bằng liên từ (không làm rách cặp dấu $...$)
   res = res
-    .replace(/(?<!\$)\$(?!\$)\s*(hoặc|và|hay|với)\s*(?<!\$)\$(?!\$)/gi, '$$ $1 $$')
-    .replace(/\$\$\s*(hoặc|và|hay|với)\s*\$\$/gi, '$$ $1 $$');
+    .replace(/(?<!\$)\$(?!\$)\s*(hoặc|và|hay|với|khi)\s*(?<!\$)\$(?!\$)/gi, '$$ $1 $$')     .replace(/\$\$\s*(hoặc\vert{}và\vert{}hay\vert{}với\vert{}khi)\s*\$\$/gi, '$$ $1$$');
 
-  // Bước 3: Nếu một phương án chứa công thức nhưng thiếu cặp dấu $ ở đầu/cuối:
-  // Ví dụ: `m \ge 3 hoặc m+2 \le 1` -> `$m \ge 3$ hoặc $m+2 \le 1$`
-  const parts = res.split(/\s+(hoặc|và|hay)\s+/gi);
+  const parts = res.split(/\s+(hoặc|và|hay|với|khi|điều kiện(?:\s+là)?)\s+/gi);
   if (parts.length > 1) {
     res = parts.map(part => {
       const trimmed = part.trim();
-      if (['hoặc', 'và', 'hay'].includes(trimmed.toLowerCase())) {
+      if (['hoặc', 'và', 'hay', 'với', 'khi'].includes(trimmed.toLowerCase()) || /^điều kiện/i.test(trimmed)) {
         return trimmed;
       }
-      // Nếu vế có chứa ký hiệu toán (\ge, \le, <, >, +, -, =, v.v.) mà chưa bọc đủ dấu $
       if (/[\\<>=+\-\^_\/]/.test(trimmed) || /\b\d+[a-zA-Z]\b/.test(trimmed)) {
         if (/^[“"”]|:\s*[“"”]/.test(trimmed)) {
           return trimmed;
         }
         const cleanPart = trimmed.replace(/\$/g, '').trim();
-        return `$${cleanPart}$`;
+        return cleanPart ? `$${cleanPart}$` : '';
       }
       return trimmed;
     }).join(' ');
   } else {
-    // Nếu không có từ nối nhưng có lệnh LaTeX trần trụi thiếu $ (vd: b \le a)
     if (/[\\<>=]/.test(res) && !res.includes('$')) {
       res = `$${res}$`;
     }
   }
 
-  // Khôi phục lại các khối \text{...}
   res = res.replace(/___TEXT_TOKEN_(\d+)___/g, (_m, idx) => textTokens[Number(idx)] || '');
 
-  // Dọn dẹp khoảng trắng và dấu $ thừa
   return (prefix + res.replace(/\${3,}/g, '$$')).trim();
 };
 
@@ -140,11 +130,9 @@ export const MarkdownRenderer = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // 0. Bảo vệ các khối code (```...```) và inline code (`...`) để các bộ tiền xử lý toán học không làm hỏng cú pháp lập trình
   const codeTokens: string[] = [];
   let processedContent = content || '';
   processedContent = processedContent.replace(/(```[a-zA-Z0-9_\-]*\s*[\s\S]*?```|`[^`\n]+`)/g, (match) => {
-    // Nếu là khối TikZ thì giữ nguyên để TikZ renderer biên dịch đồ thị
     if (/```(?:tikz|latex)\b/i.test(match) || /\\begin\s*\{tikzpicture\}/i.test(match)) {
       return match;
     }
@@ -162,7 +150,6 @@ export const MarkdownRenderer = ({
   processedContent = normalizeMathLatex(processedContent);
   processedContent = normalizeLogicAndSetSymbols(processedContent);
 
-  // Chuẩn hóa phương án trắc nghiệm: bóc tách chữ tiếng Việt và sửa rách dấu $$
   if (/^\s*(?:[-*]\s*)?(?:\*{0,2})[A-Da-d][\.\:\)]/i.test(processedContent.trim())) {
     processedContent = fixInlineOptionText(processedContent);
   }
@@ -177,38 +164,21 @@ export const MarkdownRenderer = ({
   processedContent = normalizeSetNotation(processedContent);
   processedContent = rescueCodeAndNestedText(processedContent);
 
-  // Khôi phục các khối code đã bảo vệ
   processedContent = processedContent.replace(/___CODE_BLOCK_TOKEN_(\d+)___/g, (_m, idx) => codeTokens[Number(idx)] ?? '');
   processedContent = rescueCodeAndNestedText(processedContent);
 
-  // 0. Unescape escaped dollar signs so KaTeX/remark-math parses them as math delimiters
   processedContent = processedContent.replace(/\\(\$)/g, '$1');
-
-  // Convert standard LaTeX \( ... \) to $ ... $
   processedContent = processedContent.replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$');
-  // Inside parentheses or explanation sentences, \[ ... \] must be converted to $ ... $ (Inline Math)
   processedContent = processedContent.replace(/\(([^()\n]*?)\\\[([\s\S]*?)\\\]([^()\n]*?)\)/g, (m, b, f, a) => {
     return `(${b}$${f.replace(/[\r\n]+/g, ' ').replace(/\s{2,}/g, ' ').trim()}$${a})`;
   });
-  // Also convert any $$ ... $$ inside parentheses to $ ... $ (Inline Math)
   processedContent = processedContent.replace(/\(([^()\n]*?)\$\$([\s\S]*?)\$\$([^()\n]*?)\)/g, (m, b, f, a) => {
     return `(${b}$${f.replace(/[\r\n]+/g, ' ').replace(/\s{2,}/g, ' ').trim()}$${a})`;
   });
-  // Convert remaining standalone \[ ... \] to $$ ... $$
-  processedContent = processedContent.replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$');
-
-  // Auto-wrap naked \begin{cases}...\end{cases} or math environments if not wrapped in $ or $$
-  // Also normalize line breaks inside cases so equations don't merge (e.g. \ x - y -> \\ x - y)
-  processedContent = formatMathContent(processedContent);
-
-  // Normalize spaces inside inline $ ... $ so remark-math recognizes them (e.g. "$ 1 $" -> "$1$", "$ x = 2 $" -> "$x = 2$")
-  // Strip any newlines \n and excess spaces inside $ ... $, and pull trailing punctuation OUT of the inline math block ($0.$ -> $0$.)
-  processedContent = processedContent.replace(/(?<!\$)\$(?!\$)([\s\S]+?)(?<!\$)\$(?!\$)/g, (match, formula) => {
-    if (formula.includes('$$')) return match;
+  processedContent = processedContent.replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$');    processedContent = formatMathContent(processedContent);    processedContent = processedContent.replace(/(?<!\$)\$(?!\$)([\s\S]+?)(?<!\$)\$(?!\$)/g, (match, formula) => {     if (formula.includes('$$')) return match;
     let trimmed = formula.replace(/[\r\n]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
     if (!trimmed) return match;
 
-    // Normalize pseudo not-equal symbols inside math block
     trimmed = trimmed.replace(/=\/=/g, ' \\neq ')
                      .replace(/!\s*=\s*/g, ' \\neq ')
                      .replace(/(?<!\/)\/\s*=\s*/g, ' \\neq ')
@@ -223,14 +193,10 @@ export const MarkdownRenderer = ({
     return `$${trimmed}$${trailingPunct}`;
   });
 
-  // Dọn dẹp dấu $ thừa/rách (ví dụ: $$$ -> $, $$$$ -> $$)
   processedContent = processedContent.replace(/\${3,}/g, (m) => m.length % 2 === 1 ? '$' : '$$');
 
-  // Cứu các câu hỏi tiếng Việt bị dính vào môi trường toán
   processedContent = rescueVietnameseFromMath(processedContent);
 
-  // Chuẩn hóa khối display math $$...$$: nếu có nhiều dòng, đảm bảo dấu mở $$ và đóng $$ luôn ở dòng riêng biệt
-  // Điều này ngăn remark-math bị lỗi "Expected EOF got \end{cases}" và nuốt luôn câu văn tiếng Việt phía sau
   processedContent = processedContent.replace(/\$\$([\s\S]*?)\$\$/g, (_match, body) => {
     const trimmed = body.trim();
     if (!trimmed.includes('\n')) {
@@ -239,10 +205,8 @@ export const MarkdownRenderer = ({
     return `\n\n$$\n${trimmed}\n$$\n\n`;
   });
 
-  // Xóa dấu chấm mồ côi ngay sau khối $$...$$ trước khi bắt đầu câu mới tiếng Việt
   processedContent = processedContent.replace(/(\$\$[\s\S]*?\$\$)\s*\.\s*(?=[A-ZÀ-Ỹ])/g, '$1\n\n');
 
-  // 0.05 Tự động nhận diện và chuyển đổi mọi BẢNG BIẾN THIÊN dạng Markdown table sang SVG chuẩn SGK
   processedContent = processedContent.replace(/((?:^[ \t]*\|[^\n]+\|[ \t]*(?:\n|$))+)/gm, (match) => {
     try {
       const svg = convertBbtTableToSvg(match);
@@ -254,10 +218,8 @@ export const MarkdownRenderer = ({
     return match;
   });
 
-  // 0.1 Unwrap any existing code blocks around SVG
   processedContent = processedContent.replace(/```[a-z]*\s*(<svg[\s\S]*?<\/svg>)\s*```/gi, '$1');
   
-  // Wrap SVGs in a container to prevent Markdown from messing them up and to style them
   processedContent = processedContent.replace(/(<svg[\s\S]*?<\/svg>)/gi, (match) => {
     try {
       const base64 = typeof btoa !== 'undefined' ? btoa(encodeURIComponent(match)) : Buffer.from(encodeURIComponent(match)).toString('base64');
@@ -267,15 +229,12 @@ export const MarkdownRenderer = ({
     }
   });
   
-  // 1. Remove stray preamble packages that might be generated (e.g. \usetikzlibrary{...})
   processedContent = processedContent.replace(/\\(usetikzlibrary|usepackage)\s*\{[^}]*\}\s*/gi, '');
 
-  // 1.1 Unwrap any existing code blocks around TikZ to normalize
   processedContent = processedContent.replace(/```[a-z]*\s*([\s\S]*?\\begin\s*\{tikzpicture\}[\s\S]*?\\end\s*\{tikzpicture\})\s*```/gi, (match, inner) => {
     return inner.replace(/\\(usetikzlibrary|usepackage)\s*\{[^}]*\}\s*/gi, '');
   });
   
-  // 1.5 Wrap loose tikz code blocks that don't have begin/end environment
   processedContent = processedContent.replace(/```tikz\s*([\s\S]*?)```/gi, (match, inner) => {
     let cleaned = inner.replace(/\\(usetikzlibrary|usepackage)\s*\{[^}]*\}\s*/gi, '').trim();
     if (!cleaned.includes('\\begin{tikzpicture}')) {
@@ -284,10 +243,8 @@ export const MarkdownRenderer = ({
     return cleaned;
   });
   
-  // 1.55 Handle \dotfill: replace with clean academic dotted line
   processedContent = processedContent.replace(/\\dotfill\b/g, '. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .');
 
-  // 1.5 Clean up any previously injected HTML choice containers to standard Markdown list
   processedContent = processedContent.replace(/<div\s+class=["']question-choices[^"']*["']>([\s\S]*?)<\/div>/gi, '$1');
   processedContent = processedContent.replace(/<div\s+class=["']choice-item[^"']*["']>([\s\S]*?)<\/div>/gi, (m, inner) => {
     const labelMatch = inner.match(/<span\s+class=["']choice-label[^"']*["']>([\s\S]*?)<\/span>/i);
@@ -297,9 +254,6 @@ export const MarkdownRenderer = ({
     return `\n- **${label}** ${fixInlineOptionText(text)}\n`;
   });
 
-  // 2. Base64 encode TikZ blocks to prevent Markdown/KaTeX interference
-  // If instant SVG can be generated (e.g. tkz-tab variation tables, function plots, geometry),
-  // convert directly to svg-wrapper so it loads in 0.001s without any delay or spinning!
   processedContent = processedContent.replace(/(\\begin\s*\{tikzpicture\}[\s\S]*?\\end\s*\{tikzpicture\})/gi, (match) => {
     try {
       const svg = getTikzSvg(match);
@@ -314,11 +268,8 @@ export const MarkdownRenderer = ({
     }
   });
 
-  // 3. Pre-render LaTeX inside raw HTML tags (e.g. <table>, <td>, <div>)
-  // Because remark-math ignores LaTeX inside raw HTML elements
   if (/<(table|td|th|div|span|p)[^>]*>/i.test(processedContent)) {
     processedContent = processedContent.replace(/(<(table|tr|td|th|div|span|p)[^>]*>[\s\S]*?<\/\2>)/gi, (htmlBlock) => {
-      // Replace $$...$$ in HTML
       let rendered = htmlBlock.replace(/\$\$([\s\S]*?)\$\$/g, (m, tex) => {
         try {
           return katex.renderToString(tex.trim(), { displayMode: true, throwOnError: false, errorColor: 'inherit', strict: false });
@@ -326,7 +277,6 @@ export const MarkdownRenderer = ({
           return m;
         }
       });
-      // Replace $...$ in HTML
       rendered = rendered.replace(/(?<!\$)\$(?!\$)([^\$\n]+?)(?<!\$)\$(?!\$)/g, (m, tex) => {
         try {
           let trimmed = tex.trim();
@@ -345,8 +295,6 @@ export const MarkdownRenderer = ({
     });
   }
 
-  // 4. Auto-scanner effect: whenever content updates or AI streams in new text,
-  // scan the rendered DOM container with katex auto-render to catch any unparsed formula delimiters
   useEffect(() => {
     if (!containerRef.current) return;
     try {
@@ -448,11 +396,10 @@ export const MarkdownRenderer = ({
             if (!cleanSrc || cleanSrc === '#' || cleanSrc === 'about:blank' || cleanSrc === '...' || cleanSrc === 'undefined') {
               return null;
             }
-            // Auto convert Google Drive preview/view links to direct streaming image links
-            if (cleanSrc.includes('drive.google.com/file/d/')) {
+            if (cleanSrc.includes('[drive.google.com/file/d/](https://drive.google.com/file/d/)')) {
               const fileId = cleanSrc.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)?.[1];
               if (fileId) {
-                cleanSrc = `https://drive.google.com/uc?export=view&id=${fileId}`;
+                cleanSrc = `[https://drive.google.com/uc?export=view&id=$](https://drive.google.com/uc?export=view&id=$){fileId}`;
               }
             }
             return (
@@ -463,7 +410,6 @@ export const MarkdownRenderer = ({
                 referrerPolicy="no-referrer"
                 className="max-w-full h-auto rounded-lg mx-auto my-3 border border-slate-200 shadow-sm"
                 onError={(e) => {
-                  // Do not show empty broken img frame
                   (e.target as HTMLElement).style.display = 'none';
                 }}
                 {...props}
@@ -507,7 +453,6 @@ export const MarkdownRenderer = ({
             };
 
             const childArray = React.Children.toArray(children);
-            // Check if items are multiple choice options (- **A.** ...)
             const isChoiceList = childArray.length >= 2 && childArray.length <= 4 && childArray.some((child: any) => {
               const text = getNodePlainText(child?.props?.children);
               return /\b[A-D][\.\)]/.test(text);
@@ -556,5 +501,3 @@ export const MarkdownRenderer = ({
 export const MathSpan: React.FC<{ content: string; className?: string }> = ({ content, className }) => {
   return <MarkdownRenderer content={content} inline className={className} />;
 };
-
-

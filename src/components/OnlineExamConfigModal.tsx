@@ -9,6 +9,7 @@ import { apiFetch } from '../lib/apiFetch';
 import { saveExamToCloud } from '../lib/cloudExamStore';
 import { embedTikzSvgsInText } from './TikzRenderer';
 import { sanitizeExamQuestion } from '../lib/utils';
+import { fixInlineOptionText } from './MarkdownRenderer';
 import { 
   STANDARDIZED_EXAM_TYPES, 
   getDefaultDurationForExamType, 
@@ -102,7 +103,6 @@ export const OnlineExamConfigModal: React.FC<OnlineExamConfigModalProps> = ({
     if (!isUnlimitedTime) {
       setModalDuration(newDur);
     }
-    // Auto-update title if it currently matches a standard format
     const oldTitle = formatExamTitle(modalExamType, subject, grade);
     if (!modalExamName || modalExamName === oldTitle || modalExamName.startsWith('ĐỀ ')) {
       setModalExamName(formatExamTitle(newType, subject, grade));
@@ -118,7 +118,6 @@ export const OnlineExamConfigModal: React.FC<OnlineExamConfigModalProps> = ({
       setErrorMsg(null);
       setIsSharing(true);
 
-      // Validate questions exist
       const availableQuestions = (shuffledExams && shuffledExams.length > 0)
         ? shuffledExams[0].questions
         : originalQuestions;
@@ -127,7 +126,6 @@ export const OnlineExamConfigModal: React.FC<OnlineExamConfigModalProps> = ({
         throw new Error("Chưa có câu hỏi nào trong đề thi. Vui lòng tạo hoặc tải đề trước.");
       }
 
-      // Validate schedule if enabled
       if (hasSchedule) {
         if (startTime && endTime) {
           const startTimestamp = new Date(startTime).getTime();
@@ -138,7 +136,6 @@ export const OnlineExamConfigModal: React.FC<OnlineExamConfigModalProps> = ({
         }
       }
 
-      // Filter or pick codes to include
       let codesToProcess: { code: string; questions: any[] }[] = [];
       if (selectedCodeOption === 'all' && shuffledExams && shuffledExams.length > 0) {
         codesToProcess = shuffledExams;
@@ -149,16 +146,16 @@ export const OnlineExamConfigModal: React.FC<OnlineExamConfigModalProps> = ({
         codesToProcess = [{ code: '101', questions: originalQuestions }];
       }
 
-      // Pre-render TikZ figures into high-speed native SVG
+      // Pre-render TikZ figures and sanitize/fix math formulas in questions and choices
       const optimizedCodes = codesToProcess.map(exam => ({
         ...exam,
         questions: exam.questions.map((q: any) => ({
           ...q,
           content: sanitizeExamQuestion(embedTikzSvgsInText(q.content || q.question || q.text || '')),
           explanation: q.explanation ? sanitizeExamQuestion(embedTikzSvgsInText(q.explanation)) : undefined,
-          options: q.options ? q.options.map((opt: string) => sanitizeExamQuestion(embedTikzSvgsInText(opt))) : undefined,
+          options: q.options ? q.options.map((opt: string) => fixInlineOptionText(sanitizeExamQuestion(embedTikzSvgsInText(opt)))) : undefined,
           tfStatements: q.tfStatements ? q.tfStatements.map((tf: any) => ({
-            statement: sanitizeExamQuestion(embedTikzSvgsInText(tf.statement || '')),
+            statement: fixInlineOptionText(sanitizeExamQuestion(embedTikzSvgsInText(tf.statement || ''))),
             correct: tf.correct
           })) : undefined
         }))
@@ -192,7 +189,6 @@ export const OnlineExamConfigModal: React.FC<OnlineExamConfigModalProps> = ({
         codes: optimizedCodes
       };
 
-      // Generate 6-char PIN
       const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
       let fallbackCode = '';
       for (let i = 0; i < 6; i++) {
@@ -214,15 +210,12 @@ export const OnlineExamConfigModal: React.FC<OnlineExamConfigModalProps> = ({
         console.warn("Backend share notice:", e);
       }
 
-      // Dual-sync to persistent Cloud KV with hex chunking and local cache
       await saveExamToCloud(examId, dataToShare);
 
-      // Clean short PIN url
       const publicBase = window.location.origin;
       const cleanPinUrl = `${publicBase}/?pin=${examId}`;
       let finalUrl = cleanPinUrl;
 
-      // Fallback hash for offline/static resilience if not too long
       try {
         const compressed = LZString.compressToEncodedURIComponent(JSON.stringify(dataToShare));
         if (compressed && compressed.length < 1800) {
@@ -230,7 +223,6 @@ export const OnlineExamConfigModal: React.FC<OnlineExamConfigModalProps> = ({
         }
       } catch (e) {}
 
-      // Generate QR Code
       try {
         const qrData = await QRCode.toDataURL(cleanPinUrl, {
           width: 280,
@@ -368,7 +360,7 @@ export const OnlineExamConfigModal: React.FC<OnlineExamConfigModalProps> = ({
               {/* Grid: Loại đề & Thời gian làm bài */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 
-                {/* 1. Loại đề thi (Danh mục chuẩn hóa GDPT) */}
+                {/* 1. Loại đề thi */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1.5">
                     Loại đề thi <span className="text-emerald-600 font-normal">(Gợi ý thời gian tự động)</span>
@@ -582,7 +574,6 @@ export const OnlineExamConfigModal: React.FC<OnlineExamConfigModalProps> = ({
 
               {/* QR Code & Zalo Message */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center bg-slate-50 p-4 rounded-xl border border-slate-200">
-                {/* QR Code Box */}
                 <div className="flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-2.5">
                   {qrCodeUrl ? (
                     <img src={qrCodeUrl} alt="QR Code" className="w-44 h-44 rounded-lg object-contain" />
@@ -602,7 +593,6 @@ export const OnlineExamConfigModal: React.FC<OnlineExamConfigModalProps> = ({
                   )}
                 </div>
 
-                {/* Zalo Message Template */}
                 <div className="flex flex-col justify-between h-full space-y-3">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
