@@ -21,15 +21,15 @@ import {
   sanitizeExamQuestion, 
   sanitizeMathBeforeRender, 
   normalizeMathLatex, 
-  normalizeMathContent,
-  normalizeSetNotation,
-  fixNakedLeqGeq,
-  rescueVietnameseFromMath,
-  normalizeLogicAndSetSymbols,
-  sanitizeLatexString,
-  preProcessMathContent,
-  rescueCodeAndNestedText,
-  normalizePropositionQuotes
+  normalizeMathContent, 
+  normalizeSetNotation, 
+  fixNakedLeqGeq, 
+  rescueVietnameseFromMath, 
+  normalizeLogicAndSetSymbols, 
+  sanitizeLatexString, 
+  preProcessMathContent, 
+  rescueCodeAndNestedText, 
+  normalizePropositionQuotes 
 } from '../lib/utils';
 
 export { 
@@ -41,23 +41,17 @@ export {
   sanitizeExamQuestion, 
   sanitizeMathBeforeRender, 
   normalizeMathLatex, 
-  normalizeMathContent,
-  normalizeSetNotation,
-  fixNakedLeqGeq,
-  rescueVietnameseFromMath,
-  normalizeLogicAndSetSymbols,
-  sanitizeLatexString,
-  preProcessMathContent,
-  rescueCodeAndNestedText,
-  normalizePropositionQuotes
+  normalizeMathContent, 
+  normalizeSetNotation, 
+  fixNakedLeqGeq, 
+  rescueVietnameseFromMath, 
+  normalizeLogicAndSetSymbols, 
+  sanitizeLatexString, 
+  preProcessMathContent, 
+  rescueCodeAndNestedText, 
+  normalizePropositionQuotes 
 };
 
-/**
- * Khắc phục triệt để lỗi rách dấu $$ và dính chữ tiếng Việt ("hoặc", "và", "hay", "với", "khi", "điều kiện") trong 4 phương án trắc nghiệm:
- * 1. Sửa lỗi đóng/mở $$ bị rách dính dấu phẩy (vd: 0^\circ$$,180^\circ -> $0^\circ$, $180^\circ$)
- * 2. Tách rời các từ nối tiếng Việt bị dính liền với số/ký tự (vd: 3hoặcm -> 3 hoặc m, avàa -> a và a)
- * 3. Tách từ nối ra ngoài dấu $ và tự động bọc $ chuẩn xác cho từng vế công thức
- */
 export const fixInlineOptionText = (text: string): string => {
   if (!text) return '';
   let res = text.normalize('NFC');
@@ -132,7 +126,6 @@ export const MarkdownRenderer = ({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const codeTokens: string[] = [];
-  // 1. Chuẩn hóa Unicode NFC và hàn gắn các dấu thanh bị tách rời
   let processedContent = (content || '')
     .normalize('NFC')
     .replace(/([a-zA-Zà-ỹÀ-Ỹ])[\u0300\u0301\u0303\u0309\u0323]/g, (m) => m.normalize('NFC'))
@@ -223,6 +216,3 @@ export const MarkdownRenderer = ({
       }
     } catch (e) {}
     return match;
-  });
-
-  processedContent = processedContent.replace(/
