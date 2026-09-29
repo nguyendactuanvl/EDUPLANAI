@@ -1,0 +1,8 @@
+{
+  "name": "Remix 27-09-2026-23h02-APP KHDH KHGD CHO GV ",
+  "description": "Ứng dụng soạn kế hoạch giáo dục, kế hoạch dạy học tích hợp Năng lực số, Năng lực AI và giáo dục STEM/STEAM.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

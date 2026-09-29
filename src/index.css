@@ -1,0 +1,194 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 20px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8;
+}
+
+.inline-markdown p {
+  display: inline;
+  margin: 0;
+  padding: 0;
+}
+
+.markdown-body table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 1rem;
+}
+
+.markdown-body table th,
+.markdown-body table td {
+  border: 1px solid #e2e8f0;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+.markdown-body table th {
+  background-color: #f8fafc;
+  font-weight: 600;
+}
+
+/* Protect KaTeX borders from Tailwind's reset */
+.katex, .katex * {
+  border-color: currentColor !important;
+}
+/* Ensure hline and vline are visible */
+.katex .katex-hline {
+  border-bottom: 1px solid currentColor !important;
+  background-color: currentColor !important;
+}
+.katex .vertical-separator {
+  border-right: 1px solid currentColor !important;
+  background-color: currentColor !important;
+}
+.katex .array {
+  border-collapse: collapse;
+}
+
+/* Fix for KaTeX fractions overlapping in Tailwind typography */
+.katex {
+  line-height: normal !important;
+  text-rendering: auto;
+  background: transparent !important;
+  white-space: nowrap !important;
+}
+.katex * {
+  line-height: normal !important;
+}
+
+/* Khóa chặt dấu ngoặc nhọn hệ phương trình/bất phương trình (\begin{cases}, \left\{...) cùng dòng với các phương trình bên trong */
+.katex .minner {
+  display: inline-flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  white-space: nowrap !important;
+}
+
+.katex .mopen,
+.katex .mclose,
+.katex .mtable,
+.katex .mord {
+  flex-shrink: 0 !important;
+  vertical-align: middle !important;
+}
+
+.katex-display {
+  display: block !important;
+  margin: 1em 0 !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  max-width: 100% !important;
+  text-align: center;
+}
+
+.katex-display > .katex {
+  white-space: nowrap !important;
+  display: inline-block !important;
+  text-align: initial !important;
+}
+
+/* KaTeX safe fallback - strictly inherit color, never display red error text */
+.katex-error {
+  color: inherit !important;
+  background-color: transparent !important;
+  font-family: inherit !important;
+  font-style: normal !important;
+  white-space: normal !important;
+}
+
+/* --- TIKZ & TKZ-TAB IMPROVEMENTS --- */
+
+/* Ensure tkz-tab elements render beautifully without getting clipped by their container bounds */
+.tikz-wrapper {
+  overflow: visible !important;
+  padding: 1.5rem 0.5rem; /* Extra vertical padding */
+}
+
+.tikzjax-instance {
+  overflow: visible !important;
+}
+
+/* Fix TikZ SVG clipping and rendering */
+.tikzjax-instance svg {
+  overflow: visible !important;
+  margin: 0 auto;
+}
+
+/* Ensure tkz-tab horizontal and vertical lines are sharp and not blurred/cut */
+.tikzjax-instance svg path,
+.tikzjax-instance svg line,
+.tikzjax-instance svg polygon {
+  shape-rendering: geometricPrecision;
+  stroke-linecap: square; /* Giúp các đường thẳng kết thúc vuông vức, tránh rãnh hở giữa các đoạn thẳng */
+}
+
+/* Fix parallel lines || in tkz-tab */
+.tikzjax-instance svg g {
+  /* Prevent vector lines from shifting to sub-pixels which causes blurring */
+  transform: translateZ(0); 
+}
+
+/* --- DÀN TRANG ĐỀ THI TOÁN & PHƯƠNG ÁN TRẮC NGHIỆM (CHUẨN GDPT 2018) --- */
+.question-choices {
+  margin-top: 0.75rem !important;
+  margin-bottom: 1.5rem !important; /* mb-6 */
+  width: 100%;
+}
+
+.question-choices.grid-cols-4,
+.question-choices.lg\:grid-cols-4 {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 1024px) {
+  .question-choices.lg\:grid-cols-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .question-choices.grid-cols-2,
+  .question-choices.sm\:grid-cols-2,
+  .question-choices.lg\:grid-cols-4 {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+}
+
+.choice-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.choice-label {
+  font-weight: 600;
+  color: #0f172a;
+  min-width: 1.5rem;
+  flex-shrink: 0;
+}
+
+.choice-text {
+  flex: 1;
+}
+
+/* Ensure math formulas inside choices align horizontally with the label */
+.choice-text .katex-display {
+  display: inline-block !important;
+  margin: 0 !important;
+}
+
+.choice-text .katex {
+  vertical-align: baseline;
+}

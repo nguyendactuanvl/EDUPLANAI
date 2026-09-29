@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Remix 27-09-2026-23h02-APP KHDH KHGD CHO GV </title>
+    <meta name="description" content="Ứng dụng soạn kế hoạch giáo dục, kế hoạch dạy học tích hợp Năng lực số, Năng lực AI và giáo dục STEM/STEAM." />
+    <meta property="og:title" content="Remix 27-09-2026-23h02-APP KHDH KHGD CHO GV " />
+    <meta property="og:description" content="Ứng dụng soạn kế hoạch giáo dục, kế hoạch dạy học tích hợp Năng lực số, Năng lực AI và giáo dục STEM/STEAM." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#2563eb" />
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then((registrations) => {
+          for (const registration of registrations) {
+            registration.unregister();
+          }
+        });
+      }
+    </script>
+    <style>
+      @media print {
+        body * {
+          visibility: hidden;
+        }
+        .printable-matrix, .printable-matrix * {
+          visibility: visible;
+        }
+        .printable-matrix {
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: 100%;
+          border: none !important;
+          box-shadow: none !important;
+          background: white !important;
+          padding: 0 !important;
+          margin: 0 !important;
+        }
+        /* Override app wrappers to prevent clipping */
+        html, body, #root, .h-screen, .overflow-hidden, .overflow-y-auto {
+          height: auto !important;
+          min-height: auto !important;
+          overflow: visible !important;
+          position: static !important;
+          background: white !important;
+        }
+        .no-print {
+          display: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div id="initial-loader" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; width: 100vw; background-color: #f8fafc; font-family: system-ui, -apple-system, sans-serif;">
+        <div style="width: 50px; height: 50px; border: 4px solid #e2e8f0; border-top: 4px solid #059669; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px;"></div>
+        <h2 style="color: #1e293b; margin: 0 0 8px 0; font-size: 1.25rem; font-weight: 600;">Đang tải ứng dụng...</h2>
+        <p style="color: #64748b; margin: 0; font-size: 0.875rem;">Vui lòng đợi trong giây lát</p>
+        <style>
+          @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+          body { margin: 0; padding: 0; }
+        </style>
+      </div>
+</div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

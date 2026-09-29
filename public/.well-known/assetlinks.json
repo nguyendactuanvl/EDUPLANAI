@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "com.eduplan.ai",
+        "sha256_cert_fingerprints": ["A1:5F:B2:90:F8:CF:97:CC:E6:A6:A6:E4:BB:CC:47:E7:0A:68:19:FD:82:6F:35:81:91:4D:A5:17:64:FF:2D:0D"]
+      }
+    }]
