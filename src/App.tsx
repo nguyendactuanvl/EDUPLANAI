@@ -2,6 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
+import 'katex/dist/katex.min.css';
 import { Analytics } from '@vercel/analytics/react';
 import { Menu, Sparkles, Key, AlertCircle } from "lucide-react";
 import React, { useState, Suspense, useEffect } from "react";
